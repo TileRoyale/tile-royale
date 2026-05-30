@@ -10,25 +10,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install PostgreSQL 18 client
-        run: |
-          sudo apt-get install -y curl ca-certificates
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
-          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-18
-
-      - name: Create backup
+      - name: Create backup via Docker
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           DATE=$(date +%Y-%m-%d)
           FILENAME="tile-royale-backup-${DATE}.dump"
-          pg_dump "$DATABASE_URL" \
-            --format=custom \
-            --no-acl \
-            --no-owner \
-            -f "$FILENAME"
+          docker run --rm postgres:18 \
+            pg_dump "$DATABASE_URL" \
+              --format=custom \
+              --no-acl \
+              --no-owner \
+          > "$FILENAME"
           gzip "$FILENAME"
           echo "✅ Backup: ${FILENAME}.gz"
           ls -lh "${FILENAME}.gz"
