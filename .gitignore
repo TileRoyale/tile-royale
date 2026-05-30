@@ -6,6 +6,12 @@ tile-royale-app/tile-royale-app/android/app/build/
 tile-royale-app/tile-royale-app/android/build/
 tile-royale-app/tile-royale-app/android/.gradle/
 tile-royale-app/tile-royale-app/android/local.properties
+.gradle/
+build/
+
+# AAB / APK release files
+*.aab
+*.apk
 
 # Release keystore (keep out of git)
 *.keystore
@@ -13,10 +19,16 @@ tile-royale-app/tile-royale-app/android/local.properties
 
 # Server compiled output
 tile-royale-server/tile-royale-server/build/
+dist/
 
 # Env files
 .env
 .env.local
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
 
 # IDE
 .vscode/
