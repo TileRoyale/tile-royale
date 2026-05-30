@@ -1,0 +1,2701 @@
+  /* ===== RING RARITY STYLES ===== */
+  .ring-common   { color: #555570; }
+  .ring-uncommon { color: #00ff88; text-shadow: 0 0 6px rgba(0,255,136,0.6); }
+
+  .ring-rare {
+    color: #00e5ff;
+    text-shadow: 0 0 8px #00e5ff, 0 0 20px rgba(0,229,255,0.45);
+    filter: drop-shadow(0 0 4px #00e5ff);
+  }
+
+  .ring-epic {
+    color: #b96cff;
+    text-shadow: 0 0 10px #9b59b6, 0 0 24px #cc44ff;
+    filter: drop-shadow(0 0 6px #9b59b6);
+    animation: epicPulse 1.2s ease-in-out infinite alternate;
+    display: inline-block;
+  }
+  @keyframes gauntletBtnPulse {
+    0%  { box-shadow: 0 0 14px rgba(140,0,255,0.4), inset 0 1px 0 rgba(255,200,255,0.1); }
+    100%{ box-shadow: 0 0 28px rgba(180,60,255,0.75), 0 0 50px rgba(140,0,255,0.3), inset 0 1px 0 rgba(255,200,255,0.2); }
+  }
+  .gauntlet-mode-overlay-btn {
+    position: absolute;
+    left: 50%;
+    top: 59%;
+    transform: translateX(-50%);
+    padding: 5px 20px;
+    border: none;
+    clip-path: polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%);
+    background:
+      radial-gradient(ellipse at 50% 0%,   rgba(255,200,80,0.35) 0%, transparent 55%),
+      radial-gradient(ellipse at 50% 100%, rgba(255,60,0,0.45)  0%, transparent 55%),
+      linear-gradient(170deg, #1a0005 0%, #420010 25%, #82080a 55%, #c03200 80%, #e05800 100%);
+    font-family: 'Cinzel Decorative', 'Cinzel', 'Palatino Linotype', serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1.25;
+    text-align: center;
+    color: #fff5cc;
+    text-shadow: 0 0 6px #ff8800, 0 0 14px #ff4400, 0 1px 0 rgba(0,0,0,0.9);
+    cursor: pointer;
+    filter: drop-shadow(0 0 7px rgba(255,90,0,0.9)) drop-shadow(0 0 18px rgba(200,20,0,0.5));
+    animation: fireGemPulse 1.4s ease-in-out infinite alternate;
+    z-index: 10;
+    white-space: normal;
+  }
+  @keyframes fireGemPulse {
+    0%   { filter: drop-shadow(0 0 5px rgba(255,80,0,0.7))  drop-shadow(0 0 12px rgba(180,10,0,0.4)); }
+    50%  { filter: drop-shadow(0 0 11px rgba(255,150,0,1.0)) drop-shadow(0 0 26px rgba(255,60,0,0.65)); }
+    100% { filter: drop-shadow(0 0 7px rgba(255,110,0,0.9)) drop-shadow(0 0 20px rgba(220,30,0,0.55)); }
+  }
+  @keyframes epicPulse {
+    0%  { text-shadow: 0 0 8px #9b59b6, 0 0 16px #9b59b6;  filter: drop-shadow(0 0 4px #9b59b6); }
+    100%{ text-shadow: 0 0 22px #cc44ff, 0 0 44px #9b59b6; filter: drop-shadow(0 0 12px #cc44ff); }
+  }
+
+  .ring-legendary {
+    color: #ffd700;
+    text-shadow: 0 2px 0 #aa7700, 0 4px 8px rgba(0,0,0,0.5),
+                 0 0 22px #ffd700, 0 0 44px rgba(255,200,0,0.35);
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,0.5)) drop-shadow(0 0 10px #ffd700);
+    animation: legendGlow 1.4s ease-in-out infinite alternate;
+    display: inline-block;
+  }
+  @keyframes legendGlow {
+    0%  { text-shadow: 0 2px 0 #aa7700, 0 4px 6px rgba(0,0,0,0.5), 0 0 14px #ffd700;
+          filter: drop-shadow(0 0 6px #ffd700); }
+    100%{ text-shadow: 0 2px 0 #cc9900, 0 4px 10px rgba(0,0,0,0.6), 0 0 38px #ffe566, 0 0 64px rgba(255,215,0,0.45);
+          filter: drop-shadow(0 0 20px #ffdd44); transform: scale(1.04); }
+  }
+
+  .ring-secret {
+    color: #ff3355;
+    text-shadow: 0 0 12px #ff3355, 0 0 28px #ff0033, 0 0 55px rgba(255,50,80,0.5);
+    filter: drop-shadow(0 0 8px #ff3355);
+    animation: secretAura 0.9s linear infinite;
+    display: inline-block;
+  }
+  @keyframes secretAura {
+    0%  { text-shadow: 0 0 12px #ff3355, 0 0 28px #ff0033;
+          filter: drop-shadow(0 0 8px #ff3355) hue-rotate(0deg); transform: scale(1); }
+    25% { text-shadow: 0 0 20px #ff8800, 0 0 40px #ff4400;
+          filter: drop-shadow(0 0 16px #ff6600) hue-rotate(30deg); transform: scale(1.1) rotate(3deg); }
+    50% { text-shadow: 0 0 24px #ff0055, 0 0 48px #cc0033;
+          filter: drop-shadow(0 0 20px #ff0044) hue-rotate(60deg); transform: scale(1); }
+    75% { text-shadow: 0 0 20px #ff44aa, 0 0 40px #ff0066;
+          filter: drop-shadow(0 0 16px #ff33aa) hue-rotate(30deg); transform: scale(1.1) rotate(-3deg); }
+    100%{ text-shadow: 0 0 12px #ff3355, 0 0 28px #ff0033;
+          filter: drop-shadow(0 0 8px #ff3355) hue-rotate(0deg); transform: scale(1); }
+  }
+
+  /* Flash effects on win */
+  .spin-win-legendary { animation: winFlashGold 0.7s ease-out 2; }
+  .spin-win-secret    { animation: winFlashRed  0.7s ease-out 3; }
+  @keyframes winFlashGold { 0%,100%{background:transparent;} 50%{background:rgba(255,215,0,0.1);} }
+  @keyframes winFlashRed  { 0%,100%{background:transparent;} 50%{background:rgba(255,51,85,0.14);} }
+
+  /* Ring inventory row styling */
+  .ring-inventory-row { display:flex; align-items:center; gap:10px; padding:8px 12px;
+    background:var(--panel); border-radius:8px; border:1px solid var(--border); }
+  .ring-icon-lg  { width:40px; height:40px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:50%; overflow:hidden; }
+  .ring-info     { flex:1; min-width:0; overflow:hidden; }
+  .ring-name     { font-size:13px; font-family:'Bebas Neue',sans-serif; letter-spacing:1px; word-break:break-word; }
+  .ring-rarity   { font-size:10px; letter-spacing:2px; }
+  .ring-ach-row  { display:flex; align-items:center; gap:10px; padding:10px 12px;
+    background:var(--panel); border-radius:8px; border:1px solid var(--border); }
+  .ring-ach-done { border-color:var(--green); }
+
+  /* Finger slots menu widget */
+  .menu-finger-slot {
+    flex:1; background:rgba(255,255,255,0.03); border:1px solid var(--border);
+    border-radius:8px; padding:6px 2px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    cursor:pointer; transition:border-color 0.2s; min-height:60px;
+  }
+  .menu-finger-slot:hover { background:rgba(255,255,255,0.06); }
+  .menu-finger-slot .mfs-emoji  { font-size:20px; line-height:1; }
+  .menu-finger-slot .mfs-label  { font-size:7px; color:var(--muted); letter-spacing:1px; }
+  .menu-finger-slot .mfs-rarity { font-size:7px; letter-spacing:1px; }
+  .menu-finger-slot.slot-empty  { opacity:0.45; }
+
+  /* Feature buttons */
+  .feature-btn {
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:10px 8px; display:flex; flex-direction:column; align-items:center; gap:4px;
+    font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:1.5px;
+    color:var(--text); cursor:pointer; transition:all 0.2s; min-height:56px;
+  }
+  .feature-btn:hover { border-color:var(--fire2); }
+  .feature-btn.locked { opacity:0.42; cursor:default; filter:grayscale(0.5); }
+  .feature-btn span:first-child { font-size:20px; }
+  .trade-code-display {
+    font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:4px;
+    color:var(--diamond); background:var(--bg); border-radius:8px; padding:8px 14px;
+    border:1px solid rgba(0,229,255,0.3); text-align:center; cursor:pointer;
+  }
+
+
+
+
+  /* ═══════════════════════════════════════════════
+     TILE ROYALE — THEME ENGINE v2.0  (PREMIUM)
+     Cinematic quality — layered lighting & depth
+  ═══════════════════════════════════════════════ */
+
+  /* ── Particle canvas overlay per theme ── */
+  .theme-active #gameScreen::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    animation: bgShimmer 8s ease-in-out infinite alternate;
+  }
+  @keyframes bgShimmer {
+    0%   { opacity: 0.4; }
+    100% { opacity: 0.9; }
+  }
+
+  /* ══════════════════════════════════════════════
+     🩹  PIMPLE POPPER — fleshy, tactile, gross-satisfying
+  ══════════════════════════════════════════════ */
+  .theme-pimple #gameScreen,
+  .theme-pimple #lobbyScreen {
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(220,120,60,0.5) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(160,60,20,0.6) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, #a04520 0%, #6b2510 40%, #3a1005 100%) !important;
+  }
+
+  /* Idle tile — skin texture with pore detail */
+  .theme-pimple .tile {
+    background:
+      radial-gradient(circle at 30% 25%, rgba(255,220,180,0.6) 0%, transparent 40%),
+      radial-gradient(circle at 70% 75%, rgba(120,60,20,0.4) 0%, transparent 40%),
+      radial-gradient(circle at 50% 40%, #e8956a 0%, #c4623a 50%, #9a3a18 100%);
+    border: 2px solid #7a3010;
+    border-radius: 14px;
+    box-shadow:
+      inset 0 3px 6px rgba(255,200,150,0.45),
+      inset 0 -3px 8px rgba(80,20,0,0.6),
+      inset 2px 0 4px rgba(255,180,120,0.25),
+      0 4px 12px rgba(0,0,0,0.55),
+      0 1px 0 rgba(255,200,150,0.2);
+  }
+  /* Highlight gloss */
+  .theme-pimple .tile::after {
+    content: '';
+    position: absolute; width: 55%; height: 28%; top: 8%; left: 18%;
+    background: linear-gradient(180deg, rgba(255,240,210,0.55) 0%, transparent 100%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  /* Pimple bump */
+  .theme-pimple .tile::before {
+    content: '';
+    position: absolute; width: 38%; height: 38%;
+    top: 50%; left: 50%; transform: translate(-50%,-52%);
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,220,160,0.9) 0%, #e88a50 35%, #b04010 70%, #7a2408 100%);
+    border-radius: 50%;
+    box-shadow:
+      inset 0 2px 4px rgba(255,200,140,0.5),
+      inset 0 -2px 4px rgba(60,10,0,0.6),
+      0 2px 6px rgba(0,0,0,0.5);
+  }
+
+  /* Burning — READY TO POP! */
+  .theme-pimple .tile.burning {
+    background:
+      radial-gradient(circle at 30% 25%, rgba(255,180,100,0.5) 0%, transparent 35%),
+      radial-gradient(circle at 50% 40%, #ff5522 0%, #cc2200 50%, #880000 100%) !important;
+    border: 2px solid #ff3300 !important;
+    border-radius: 14px !important;
+    box-shadow:
+      inset 0 3px 8px rgba(255,180,100,0.5),
+      inset 0 -2px 6px rgba(100,0,0,0.7),
+      0 0 20px rgba(255,80,0,0.8),
+      0 0 40px rgba(255,40,0,0.35),
+      0 0 8px rgba(255,200,0,0.3) !important;
+    animation: pimplePulse 0.22s ease-in-out infinite alternate !important;
+  }
+  .theme-pimple .tile.burning::before {
+    background:
+      radial-gradient(circle at 35% 25%, #fff5a0 0%, #ffcc00 20%, #ff8800 50%, transparent 80%) !important;
+    width: 52% !important; height: 52% !important;
+    box-shadow: 0 0 16px rgba(255,200,0,0.9), 0 0 4px rgba(255,255,200,0.6) !important;
+    animation: pimpleGrow 0.28s ease-in-out infinite alternate;
+  }
+  .theme-pimple .tile.tapped {
+    background: radial-gradient(circle at 50% 50%, #8a5030 0%, #5a2810 60%, #3a1808 100%) !important;
+    border-color: #5a2808 !important;
+    box-shadow: inset 0 4px 12px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5) !important;
+  }
+  .theme-pimple .tile.tapped::before {
+    background: radial-gradient(ellipse, rgba(80,20,0,0.8) 0%, transparent 70%) !important;
+    width: 80% !important; height: 40% !important; top: 55% !important;
+    border-radius: 50% !important;
+    box-shadow: none !important;
+  }
+  @keyframes pimplePulse { 0% { transform: scale(1); } 100% { transform: scale(1.05); } }
+  @keyframes pimpleGrow  { 0% { width:44%; height:44%; } 100% { width:62%; height:62%; opacity:0.95; } }
+  .theme-pimple .game-timer { color: #ffdd99 !important; text-shadow: 0 0 10px rgba(255,160,50,0.7) !important; }
+  .theme-pimple .btn-play {
+    background: linear-gradient(180deg, #ff7040 0%, #cc3a10 50%, #aa2800 100%) !important;
+    box-shadow: 0 4px 0 #7a1800, 0 6px 20px rgba(200,60,0,0.6), inset 0 1px 0 rgba(255,180,120,0.4) !important;
+    border: 1px solid #ff6030 !important;
+  }
+
+  /* ══════════════════════════════════════════════
+     👁️  EYE POPPER — creepy-cute, hyper-detailed eyeballs
+  ══════════════════════════════════════════════ */
+  .theme-eye #gameScreen,
+  .theme-eye #lobbyScreen {
+    background:
+      radial-gradient(ellipse at 25% 25%, rgba(80,20,140,0.7) 0%, transparent 45%),
+      radial-gradient(ellipse at 75% 75%, rgba(40,0,100,0.7) 0%, transparent 45%),
+      radial-gradient(ellipse at 50% 50%, #200540 0%, #140330 50%, #08001a 100%) !important;
+  }
+
+  /* Idle — eyeball sclera */
+  .theme-eye .tile {
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,240,0.9) 0%, rgba(240,232,210,0.7) 30%, transparent 60%),
+      radial-gradient(circle at 50% 50%, #f2ead8 0%, #ddd0a8 50%, #c4b080 100%);
+    border: 2px solid #b8a070;
+    border-radius: 50%;
+    box-shadow:
+      inset 0 4px 10px rgba(255,255,220,0.5),
+      inset 0 -4px 12px rgba(80,60,20,0.5),
+      inset -3px 0 8px rgba(200,180,100,0.3),
+      0 4px 14px rgba(0,0,0,0.65),
+      0 0 0 1px rgba(255,240,180,0.15);
+  }
+  /* Iris */
+  .theme-eye .tile::before {
+    content: '';
+    position: absolute; width: 54%; height: 54%; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    background:
+      radial-gradient(circle at 35% 30%, rgba(80,200,255,0.7) 0%, transparent 35%),
+      radial-gradient(circle at 50% 50%, #2080b0 0%, #0a4870 40%, #03203a 80%, #010810 100%);
+    border-radius: 50%;
+    box-shadow:
+      0 0 12px rgba(0,160,255,0.6),
+      inset 0 2px 4px rgba(100,220,255,0.4),
+      inset 0 -2px 6px rgba(0,20,60,0.8);
+  }
+  /* Pupil */
+  .theme-eye .tile::after {
+    content: '';
+    position: absolute; width: 23%; height: 23%; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    background: radial-gradient(circle at 30% 25%, rgba(80,80,100,0.6) 0%, #060608 50%, #000 100%);
+    border-radius: 50%;
+    box-shadow: 2px -3px 0 1px rgba(255,255,255,0.65), 0 0 4px rgba(0,0,0,0.9);
+    pointer-events: none;
+  }
+
+  /* Burning — bloodshot, dilated */
+  .theme-eye .tile.burning {
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,240,200,0.9) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, #ffeedd 0%, #f5d090 50%, #d4a060 100%) !important;
+    border-color: #cc2200 !important;
+    border-radius: 50% !important;
+    box-shadow:
+      inset 0 3px 8px rgba(255,200,150,0.4),
+      inset 0 -3px 8px rgba(150,20,0,0.4),
+      0 0 0 3px rgba(255,50,0,0.3),
+      0 0 25px rgba(220,40,20,0.8),
+      0 0 50px rgba(255,20,0,0.35) !important;
+    animation: eyePulse 0.28s ease-in-out infinite alternate !important;
+  }
+  .theme-eye .tile.burning::before {
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,100,100,0.8) 0%, transparent 30%),
+      radial-gradient(circle at 50% 50%, #dd0000 0%, #880000 55%, #330000 100%) !important;
+    width: 70% !important; height: 70% !important;
+    box-shadow: 0 0 16px rgba(255,0,0,0.8), inset 0 2px 4px rgba(255,100,100,0.4) !important;
+    animation: eyeDilate 0.35s ease-in-out infinite alternate;
+  }
+  .theme-eye .tile.burning::after {
+    width: 34% !important; height: 34% !important;
+    background: radial-gradient(circle at 28% 22%, rgba(60,0,0,0.5) 0%, #1a0000 60%, #000 100%) !important;
+  }
+  .theme-eye .tile.tapped {
+    background: radial-gradient(circle, #c8b880 0%, #9a8850 50%, #6a5830 100%) !important;
+    border-color: #7a6030 !important;
+    box-shadow: inset 0 4px 12px rgba(0,0,0,0.6) !important;
+  }
+  @keyframes eyePulse { 0% { transform: scale(1); } 100% { transform: scale(1.07) rotate(1deg); } }
+  @keyframes eyeDilate { 0% { width:64%; height:64%; } 100% { width:76%; height:76%; } }
+  .theme-eye .game-timer { color: #cc88ff !important; text-shadow: 0 0 12px rgba(180,80,255,0.8) !important; }
+  .theme-eye .btn-play {
+    background: linear-gradient(180deg, #8840ee 0%, #5510bb 50%, #3a0088 100%) !important;
+    box-shadow: 0 4px 0 #200060, 0 6px 22px rgba(120,40,220,0.7), inset 0 1px 0 rgba(200,140,255,0.4) !important;
+    border: 1px solid #aa60ff !important;
+  }
+
+  /* ══════════════════════════════════════════════
+     🐛  BUG SQUASHER — creepy crawlers, slimy greens
+  ══════════════════════════════════════════════ */
+  .theme-bug #gameScreen,
+  .theme-bug #lobbyScreen {
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(40,100,0,0.7) 0%, transparent 45%),
+      radial-gradient(ellipse at 80% 20%, rgba(20,70,0,0.6) 0%, transparent 45%),
+      radial-gradient(ellipse at 50% 50%, #1a4010 0%, #0e2808 50%, #040e02 100%) !important;
+  }
+
+  .theme-bug .tile {
+    background:
+      radial-gradient(circle at 30% 22%, rgba(120,200,80,0.5) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, #5aaa3a 0%, #2a7018 55%, #143808 100%);
+    border: 2px solid #1a5808;
+    border-radius: 12px;
+    box-shadow:
+      inset 0 3px 7px rgba(150,255,80,0.3),
+      inset 0 -3px 8px rgba(0,40,0,0.7),
+      0 4px 12px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(80,200,40,0.1);
+  }
+  .theme-bug .tile::before {
+    content: '🐛';
+    position: absolute; font-size: 58%; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    animation: bugWiggle 2.2s ease-in-out infinite;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
+    pointer-events: none;
+  }
+  .theme-bug .tile::after {
+    content: '';
+    position: absolute; width: 60%; height: 22%; top: 12%; left: 20%;
+    background: linear-gradient(180deg, rgba(180,255,100,0.35) 0%, transparent 100%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  /* Burning — ANGRY red bug! */
+  .theme-bug .tile.burning {
+    background:
+      radial-gradient(circle at 30% 22%, rgba(255,160,50,0.5) 0%, transparent 35%),
+      radial-gradient(circle at 50% 50%, #ff5500 0%, #cc1100 50%, #660000 100%) !important;
+    border-color: #ff2200 !important;
+    border-radius: 12px !important;
+    box-shadow:
+      inset 0 3px 8px rgba(255,160,80,0.4),
+      inset 0 -2px 6px rgba(80,0,0,0.7),
+      0 0 22px rgba(255,60,0,0.85),
+      0 0 44px rgba(255,20,0,0.35) !important;
+    animation: bugAngry 0.18s ease-in-out infinite alternate !important;
+  }
+  .theme-bug .tile.burning::before {
+    content: '🐞' !important;
+    font-size: 72% !important;
+    animation: bugAngryWiggle 0.16s infinite !important;
+    filter: drop-shadow(0 0 8px rgba(255,100,0,0.9)) !important;
+  }
+  .theme-bug .tile.tapped {
+    background: radial-gradient(circle, #233a14 0%, #111e08 60%, #080c03 100%) !important;
+    border-color: #1a2e0a !important;
+    box-shadow: inset 0 4px 12px rgba(0,0,0,0.8) !important;
+  }
+  .theme-bug .tile.tapped::before {
+    content: '💚' !important; animation: none !important; font-size: 54% !important;
+    filter: drop-shadow(0 0 6px rgba(0,200,50,0.6)) !important;
+  }
+  @keyframes bugWiggle {
+    0%,100% { transform: translate(-50%,-50%) rotate(-8deg); }
+    50%      { transform: translate(-50%,-50%) rotate(8deg) scaleX(-1); }
+  }
+  @keyframes bugAngry { 0% { transform:scale(1) rotate(-2deg); } 100% { transform:scale(1.06) rotate(2deg); } }
+  @keyframes bugAngryWiggle {
+    0%   { transform: translate(-50%,-50%) rotate(-6deg) scale(1.1); }
+    100% { transform: translate(-50%,-50%) rotate(6deg) scale(1.2); }
+  }
+  .theme-bug .game-timer { color: #aaffaa !important; text-shadow: 0 0 10px rgba(100,255,80,0.7) !important; }
+  .theme-bug .btn-play {
+    background: linear-gradient(180deg, #44cc14 0%, #228800 50%, #155500 100%) !important;
+    box-shadow: 0 4px 0 #0a3300, 0 6px 20px rgba(40,180,10,0.65), inset 0 1px 0 rgba(180,255,120,0.4) !important;
+    border: 1px solid #55ee22 !important;
+  }
+
+  /* ══════════════════════════════════════════════
+     🌌  COSMIC POPPER — deep space, supernova, nebula
+  ══════════════════════════════════════════════ */
+  .theme-cosmic #gameScreen,
+  .theme-cosmic #lobbyScreen {
+    background:
+      radial-gradient(ellipse at 15% 15%, rgba(120,40,240,0.6) 0%, transparent 40%),
+      radial-gradient(ellipse at 85% 85%, rgba(0,80,200,0.5) 0%, transparent 40%),
+      radial-gradient(ellipse at 50% 50%, rgba(40,0,80,0.9) 0%, #080018 50%, #020008 100%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Ccircle cx='20' cy='30' r='1' fill='white' opacity='0.6'/%3E%3Ccircle cx='80' cy='10' r='0.5' fill='white' opacity='0.8'/%3E%3Ccircle cx='150' cy='50' r='1.5' fill='white' opacity='0.4'/%3E%3Ccircle cx='40' cy='100' r='0.8' fill='%23aaaaff' opacity='0.7'/%3E%3Ccircle cx='120' cy='80' r='1' fill='white' opacity='0.5'/%3E%3Ccircle cx='180' cy='140' r='0.6' fill='%23ffccff' opacity='0.9'/%3E%3Ccircle cx='60' cy='160' r='1.2' fill='white' opacity='0.4'/%3E%3Ccircle cx='170' cy='30' r='0.7' fill='%23ccddff' opacity='0.6'/%3E%3C/svg%3E") !important;
+    background-size: auto, auto, auto, 200px 200px !important;
+  }
+
+  .theme-cosmic .tile {
+    background:
+      radial-gradient(circle at 32% 28%, rgba(160,100,255,0.5) 0%, transparent 40%),
+      radial-gradient(circle at 68% 72%, rgba(0,80,200,0.4) 0%, transparent 40%),
+      radial-gradient(circle at 50% 45%, #2a0e5a 0%, #14063a 55%, #080220 100%);
+    border: 1.5px solid rgba(140,80,255,0.5);
+    border-radius: 50%;
+    box-shadow:
+      inset 0 2px 6px rgba(180,140,255,0.3),
+      inset 0 -2px 8px rgba(0,0,40,0.8),
+      0 0 14px rgba(100,50,200,0.4),
+      0 4px 12px rgba(0,0,0,0.7),
+      0 0 0 1px rgba(100,60,200,0.2);
+    animation: planetFloat 6s ease-in-out infinite alternate;
+  }
+  /* Planet surface shimmer */
+  .theme-cosmic .tile::before {
+    content: '';
+    position: absolute; width: 68%; height: 68%; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    background:
+      radial-gradient(circle at 30% 25%, rgba(180,130,255,0.6) 0%, transparent 35%),
+      radial-gradient(circle at 50% 50%, #5533cc 0%, #2a1888 45%, #100844 80%, #060220 100%);
+    border-radius: 50%;
+    box-shadow:
+      inset -4px -4px 10px rgba(0,0,0,0.7),
+      inset 3px 3px 8px rgba(160,120,255,0.4),
+      0 0 12px rgba(100,60,200,0.5);
+    animation: planetSpin 10s linear infinite;
+  }
+  /* Star glint */
+  .theme-cosmic .tile::after {
+    content: '';
+    position: absolute; width: 12%; height: 12%; top: 16%; right: 16%;
+    background: radial-gradient(circle, #ffffff 0%, rgba(200,220,255,0.6) 50%, transparent 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(255,255,255,0.9), 0 0 20px rgba(180,200,255,0.5);
+    animation: starTwinkle 2.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  /* Burning — SUPERNOVA! */
+  .theme-cosmic .tile.burning {
+    background:
+      radial-gradient(circle at 30% 25%, rgba(255,240,150,0.6) 0%, transparent 30%),
+      radial-gradient(circle at 50% 50%, #ffaa00 0%, #ff5500 35%, #cc0000 65%, #440000 100%) !important;
+    border-color: #ffaa00 !important; border-radius: 50% !important;
+    box-shadow:
+      inset 0 3px 10px rgba(255,220,100,0.5),
+      0 0 30px rgba(255,140,0,0.9),
+      0 0 60px rgba(255,60,0,0.5),
+      0 0 100px rgba(200,0,0,0.25) !important;
+    animation: cosmicBurn 0.4s ease-in-out infinite alternate !important;
+  }
+  .theme-cosmic .tile.burning::before {
+    background:
+      radial-gradient(circle at 35% 30%, #ffffff 0%, #ffee66 15%, #ffaa00 40%, #ff4400 70%, #cc0000 100%) !important;
+    width: 82% !important; height: 82% !important;
+    animation: cosmicExpand 0.45s ease-in-out infinite alternate;
+    box-shadow: 0 0 20px rgba(255,220,0,0.9) !important;
+  }
+  .theme-cosmic .tile.burning::after { display: none !important; }
+  .theme-cosmic .tile.tapped {
+    background: radial-gradient(circle, #0a0428 0%, #040110 60%, #020008 100%) !important;
+    border-color: rgba(100,50,200,0.15) !important;
+    box-shadow: inset 0 4px 12px rgba(0,0,0,0.9) !important;
+  }
+  @keyframes planetFloat { 0% { transform: translateY(0); } 100% { transform: translateY(-3px); } }
+  @keyframes planetSpin  { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(30deg); } }
+  @keyframes starTwinkle { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.2; transform:scale(0.4); } }
+  @keyframes cosmicBurn  { 0% { transform:scale(1) rotate(-1deg); } 100% { transform:scale(1.09) rotate(1deg); } }
+  @keyframes cosmicExpand { 0% { width:72%; height:72%; } 100% { width:88%; height:88%; } }
+  .theme-cosmic .game-timer { color: #cc99ff !important; text-shadow: 0 0 14px rgba(180,100,255,0.8) !important; }
+  .theme-cosmic .btn-play {
+    background: linear-gradient(180deg, #6633ee 0%, #3311bb 50%, #220088 100%) !important;
+    box-shadow: 0 4px 0 #110044, 0 6px 24px rgba(100,50,220,0.8), inset 0 1px 0 rgba(180,140,255,0.5) !important;
+    border: 1px solid #9966ff !important;
+  }
+
+  /* ══════════════════════════════════════════════
+     🍓  FRUIT POPPER — juicy, ripe, organic satisfaction
+  ══════════════════════════════════════════════ */
+  .theme-fruit #gameScreen,
+  .theme-fruit #lobbyScreen {
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(80,180,20,0.6) 0%, transparent 45%),
+      radial-gradient(ellipse at 70% 80%, rgba(30,100,0,0.7) 0%, transparent 45%),
+      radial-gradient(ellipse at 50% 50%, #1e5a0a 0%, #0e3006 50%, #060f02 100%) !important;
+  }
+
+  .theme-fruit .tile {
+    background:
+      radial-gradient(circle at 28% 20%, rgba(160,255,80,0.45) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, #66cc2a 0%, #3a8814 55%, #1a4808 100%);
+    border: 2px solid #224d06;
+    border-radius: 14px;
+    box-shadow:
+      inset 0 3px 7px rgba(180,255,100,0.35),
+      inset 0 -3px 8px rgba(0,40,0,0.65),
+      0 4px 12px rgba(0,0,0,0.55),
+      0 0 0 1px rgba(100,220,40,0.12);
+  }
+  /* Leaf shine */
+  .theme-fruit .tile::after {
+    content: '';
+    position: absolute; width: 50%; height: 22%; top: 10%; left: 20%;
+    background: linear-gradient(180deg, rgba(200,255,150,0.4) 0%, transparent 100%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  /* Fruit bud */
+  .theme-fruit .tile::before {
+    content: '';
+    position: absolute; width: 38%; height: 42%; bottom: 12%; left: 50%;
+    transform: translateX(-50%);
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,220,200,0.7) 0%, transparent 30%),
+      radial-gradient(ellipse at 50% 40%, #ff6644 0%, #ee2222 55%, #aa0000 100%);
+    border-radius: 50% 50% 48% 48% / 55% 55% 45% 45%;
+    box-shadow:
+      inset -3px -3px 6px rgba(0,0,0,0.4),
+      inset 2px 2px 5px rgba(255,180,160,0.5),
+      0 3px 8px rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+  /* Burning — RIPE! juice explosion imminent */
+  .theme-fruit .tile.burning {
+    background:
+      radial-gradient(circle at 28% 20%, rgba(255,200,100,0.5) 0%, transparent 35%),
+      radial-gradient(circle at 50% 50%, #ff7722 0%, #dd2200 50%, #880000 100%) !important;
+    border-color: #ff5500 !important; border-radius: 14px !important;
+    box-shadow:
+      inset 0 3px 8px rgba(255,180,80,0.4),
+      inset 0 -2px 6px rgba(80,0,0,0.6),
+      0 0 22px rgba(255,90,0,0.8),
+      0 0 44px rgba(255,40,0,0.35) !important;
+    animation: fruitRipe 0.32s ease-in-out infinite alternate !important;
+  }
+  .theme-fruit .tile.burning::before {
+    background:
+      radial-gradient(circle at 32% 25%, rgba(255,255,160,0.7) 0%, transparent 25%),
+      radial-gradient(ellipse at 50% 40%, #ffee44 0%, #ffaa00 40%, #ff5500 80%, #cc2200 100%) !important;
+    width: 56% !important; height: 62% !important; bottom: 6% !important;
+    animation: fruitBounce 0.28s ease-in-out infinite alternate;
+    box-shadow: 0 0 14px rgba(255,180,0,0.7) !important;
+  }
+  .theme-fruit .tile.tapped {
+    background: radial-gradient(circle, #1e4010 0%, #0e2008 60%, #060d03 100%) !important;
+    border-color: #0e2008 !important;
+    box-shadow: inset 0 4px 12px rgba(0,0,0,0.8) !important;
+  }
+  @keyframes fruitRipe   { 0% { transform:scale(1) rotate(-1deg); } 100% { transform:scale(1.05) rotate(1.5deg); } }
+  @keyframes fruitBounce { 0% { transform:translateX(-50%) scale(1); } 100% { transform:translateX(-50%) scale(1.18); } }
+  .theme-fruit .game-timer { color: #aaff44 !important; text-shadow: 0 0 10px rgba(140,255,40,0.75) !important; }
+  .theme-fruit .btn-play {
+    background: linear-gradient(180deg, #55dd18 0%, #2a9900 50%, #186600 100%) !important;
+    box-shadow: 0 4px 0 #0a3300, 0 6px 20px rgba(60,200,10,0.65), inset 0 1px 0 rgba(180,255,120,0.45) !important;
+    border: 1px solid #66ff22 !important;
+  }
+
+  /* ── Theme store card — premium ── */
+  .theme-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%),
+      var(--panel);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; cursor: pointer; transition: all 0.2s;
+    position: relative; overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .theme-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  }
+  .theme-card:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 20px rgba(0,0,0,0.5); }
+  .theme-card.owned { border-color: rgba(255,140,0,0.4); }
+  .theme-card.active-theme { border-color: rgba(0,255,136,0.5); box-shadow: inset 0 1px 0 rgba(0,255,136,0.15), 0 0 16px rgba(0,255,136,0.2); }
+  .theme-card-preview {
+    width: 64px; height: 64px; border-radius: 12px; flex-shrink: 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 4px;
+    overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .theme-preview-tile { border-radius: 5px; transition: background 0.2s; }
+  .theme-card-info { flex: 1; }
+  .theme-card-name { font-family:'Bebas Neue',sans-serif; font-size: 20px; letter-spacing: 2px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+  .theme-card-desc { font-size: 11px; color: var(--muted); letter-spacing: 1px; margin-top: 2px; line-height: 1.4; }
+  .theme-card-price { font-family:'Bebas Neue',sans-serif; font-size: 16px; color: var(--diamond); margin-top: 5px; text-shadow: 0 0 8px rgba(0,229,255,0.4); }
+  .theme-card-badge {
+    position: absolute; top: 10px; right: 10px;
+    font-family:'Bebas Neue',sans-serif; font-size: 11px; letter-spacing: 1px;
+    padding: 3px 9px; border-radius: 20px;
+  }
+  .theme-card-badge.active { background:rgba(0,255,136,0.15); color:var(--green); border:1px solid rgba(0,255,136,0.4); text-shadow: 0 0 6px rgba(0,255,136,0.5); }
+  .theme-card-badge.owned  { background:rgba(255,140,0,0.12);  color:var(--fire2); border:1px solid rgba(255,140,0,0.35); }
+  .theme-card-badge.locked { background:rgba(0,0,0,0.3);  color:var(--muted);  border:1px solid rgba(255,255,255,0.08); }
+
+
+
+  /* ═══════════════════════════════════════════════════════════
+     PREMIUM UI SYSTEM v2 — Reference Sheet Recreation
+     Based on: Tile Spritesheet + Button System + Wheel Frame
+  ═══════════════════════════════════════════════════════════ */
+
+  /* ── PLAY BUTTON — Orange bevel like the reference ── */
+  .btn-play {
+    width: 100%;
+    padding: 16px;
+    background:
+      linear-gradient(180deg,
+        #ff9940 0%,
+        #ee6c00 25%,
+        #cc4800 50%,
+        #aa3000 75%,
+        #882000 100%);
+    border: none;
+    border-radius: 12px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 30px;
+    letter-spacing: 5px;
+    color: #ffe8c0;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 0 20px rgba(255,180,80,0.4);
+    box-shadow:
+      inset 0 1px 0 rgba(255,200,120,0.7),
+      inset 0 -3px 0 rgba(0,0,0,0.4),
+      inset 2px 0 4px rgba(255,160,60,0.2),
+      0 4px 0 #661800,
+      0 6px 0 #441000,
+      0 8px 20px rgba(180,60,0,0.6),
+      0 0 40px rgba(255,100,0,0.2);
+    transition: all 0.12s;
+  }
+  .btn-play::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      rgba(255,255,255,0.18) 0%,
+      rgba(255,255,255,0.06) 45%,
+      transparent 100%);
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .btn-play::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -80%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+    transform: skewX(-20deg);
+    animation: btnShine 3.5s ease-in-out infinite;
+  }
+  @keyframes btnShine { 0%,60% { left:-80%; } 100% { left:160%; } }
+  .btn-play:active {
+    transform: translateY(4px);
+    box-shadow:
+      inset 0 1px 0 rgba(255,200,120,0.5),
+      inset 0 3px 6px rgba(0,0,0,0.4),
+      0 0 0 #661800, 0 1px 0 #441000,
+      0 2px 8px rgba(180,60,0,0.4);
+  }
+
+  /* ── SECONDARY / STORE BUTTON — Purple gem style ── */
+  .btn-store {
+    width: 100%;
+    padding: 14px 20px;
+    background:
+      linear-gradient(180deg,
+        #8844ee 0%,
+        #6622cc 30%,
+        #4410aa 65%,
+        #330088 100%);
+    border: 1px solid #aa66ff;
+    border-radius: 12px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 3px;
+    color: #ddc0ff;
+    cursor: pointer;
+    position: relative; overflow: hidden;
+    text-shadow: 0 0 10px rgba(180,100,255,0.7), 0 2px 4px rgba(0,0,0,0.5);
+    box-shadow:
+      inset 0 1px 0 rgba(200,150,255,0.5),
+      inset 0 -2px 0 rgba(0,0,0,0.4),
+      0 4px 0 #1a0050,
+      0 6px 18px rgba(100,30,200,0.55),
+      0 0 30px rgba(140,60,255,0.2);
+    display: flex; flex-direction: column; align-items: center;
+    transition: all 0.12s;
+  }
+  .btn-store::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%);
+    border-radius: inherit; pointer-events: none;
+  }
+  .btn-store::after {
+    content: '';
+    position: absolute; top: 0; left: -80%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    transform: skewX(-20deg);
+    animation: btnShine 4s ease-in-out infinite 0.8s;
+  }
+  .btn-store:active { transform: translateY(3px); box-shadow: inset 0 3px 6px rgba(0,0,0,0.5), 0 1px 0 #1a0050; }
+  .btn-store-sub { font-size: 10px; letter-spacing: 2px; color: rgba(200,160,255,0.7); margin-top: 2px; }
+
+  /* ── SECONDARY GHOST BUTTON — Dark glass ── */
+  .btn-secondary {
+    width: 100%;
+    padding: 13px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+    border: 1px solid rgba(100,120,180,0.45);
+    border-radius: 10px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: rgba(180,200,255,0.85);
+    cursor: pointer;
+    position: relative; overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 rgba(180,200,255,0.15),
+      0 2px 8px rgba(0,0,0,0.4);
+    transition: all 0.15s;
+  }
+  .btn-secondary::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(180,200,255,0.3), transparent);
+  }
+  .btn-secondary:hover { border-color: rgba(255,140,60,0.6); color: #ffaa66; box-shadow: inset 0 1px 0 rgba(255,160,80,0.15), 0 0 12px rgba(255,100,0,0.2); }
+
+  /* ── FEATURE BUTTONS — Gem-studded dark panels ── */
+  .feature-btn {
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.07) 0%, rgba(0,0,0,0.2) 100%),
+      var(--panel);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 12px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 12px; letter-spacing: 1.5px;
+    color: rgba(200,220,255,0.85);
+    cursor: pointer; transition: all 0.15s;
+    min-height: 58px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.1),
+      inset 0 -1px 0 rgba(0,0,0,0.3),
+      0 2px 8px rgba(0,0,0,0.4);
+    position: relative; overflow: hidden;
+  }
+  .feature-btn::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 40%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);
+    border-radius: inherit 0 0; pointer-events: none;
+  }
+  .feature-btn:hover {
+    border-color: rgba(255,160,60,0.5);
+    box-shadow: inset 0 1px 0 rgba(255,180,80,0.12), 0 0 14px rgba(255,100,0,0.2);
+    transform: translateY(-1px);
+  }
+  .feature-btn span:first-child { font-size: 22px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+
+  /* ── MODE CARDS — Premium dark panels ── */
+  .mode-card {
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.3) 100%),
+      var(--panel);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative; overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.1),
+      inset 0 -1px 0 rgba(0,0,0,0.3),
+      0 3px 10px rgba(0,0,0,0.4);
+  }
+  .mode-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 45%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 100%);
+    pointer-events: none;
+  }
+  .mode-card.selected, .mode-card:hover {
+    border-color: rgba(255,165,0,0.7);
+    box-shadow:
+      inset 0 1px 0 rgba(255,200,80,0.15),
+      0 0 0 1px rgba(255,140,0,0.3),
+      0 0 20px rgba(255,100,0,0.25),
+      0 4px 14px rgba(0,0,0,0.5);
+  }
+  .mode-icon { font-size: 28px; margin-bottom: 6px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+  .mode-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px; letter-spacing: 2px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  .mode-time { font-size: 11px; color: var(--muted); letter-spacing: 1px; margin-top: 3px; }
+
+  /* Canvas replaced by Wheel.png image — styling moved to .gv2-wheel-img */
+
+  @keyframes ls-pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
+
+  /* ── MYSTIC GAUNTLET TITLE ── */
+  .gauntlet-title {
+    font-family: 'Cinzel Decorative', 'Cinzel', 'Palatino Linotype', serif;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #b8860b 0%, #ffd700 35%, #ffb300 65%, #b8860b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 8px rgba(255,180,0,0.45));
+    line-height: 1.1;
+  }
+  .gauntlet-title-sm {
+    font-family: 'Cinzel Decorative', 'Cinzel', 'Palatino Linotype', serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    background: linear-gradient(135deg, #c8a020 0%, #ffd700 50%, #c8a020 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── GAUNTLET SCREEN RING FRAME ── */
+  #gauntletScreen .gauntlet-hand-container {
+    position: relative;
+  }
+
+  /* ── SKIN CARD — Premium ── */
+  .skin-card {
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.2) 100%),
+      var(--panel);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 2px 8px rgba(0,0,0,0.4);
+    position: relative; overflow: hidden;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .skin-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 40%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 100%);
+    pointer-events: none;
+  }
+  .skin-card:hover { border-color: rgba(255,140,60,0.5); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,160,80,0.1), 0 0 16px rgba(255,80,0,0.2); }
+  .skin-card.active { border-color: rgba(255,200,0,0.6); box-shadow: inset 0 1px 0 rgba(255,220,80,0.15), 0 0 20px rgba(255,150,0,0.3); }
+
+  /* ── RARITY CARD FRAMES — Based on reference section 3 ── */
+  .ring-inventory-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    position: relative; overflow: hidden;
+    transition: all 0.15s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.4);
+    width: 100%; box-sizing: border-box; flex-shrink: 0; min-width: 0;
+  }
+  .ring-inventory-row::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 45%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);
+    pointer-events: none;
+  }
+  /* Rarity-specific ring row frames */
+  .ring-inventory-row:has(.ring-common)    { background: linear-gradient(135deg,#1a1a22,#111118); border: 1px solid rgba(85,85,112,0.5); }
+  .ring-inventory-row:has(.ring-uncommon)  { background: linear-gradient(135deg,#0a1a12,#050e08); border: 1px solid rgba(0,180,80,0.45); box-shadow: inset 0 1px 0 rgba(0,255,100,0.08), 0 0 12px rgba(0,150,60,0.2); }
+  .ring-inventory-row:has(.ring-rare)      { background: linear-gradient(135deg,#0a1a2a,#050e18); border: 1px solid rgba(0,180,255,0.45); box-shadow: inset 0 1px 0 rgba(0,220,255,0.08), 0 0 12px rgba(0,150,220,0.25); }
+  .ring-inventory-row:has(.ring-epic)      { background: linear-gradient(135deg,#1a0a2a,#0e0518); border: 1px solid rgba(140,60,220,0.5); box-shadow: inset 0 1px 0 rgba(180,100,255,0.1), 0 0 14px rgba(120,40,200,0.3); }
+  .ring-inventory-row:has(.ring-legendary) { background: linear-gradient(135deg,#1a1400,#0e0c00); border: 1px solid rgba(220,180,0,0.55); box-shadow: inset 0 1px 0 rgba(255,220,80,0.1), 0 0 16px rgba(200,150,0,0.35); }
+  .ring-inventory-row:has(.ring-secret)    { background: linear-gradient(135deg,#1a0008,#0e0004); border: 1px solid rgba(220,30,60,0.55); box-shadow: inset 0 1px 0 rgba(255,60,100,0.1), 0 0 16px rgba(200,20,50,0.35); }
+
+  /* ── ACHIEVEMENT CARDS ── */
+  .ach-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    background: linear-gradient(160deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.2) 100%), var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 6px rgba(0,0,0,0.35);
+    position: relative; overflow: hidden;
+    width: 100%; box-sizing: border-box;
+  }
+  .ach-card.unlocked {
+    border-color: rgba(0,200,80,0.45);
+    box-shadow: inset 0 1px 0 rgba(0,255,100,0.08), 0 0 12px rgba(0,150,60,0.2);
+  }
+
+  /* ── GAUNTLET FINGER SLOTS — Gem socket style ── */
+  .menu-finger-slot {
+    flex: 1;
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.08) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.3) 100%),
+      var(--panel);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 6px 2px;
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    cursor: pointer;
+    min-height: 64px;
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 2px 6px rgba(0,0,0,0.3);
+    transition: all 0.15s;
+  }
+  .menu-finger-slot:hover {
+    border-color: rgba(255,160,60,0.4);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), 0 0 10px rgba(255,120,0,0.2);
+  }
+  .menu-finger-slot.slot-empty { opacity: 0.5; }
+  .menu-finger-slot .mfs-emoji  { font-size: 22px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+  .menu-finger-slot .mfs-label  { font-size: 7px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .menu-finger-slot .mfs-rarity { font-size: 7px; letter-spacing: 1px; }
+
+  /* ══════════════════════════════════════════════════════════════════
+     GAUNTLET UI V2  —  Image-based production artwork
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* ── GAUNTLET ARTWORK DISPLAY ──
+     gauntlet.png is shown cropped to the hand section.
+     Invisible hotspots overlay the ring slot circles in the artwork.
+     Adjust .gv2-hs-N left/top values if slots don't align on a specific device. */
+
+  .gv2-art-container {
+    position: relative;
+    width: 100%;
+    /* Gauntlet.png is square — show full image at 1:1 ratio.
+       The image contains the complete gauntlet hand with ring slots visible. */
+    overflow: hidden;
+    padding-bottom: 100%;  /* 1:1 square for the square artwork */
+    max-height: 0;
+    border-radius: 16px;
+    background: #000;
+    margin-bottom: 10px;
+  }
+  .gv2-art-img {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: auto;
+    display: block;
+    user-select: none; -webkit-user-drag: none;
+    pointer-events: none;
+  }
+  /* No fade needed — Gauntlet.png is self-contained on black background */
+
+  /* Invisible finger hotspots — positioned over ring slot circles in gauntlet.png
+     Width is % of container width; aspect-ratio keeps them circular.
+     left/top are the TOP-LEFT corner of the hotspot circle.
+     Centers correspond to ring slot centres in the artwork. */
+  .gv2-hs {
+    position: absolute;
+    width: 13%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    transition: box-shadow .18s, transform .12s;
+    touch-action: manipulation;
+    z-index: 2;
+  }
+  .gv2-hs:active { transform: scale(.88); }
+
+  /* Hover glow on empty slots — faint gold ring so user knows it's tappable */
+  .gv2-hs.hs-empty:hover {
+    box-shadow: 0 0 0 2px rgba(215,180,60,.65), 0 0 14px rgba(215,180,60,.4);
+  }
+
+  /* Equipped slot — subtle rarity tint */
+  .gv2-hs.hs-equipped {
+    box-shadow: 0 0 0 1px rgba(var(--hs-clr-rgb,215,180,60),.5), 0 0 5px var(--hs-clr,#ffd700);
+    animation: gv2-slot-pulse 2.8s ease-in-out infinite;
+  }
+  @keyframes gv2-slot-pulse {
+    0%,100%{ box-shadow: 0 0 0 1px rgba(var(--hs-clr-rgb,215,180,60),.4), 0 0 3px var(--hs-clr,#ffd700); }
+    50%    { box-shadow: 0 0 0 1px rgba(var(--hs-clr-rgb,215,180,60),.6), 0 0 7px var(--hs-clr,#ffd700); }
+  }
+
+  /* Ring image inside hotspot — clipped to circle by parent overflow:hidden */
+  .gv2-hs { overflow: hidden; }
+
+  .gv2-ring-img {
+    display: block;
+    pointer-events: none;
+    user-select: none;
+    animation: gv2-ring-bob 3.2s ease-in-out infinite;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,.9));
+    transition: transform .2s ease, opacity .2s ease;
+    border-radius: 50%;
+  }
+  @keyframes gv2-ring-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-1.5px)} }
+
+  /* Equip flash animation */
+  @keyframes gv2-equip {
+    0%  { transform:scale(.8);  opacity:0; }
+    45% { transform:scale(1.22);opacity:1; }
+    70% { transform:scale(.96); }
+    100%{ transform:scale(1);   opacity:1; }
+  }
+  .gv2-equip-anim { animation: gv2-equip .38s cubic-bezier(.34,1.56,.64,1) both; }
+
+  /* ── HOTSPOT POSITIONS (calibrated for Gauntlet.png, square image) ──
+     Hotspot is 13% wide × 13% tall (aspect-ratio:1 inside a square container).
+     left/top = TOP-LEFT corner = circle_center - 6.5% on each axis.
+     Index/Middle/Ring confirmed correct by visual test.
+     Thumb moved up: socket is mid-thumb, not at palm junction.
+     Pinky moved left+up: socket sits on the finger, not beside it.
+       Thumb  ~(17%, 33%)  Index ~(32%, 24%)  Middle ~(49%, 17%)
+       Ring   ~(64%, 22%)  Pinky ~(71%, 25%)                        */
+  .gv2-hs-0 { left: 14.5%; top: 37.6%; }  /* Thumb  — lower left        */
+  .gv2-hs-1 { left: 27.7%; top: 16.9%; }  /* Index  — second from left  */
+  .gv2-hs-2 { left: 43.9%; top: 11.6%; }  /* Middle — tallest finger    */
+  .gv2-hs-3 { left: 59.85%; top: 16.7%; } /* Ring   — second from right */
+  .gv2-hs-4 { left: 72.8%; top: 32.15%; } /* Pinky  — lower right       */
+
+  /* Legacy canvas — hidden now that we use Wheel.png */
+  #spinWheelCanvas { display: none; }
+
+  /* ── WHEEL IMAGE ── */
+  .gv2-wheel-outer {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 0 22px rgba(180,80,20,.55)) drop-shadow(0 0 50px rgba(140,40,0,.35));
+  }
+
+  .gv2-wheel-img {
+    width: 280px;
+    height: 280px;
+    display: block;
+    border-radius: 50%;
+    /* Rotate exactly around the center red gem — which is at geometric center */
+    transform-origin: 50% 50%;
+    will-change: transform;
+    user-select: none;
+    -webkit-user-drag: none;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+
+  /* Fixed red gem pointer — stays at top while wheel rotates */
+  .gv2-wheel-ptr-gem {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 22px;
+    height: 26px;
+    background: linear-gradient(160deg, #ff9999 0%, #dd1111 35%, #880000 100%);
+    clip-path: polygon(50% 100%, 5% 0%, 95% 0%);
+    filter: drop-shadow(0 0 8px rgba(255,40,0,.9)) drop-shadow(0 3px 6px rgba(0,0,0,.85));
+    z-index: 5;
+    pointer-events: none;
+    animation: gemGlow 1.6s ease-in-out infinite alternate;
+  }
+  @keyframes gemGlow {
+    0%   { filter: drop-shadow(0 0 6px rgba(255,40,0,.75)) drop-shadow(0 2px 4px rgba(0,0,0,.8)); }
+    100% { filter: drop-shadow(0 0 14px rgba(255,90,0,1.0)) drop-shadow(0 0 28px rgba(200,20,0,.6)) drop-shadow(0 2px 4px rgba(0,0,0,.8)); }
+  }
+
+  /* ── PREMIUM RING PICKER (bottom-sheet) ── */
+  .gv2-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.87);
+    z-index:900; display:flex; align-items:flex-end; justify-content:center;
+    animation:gv2-ol-in .18s ease;
+  }
+  @keyframes gv2-ol-in { from{opacity:0} to{opacity:1} }
+  .gv2-panel {
+    width:100%; max-width:420px; max-height:74vh;
+    background:linear-gradient(180deg,#0f0d1e 0%,#090717 100%);
+    border:1px solid rgba(115,85,215,.42); border-bottom:none;
+    border-radius:20px 20px 0 0; overflow:hidden;
+    display:flex; flex-direction:column;
+    box-shadow:0 -8px 40px rgba(75,28,195,.38), inset 0 0 0 1px rgba(175,135,255,.08);
+    animation:gv2-panel-up .28s cubic-bezier(.34,1.4,.64,1);
+  }
+  @keyframes gv2-panel-up { from{transform:translateY(100%)} to{transform:translateY(0)} }
+  .gv2-phdr {
+    padding:14px 16px 10px; flex-shrink:0;
+    background:linear-gradient(180deg,rgba(75,38,175,.22) 0%,transparent 100%);
+    border-bottom:1px solid rgba(115,85,215,.22);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .gv2-ptitle {
+    font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:3px;
+    color:rgba(218,196,255,.92); text-shadow:0 0 10px rgba(135,98,255,.48);
+  }
+  .gv2-pclose {
+    width:30px; height:30px; border-radius:50%;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+    color:rgba(255,255,255,.55); font-size:15px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition:all .15s;
+  }
+  .gv2-pclose:hover { background:rgba(255,70,70,.14); border-color:rgba(255,70,70,.3); color:#ff6060; }
+  .gv2-pbody { overflow-y:auto; padding:10px 12px 22px; flex:1; }
+
+  /* Picker rows */
+  .gv2-prow {
+    display:flex; align-items:center; gap:11px; padding:10px 12px;
+    border-radius:12px; margin-bottom:6px; cursor:pointer;
+    transition:transform .14s, filter .14s; position:relative; overflow:hidden;
+  }
+  .gv2-prow::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:42%;
+    background:linear-gradient(180deg,rgba(255,255,255,.04) 0%,transparent 100%);
+    pointer-events:none;
+  }
+  .gv2-prow:active { transform:scale(.97); }
+  .gv2-pr-common    { background:linear-gradient(135deg,#131320,#09090f); border:1px solid rgba(82,82,108,.42); }
+  .gv2-pr-uncommon  { background:linear-gradient(135deg,#071410,#040b07); border:1px solid rgba(0,195,85,.38);  box-shadow:0 0 10px rgba(0,175,68,.13); }
+  .gv2-pr-rare      { background:linear-gradient(135deg,#071420,#030c14); border:1px solid rgba(0,195,235,.38); box-shadow:0 0 10px rgba(0,175,215,.18); }
+  .gv2-pr-epic      { background:linear-gradient(135deg,#140820,#080314); border:1px solid rgba(135,55,215,.48); box-shadow:0 0 12px rgba(115,38,195,.22); }
+  .gv2-pr-legendary { background:linear-gradient(135deg,#161100,#0d0800); border:1px solid rgba(215,175,0,.52);  box-shadow:0 0 14px rgba(195,148,0,.28); }
+  .gv2-pr-secret    { background:linear-gradient(135deg,#180008,#0d0004); border:1px solid rgba(215,35,58,.52);  box-shadow:0 0 14px rgba(195,18,48,.28); }
+  .gv2-pr-icon  { width:44px; height:44px; flex-shrink:0; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:50%; }
+  .gv2-pr-info  { flex:1; }
+  .gv2-pr-name  { font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:1.5px; color:rgba(218,208,238,.95); }
+  .gv2-pr-rar   { font-size:9px; letter-spacing:2px; text-transform:uppercase; margin-top:1px; }
+  .gv2-pr-cnt   { font-size:10px; color:rgba(175,155,215,.48); letter-spacing:1px; }
+  .gv2-pr-equip {
+    font-size:10px; letter-spacing:1.5px; padding:5px 10px; border-radius:8px;
+    background:rgba(115,76,215,.2); border:1px solid rgba(115,76,215,.4);
+    color:rgba(175,135,255,.92); cursor:pointer; flex-shrink:0;
+    font-family:'Bebas Neue',sans-serif; transition:all .14s;
+  }
+  .gv2-pr-equip:hover { background:rgba(138,98,235,.34); border-color:rgba(158,118,255,.6); }
+  .gv2-pempty {
+    text-align:center; padding:28px 16px;
+    color:rgba(135,115,175,.58); font-size:13px; letter-spacing:1px;
+  }
+
+  /* ── STATS BAR — polished dark glass ── */
+  .stats-bar {
+    display: flex; gap: 0;
+    align-items: flex-start;
+    margin-bottom: 28px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.2) 100%),
+      var(--panel);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 10px 16px;
+    width: 100%;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      inset 0 -1px 0 rgba(0,0,0,0.3),
+      0 3px 10px rgba(0,0,0,0.4);
+  }
+  .stat { text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; }
+  .stat-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    color: var(--diamond);
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px rgba(0,200,255,0.4);
+  }
+  .stat-lbl { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+  .stat-div { width: 1px; background: rgba(255,255,255,0.08); margin: 4px 8px; }
+
+  /* ── PANEL & OVERLAY BACKGROUNDS ── */
+
+  /* ── AMBIENT GLOW PARTICLES on game screen ── */
+  @keyframes particleDrift {
+    0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+    20%  { opacity: 0.7; }
+    80%  { opacity: 0.5; }
+    100% { transform: translateY(-80px) translateX(20px) scale(0.3); opacity: 0; }
+  }
+
+
+
+
+
+  /* Keep glow overlay for burning state */
+  .theme-active .tile.burning::after {
+    display: block !important;
+    content: '' !important;
+    position: absolute; inset: -4px;
+    border-radius: inherit;
+    background: transparent !important;
+    box-shadow: 0 0 20px rgba(255,80,0,0.7), 0 0 40px rgba(255,40,0,0.35) !important;
+    pointer-events: none;
+    animation: burnGlowPulse 0.25s ease-in-out infinite alternate;
+  }
+  @keyframes burnGlowPulse {
+    0%   { box-shadow: 0 0 16px rgba(255,80,0,0.6),  0 0 32px rgba(255,40,0,0.25); }
+    100% { box-shadow: 0 0 28px rgba(255,120,0,0.9), 0 0 56px rgba(255,60,0,0.5); }
+  }
+
+
+  /* ═══════════════════════════════════════════════
+     JUICE SYSTEM v1.0 — Game Feel & Micro-animations
+  ═══════════════════════════════════════════════ */
+
+  /* 1. IDLE BREATHING — subtle, subconscious */
+  .tile {
+    animation: tileBreath 3.2s ease-in-out infinite;
+    transform-origin: center;
+    will-change: transform, box-shadow;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -2px 4px rgba(0,0,0,0.4), 0 3px 8px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.6);
+    transition: transform 0.08s cubic-bezier(0.34,1.56,0.64,1),
+                box-shadow 0.12s ease,
+                filter 0.12s ease;
+  }
+  @keyframes tileBreath {
+    0%,100% { transform: scale(1.000); filter: brightness(1.000); }
+    50%     { transform: scale(1.006); filter: brightness(1.015); }
+  }
+  /* Stagger breathing so tiles feel alive, not synchronized */
+  .tile:nth-child(2)  { animation-delay: -0.4s; }
+  .tile:nth-child(3)  { animation-delay: -0.9s; }
+  .tile:nth-child(4)  { animation-delay: -1.5s; }
+  .tile:nth-child(5)  { animation-delay: -2.1s; }
+  .tile:nth-child(6)  { animation-delay: -0.7s; }
+  .tile:nth-child(7)  { animation-delay: -1.2s; }
+  .tile:nth-child(8)  { animation-delay: -2.6s; }
+  .tile:nth-child(9)  { animation-delay: -0.3s; }
+  .tile:nth-child(10) { animation-delay: -1.8s; }
+  .tile:nth-child(11) { animation-delay: -0.6s; }
+  .tile:nth-child(12) { animation-delay: -2.2s; }
+  .tile:nth-child(13) { animation-delay: -1.0s; }
+  .tile:nth-child(14) { animation-delay: -0.2s; }
+  .tile:nth-child(15) { animation-delay: -1.6s; }
+  .tile:nth-child(16) { animation-delay: -2.8s; }
+  .tile:nth-child(17) { animation-delay: -0.5s; }
+  .tile:nth-child(18) { animation-delay: -1.3s; }
+  .tile:nth-child(19) { animation-delay: -2.4s; }
+  .tile:nth-child(20) { animation-delay: -0.8s; }
+  .tile:nth-child(21) { animation-delay: -1.7s; }
+  .tile:nth-child(22) { animation-delay: -3.0s; }
+  .tile:nth-child(23) { animation-delay: -0.1s; }
+  .tile:nth-child(24) { animation-delay: -2.0s; }
+  .tile:nth-child(25) { animation-delay: -1.4s; }
+
+  /* 2. BURNING TILE — pulsing heat */
+  .tile.burning {
+    animation: burnPulse 0.55s ease-in-out infinite alternate !important;
+    transform-origin: center;
+  }
+  @keyframes burnPulse {
+    0%   { transform: scale(1.00); filter: brightness(1.0)  drop-shadow(0 0 12px rgba(255,100,0,0.8)) drop-shadow(0 0 4px rgba(255,200,0,0.4)); }
+    100% { transform: scale(1.07); filter: brightness(1.18) drop-shadow(0 0 28px rgba(255,60,0,1.0)) drop-shadow(0 0 55px rgba(255,30,0,0.55)) drop-shadow(0 0 8px rgba(255,200,0,0.5)); }
+  }
+
+  /* Heat shimmer overlay on burning tiles */
+  .tile.burning::before {
+    content: '';
+    position: absolute; inset: -2px;
+    border-radius: inherit;
+    background: radial-gradient(ellipse at 50% 120%, rgba(255,120,0,0.25) 0%, transparent 65%);
+    animation: heatShimmer 0.4s ease-in-out infinite alternate;
+    pointer-events: none; z-index: 2;
+  }
+  @keyframes heatShimmer {
+    0%   { opacity: 0.4; transform: scaleY(1.0)   translateY(0); }
+    100% { opacity: 0.9; transform: scaleY(1.04)  translateY(-2px); }
+  }
+
+  /* Ember particles handled per theme via ::before */
+  @keyframes emberFloat {
+    0%   { background-position: 20% 80%, 75% 90%, 50% 95%; opacity: 0.8; }
+    50%  { background-position: 22% 60%, 73% 68%, 52% 72%; opacity: 1.0; }
+    100% { background-position: 24% 40%, 71% 46%, 54% 50%; opacity: 0; }
+  }
+
+  /* 3. TAP RESPONSE — squash & bounce */
+  .tile.tap-squash {
+    animation: tapSquash 0.28s cubic-bezier(0.36,0.07,0.19,0.97) forwards !important;
+  }
+  @keyframes tapSquash {
+    0%   { transform: scale(1,1); }
+    12%  { transform: scale(0.78,0.82); filter: brightness(1.6) saturate(1.3); }
+    35%  { transform: scale(1.16,1.10); filter: brightness(1.3); }
+    58%  { transform: scale(0.94,0.97); }
+    78%  { transform: scale(1.06,1.03); }
+    100% { transform: scale(1,1); filter: brightness(1); }
+  }
+
+  /* Impact glow flash */
+  .tile.tap-flash {
+    animation: tapFlash 0.22s ease-out forwards !important;
+  }
+  @keyframes tapFlash {
+    0%   { filter: brightness(2.2) saturate(1.5); }
+    100% { filter: brightness(1); }
+  }
+
+  /* 4. POP PARTICLES — goo splat rings */
+  .tile-pop-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 3px solid rgba(255,150,0,0.8);
+    pointer-events: none;
+    z-index: 100;
+    animation: popRing 0.4s ease-out forwards;
+  }
+  @keyframes popRing {
+    0%   { transform: translate(-50%,-50%) scale(0.2); opacity: 1; }
+    100% { transform: translate(-50%,-50%) scale(2.8); opacity: 0; }
+  }
+  .tile-pop-dot {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 100;
+    animation: popDot 0.5s ease-out forwards;
+    width: 8px; height: 8px;
+  }
+  @keyframes popDot {
+    0%   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+    100% { transform: translate(var(--dx),var(--dy)) scale(0.2); opacity: 0; }
+  }
+
+  /* 5. GLOW SPILL — nearby tiles react to burning */
+  .tile.heat-neighbor {
+    filter: brightness(1.06) drop-shadow(0 0 6px rgba(255,80,0,0.3)) !important;
+    animation: neighborGlow 0.6s ease-in-out infinite alternate !important;
+  }
+  @keyframes neighborGlow {
+    0%   { filter: brightness(1.04) drop-shadow(0 0 4px rgba(255,80,0,0.25)); }
+    100% { filter: brightness(1.09) drop-shadow(0 0 10px rgba(255,80,0,0.45)); }
+  }
+
+  /* 6. BOARD ATMOSPHERE — floating particles canvas */
+  #boardAtmosphere {
+    position: absolute; inset: 0;
+    pointer-events: none; z-index: 0;
+    overflow: hidden;
+  }
+
+  /* 7. COMBO ESCALATION */
+  .combo-2 .tile.burning  { animation: burnPulse 0.42s ease-in-out infinite alternate !important; }
+  .combo-3 .tile.burning  { animation: burnPulse 0.30s ease-in-out infinite alternate !important; }
+  .combo-4 .tile.burning  { animation: burnPulse 0.22s ease-in-out infinite alternate !important; }
+
+  /* 8. TAPPED STATE */
+  .tile.tapped {
+    animation: tappedSettle 0.3s ease-out forwards !important;
+    filter: brightness(0.65) saturate(0.6) !important;
+  }
+  @keyframes tappedSettle {
+    0%   { transform: scale(0.88); }
+    60%  { transform: scale(1.04); }
+    100% { transform: scale(1.0); }
+  }
+
+  /* 9. MISSED TILE — shake */
+  .tile.missed {
+    animation: missShake 0.35s ease-out forwards !important;
+    filter: brightness(0.5) saturate(0.4) !important;
+  }
+  @keyframes missShake {
+    0%,100% { transform: translateX(0); }
+    20%     { transform: translateX(-4px) rotate(-2deg); }
+    40%     { transform: translateX(4px)  rotate(2deg);  }
+    60%     { transform: translateX(-2px) rotate(-1deg); }
+    80%     { transform: translateX(2px)  rotate(1deg);  }
+  }
+
+  /* 10. SCREEN SHAKE on miss */
+  #tileGrid.grid-shake {
+    animation: gridShake 0.3s ease-out;
+  }
+  @keyframes gridShake {
+    0%,100% { transform: translate(0,0); }
+    20%     { transform: translate(-3px,-1px); }
+    40%     { transform: translate(3px, 2px); }
+    60%     { transform: translate(-2px,-2px); }
+    80%     { transform: translate(2px, 1px); }
+  }
+
+  /* Danger mode — board pulses red */
+  .danger-active #tileGrid {
+    animation: dangerAura 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes dangerAura {
+    0%   { filter: drop-shadow(0 0 0px  rgba(255,0,0,0)); }
+    100% { filter: drop-shadow(0 0 18px rgba(255,0,0,0.4)); }
+  }
+
+
+
+  #boardAtmosphere { z-index: 0 !important; }
+
+  /* Micro-FX: subtle shine sweep on tile hover */
+  .tile:active::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 40%, rgba(255,255,255,0.35) 0%, transparent 65%);
+    border-radius: inherit; pointer-events: none; z-index: 4;
+    animation: tileActiveShine 0.18s ease-out forwards;
+  }
+  @keyframes tileActiveShine {
+    0%   { opacity: 1; transform: scale(0.4); }
+    100% { opacity: 0; transform: scale(1.6); }
+  }
+
+  /* Ember glow on burning — sharper, more localized */
+  .tile.burning {
+    position: relative;
+    z-index: 2; /* burning tile floats above others */
+  }
+
+
+  /* ═══════════════════════════════════════════════
+     CINEMATIC POLISH — Final Premium Feel
+  ═══════════════════════════════════════════════ */
+
+  /* ── Color temperature: cool bg, warm gameplay ── */
+
+  /* Subtle blue-purple ambient in corners */
+  #gameScreen {
+    background:
+      radial-gradient(ellipse at 15% 15%, rgba(60,20,120,0.12) 0%, transparent 45%),
+      radial-gradient(ellipse at 85% 85%, rgba(20,10,80,0.10) 0%, transparent 45%),
+      var(--bg) !important;
+  }
+
+  /* ── Premium glossy shine on game header ── */
+  .game-header::after {
+    content: '';
+    position: absolute; bottom: 0; left: 10%; right: 10%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    pointer-events: none;
+  }
+
+  /* ── Board glow depth layer ── */
+  #tileGrid {
+    border-radius: 12px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 8px 32px rgba(0,0,0,0.6),
+      0 2px 8px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative;
+  }
+
+
+
+
+  @keyframes vignetteDim {
+    0%   { opacity: 1.0; }
+    50%  { opacity: 0.4; }
+    100% { opacity: 0.7; }
+  }
+
+  /* ── Camera micro-drift on impact ── */
+  #tileGrid.impact-drift {
+    animation: cameraDrift 0.4s cubic-bezier(0.36,0.07,0.19,0.97);
+  }
+  @keyframes cameraDrift {
+    0%   { transform: translate(0, 0) rotate(0deg); }
+    20%  { transform: translate(-1.5px, -1px) rotate(-0.3deg); }
+    45%  { transform: translate(1.5px,  0.5px) rotate(0.2deg); }
+    70%  { transform: translate(-0.8px,-0.3px) rotate(-0.1deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+  }
+
+  /* ── Slow moving shine sweep on panels ── */
+  .btn-play, .btn-store {
+    overflow: hidden;
+  }
+  .stats-bar::after {
+    content: '';
+    position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+    transform: skewX(-20deg);
+    animation: panelShine 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes panelShine {
+    0%,70% { left: -100%; }
+    100%   { left: 200%; }
+  }
+
+  /* ── Depth layer: burning tiles cast warm light on board ── */
+  #tileGrid.has-burning {
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 8px 32px rgba(0,0,0,0.6),
+      0 0 60px rgba(255,80,0,0.08),
+      0 0 120px rgba(255,40,0,0.04);
+  }
+
+  /* ── Motion quality: elastic spring on all interactive elements ── */
+  button, .tile, .mode-card, .feature-btn, .skin-card, .theme-card {
+    transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .tile {
+    transition-duration: 0.12s;
+  }
+
+  /* ── Depth stacking with subtle shadow hierarchy ── */
+  .tile { z-index: 1; }
+  .tile.burning { z-index: 3; }
+  .tile.tapped  { z-index: 2; }
+  .tile-pop-ring, .tile-pop-dot { z-index: 10; }
+  #boardAtmosphere { z-index: 0; }
+
+  /* ── Warm emissive glow behind burning tile (light spill on board) ── */
+  .tile.burning {
+    filter: brightness(1.0) drop-shadow(0 0 18px rgba(255,80,0,0.7));
+  }
+
+  /* ── Premium panel finish ── */
+  .stats-bar {
+    position: relative;
+  }
+
+  /* ── Smooth color temperature: UI panels get slight cool tint ── */
+  .screen > .btn-play, .screen > .btn-store {
+    filter: saturate(1.1);
+  }
+
+  /* ── Tile tier badging for depth ── */
+  .skin-tier-badge {
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+    border: 1px solid currentColor;
+    opacity: 0.85;
+  }
+
+
+  /* Ring rarity icons from PNG assets */
+  .ring-icon-img { width:36px; height:36px; background-size:contain; background-repeat:no-repeat; background-position:center; display:inline-block; }
+  .ring-icon-img.ring-common    { background-image: var(--ring-common); }
+  .ring-icon-img.ring-uncommon  { background-image: var(--ring-uncommon); }
+  .ring-icon-img.ring-rare      { background-image: var(--ring-rare); }
+  .ring-icon-img.ring-epic      { background-image: var(--ring-epic); }
+  .ring-icon-img.ring-legendary { background-image: var(--ring-legendary); }
+  .ring-icon-img.ring-secret    { background-image: var(--ring-secret); }
+
+  /* Spin wheel ornate frame overlay */
+  #spinWheelWrap {
+    position: relative;
+    display: inline-block;
+  }
+  #spinWheelWrap::after {
+    content: '';
+    position: absolute;
+    inset: -24px;
+    background-image: var(--wheel-frame);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Tapped states per theme */
+  .theme-pimple .tile.tapped  { background-image: var(--pimple-tapped)  !important; background-size:cover !important; }
+  .theme-eye    .tile.tapped  { background-image: var(--eye-tapped)      !important; background-size:cover !important; }
+  .theme-bug    .tile.tapped  { background-image: var(--bug-tapped)      !important; background-size:cover !important; }
+  .theme-cosmic .tile.tapped  { background-image: var(--cosmic-tapped)   !important; background-size:cover !important; }
+  .theme-fruit  .tile.tapped  { background-image: var(--fruit-tapped)    !important; background-size:cover !important; }
+
+  /* ════════════════════════════════════════════════════════════════
+     VISUAL POLISH v2 — Premium Mobile Game Feel
+     Scope: table · tile material · burning · tap · animation
+     Non-gameplay. Late cascade. Scoped to body:not(.theme-active)
+     to leave secret themes (pimple/eye/bug/cosmic/fruit) untouched.
+     ════════════════════════════════════════════════════════════════ */
+
+  /* --- Define previously-referenced but missing keyframe (was dead) --- */
+  @keyframes burnFlicker {
+    0%   { filter: brightness(1.00); }
+    100% { filter: brightness(1.10); }
+  }
+
+  /* ─────────────────────────────────────────────
+     TABLE — soft radial vignette focuses the eye
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) #gameScreen { position: relative; }
+  body:not(.theme-active) #gameScreen::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background: radial-gradient(ellipse 80% 65% at 50% 48%,
+      transparent 0%,
+      transparent 52%,
+      rgba(0,0,0,0.38) 88%,
+      rgba(0,0,0,0.62) 100%);
+  }
+  body:not(.theme-active) #gameScreen > * { position: relative; z-index: 2; }
+  body:not(.theme-active) #gameScreen .lock-overlay,
+  body:not(.theme-active) #gameScreen .elim-overlay,
+  body:not(.theme-active) #gameScreen .watch-bar { z-index: 50; }
+
+  /* ─────────────────────────────────────────────
+     BOARD — refined playing-surface
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) #tileGrid {
+    padding: 10px !important;
+    border-radius: 18px !important;
+    gap: 7px !important;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.028), transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,0.012), rgba(0,0,0,0.22));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 0 0 1px rgba(255,255,255,0.025),
+      0 16px 42px rgba(0,0,0,0.55),
+      0 4px 12px rgba(0,0,0,0.4) !important;
+  }
+  body:not(.theme-active) #tileGrid.has-burning {
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 0 0 1px rgba(255,255,255,0.025),
+      0 16px 42px rgba(0,0,0,0.55),
+      0 0 60px rgba(255,80,0,0.12),
+      0 0 130px rgba(255,40,0,0.06) !important;
+  }
+
+  /* ─────────────────────────────────────────────
+     TILE — refined material w/ subtle bevel
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) .tile {
+    border-radius: 11px;
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,0.055) 0%,
+        rgba(255,255,255,0.015) 28%,
+        transparent 55%,
+        rgba(0,0,0,0.22) 100%),
+      var(--panel);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.10),
+      inset 0 -1px 0 rgba(0,0,0,0.5),
+      inset 0 0 0 1px rgba(255,255,255,0.018),
+      0 2px 5px rgba(0,0,0,0.42),
+      0 1px 2px rgba(0,0,0,0.3);
+  }
+
+  /* Re-skin idle tile darks for each tile skin (top sheen + ambient gradient) */
+  body:not(.theme-active) .tskin-gold   .tile { background: linear-gradient(180deg, rgba(255,220,120,0.10), transparent 55%, rgba(0,0,0,0.3)), #1a1400; }
+  body:not(.theme-active) .tskin-chrome .tile { background: linear-gradient(180deg, rgba(180,200,230,0.08), transparent 55%, rgba(0,0,0,0.3)), #111318; }
+  body:not(.theme-active) .tskin-wood   .tile { background: linear-gradient(180deg, rgba(255,180,100,0.06), transparent 55%, rgba(0,0,0,0.3)), #1a0e06; }
+  body:not(.theme-active) .tskin-stone  .tile { background: linear-gradient(180deg, rgba(200,200,220,0.06), transparent 55%, rgba(0,0,0,0.3)), #111114; }
+  body:not(.theme-active) .tskin-holo   .tile { background: linear-gradient(180deg, rgba(100,180,255,0.08), transparent 55%, rgba(0,0,0,0.3)), #050a1a; }
+  body:not(.theme-active) .tskin-lava   .tile { background: linear-gradient(180deg, rgba(255,150,80,0.10), transparent 55%, rgba(0,0,0,0.3)), #1a0500; }
+  body:not(.theme-active) .tskin-ice    .tile { background: linear-gradient(180deg, rgba(150,210,255,0.08), transparent 55%, rgba(0,0,0,0.3)), #050e1a; }
+  body:not(.theme-active) .tskin-toxic  .tile { background: linear-gradient(180deg, rgba(120,255,120,0.06), transparent 55%, rgba(0,0,0,0.3)), #050f05; }
+
+  /* Active press: crisp inset + brighter sheen, snappier squash */
+  body:not(.theme-active) .tile:active {
+    transform: scale(0.92);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.16),
+      inset 0 0 0 1px rgba(255,255,255,0.05),
+      inset 0 -1px 0 rgba(0,0,0,0.55),
+      0 1px 2px rgba(0,0,0,0.4);
+  }
+
+  /* ─────────────────────────────────────────────
+     BURNING — single confident lava core
+     Higher readability · tighter halo · less bloom
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) .tile.burning {
+    border: 1px solid #ff7a1a !important;
+    background:
+      radial-gradient(circle at 50% 42%,
+        #ffe488 0%,
+        #ff9a2a 22%,
+        #ff4a00 55%,
+        #c01000 100%) !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.32),
+      inset 0 0 14px rgba(255,200,100,0.45),
+      inset 0 -6px 14px rgba(120,0,0,0.45),
+      0 0 0 2px rgba(255,90,0,0.55),
+      0 0 22px rgba(255,90,0,0.75),
+      0 0 44px rgba(255,40,0,0.30) !important;
+    /* Replace heavy filter chain with box-shadow glow — GPU-cheap */
+    filter: none !important;
+  }
+
+  /* Confident pulse — no flicker, transform-only (perf) */
+  @keyframes burnPulse {
+    0%   { transform: scale(1.000); }
+    100% { transform: scale(1.048); }
+  }
+  body:not(.theme-active) .tile.burning {
+    animation: burnPulse 0.55s ease-in-out infinite alternate !important;
+  }
+  body:not(.theme-active) .combo-2 .tile.burning { animation: burnPulse 0.40s ease-in-out infinite alternate !important; }
+  body:not(.theme-active) .combo-3 .tile.burning { animation: burnPulse 0.28s ease-in-out infinite alternate !important; }
+  body:not(.theme-active) .combo-4 .tile.burning { animation: burnPulse 0.20s ease-in-out infinite alternate !important; }
+
+  /* Heat shimmer — softer, GPU-friendly */
+  body:not(.theme-active) .tile.burning::before {
+    display: block !important;
+    content: '' !important;
+    position: absolute !important;
+    inset: -2px !important;
+    border-radius: inherit !important;
+    background: radial-gradient(ellipse at 50% 110%, rgba(255,180,80,0.42) 0%, transparent 60%) !important;
+    opacity: 1 !important;
+    height: auto !important;
+    animation: heatShimmer 0.45s ease-in-out infinite alternate !important;
+    pointer-events: none !important;
+    z-index: 2 !important;
+  }
+  @keyframes heatShimmer {
+    0%   { opacity: 0.55; transform: translateY(0)    scaleY(1.00); }
+    100% { opacity: 0.95; transform: translateY(-2px) scaleY(1.06); }
+  }
+
+  /* Skin emoji — slightly smaller + crisper, sits above shimmer */
+  body:not(.theme-active) .tile.burning::after {
+    font-size: 30px !important;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45));
+    z-index: 3;
+  }
+
+  /* Per-skin BURNING — preserve each skin's color identity,
+     but apply the same crisp depth template (radial + clean halo)  */
+  body:not(.theme-active) .tfx-neonblue .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #c9ecff 0%, #38a6ff 22%, #0066ee 55%, #001b66 100%) !important;
+    border-color: #66bbff !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(200,230,255,0.4),
+      inset 0 0 14px rgba(120,200,255,0.5),
+      inset 0 -6px 14px rgba(0,30,80,0.5),
+      0 0 0 2px rgba(0,140,255,0.55),
+      0 0 22px rgba(0,170,255,0.8),
+      0 0 44px rgba(0,120,255,0.30) !important;
+  }
+  body:not(.theme-active) .tfx-neonpink .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #ffdaf2 0%, #ff7ad0 22%, #d8009a 55%, #4a0033 100%) !important;
+    border-color: #ff66cc !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,220,240,0.4),
+      inset 0 0 14px rgba(255,140,210,0.5),
+      inset 0 -6px 14px rgba(80,0,50,0.5),
+      0 0 0 2px rgba(255,80,180,0.55),
+      0 0 22px rgba(255,40,170,0.8),
+      0 0 44px rgba(255,0,140,0.30) !important;
+  }
+  body:not(.theme-active) .tfx-electric .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #ffffd0 0%, #ffeb44 22%, #c8a000 55%, #3a2a00 100%) !important;
+    border-color: #ffe55a !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,200,0.4),
+      inset 0 0 14px rgba(255,235,80,0.55),
+      inset 0 -6px 14px rgba(60,40,0,0.5),
+      0 0 0 2px rgba(255,220,30,0.55),
+      0 0 22px rgba(255,235,80,0.85),
+      0 0 44px rgba(255,200,0,0.30) !important;
+  }
+  body:not(.theme-active) .tfx-plasma .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #f4dfff 0%, #c47aff 22%, #7a00d8 55%, #28004a 100%) !important;
+    border-color: #b066ff !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(240,220,255,0.4),
+      inset 0 0 14px rgba(180,100,255,0.5),
+      inset 0 -6px 14px rgba(40,0,80,0.5),
+      0 0 0 2px rgba(160,40,255,0.55),
+      0 0 22px rgba(170,60,255,0.85),
+      0 0 44px rgba(130,0,220,0.30) !important;
+  }
+  body:not(.theme-active) .tfx-ice .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #e8f5ff 0%, #8fcaff 22%, #1e7ec8 55%, #002844 100%) !important;
+    border-color: #8fd0ff !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(220,240,255,0.45),
+      inset 0 0 14px rgba(140,200,255,0.5),
+      inset 0 -6px 14px rgba(0,30,60,0.5),
+      0 0 0 2px rgba(120,200,255,0.55),
+      0 0 22px rgba(150,210,255,0.85),
+      0 0 44px rgba(80,170,255,0.30) !important;
+  }
+  body:not(.theme-active) .tfx-toxic .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #e6ffd0 0%, #95f04a 22%, #2da800 55%, #0a2800 100%) !important;
+    border-color: #88ff55 !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(220,255,200,0.4),
+      inset 0 0 14px rgba(140,240,80,0.5),
+      inset 0 -6px 14px rgba(0,50,0,0.5),
+      0 0 0 2px rgba(80,220,40,0.55),
+      0 0 22px rgba(100,255,60,0.85),
+      0 0 44px rgba(40,200,0,0.30) !important;
+  }
+  body:not(.theme-active) .tfx-solar .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #ffffff 0%, #ffd966 22%, #ff8a00 55%, #4a1a00 100%) !important;
+    border-color: #ffd966 !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,220,0.5),
+      inset 0 0 14px rgba(255,210,100,0.55),
+      inset 0 -6px 14px rgba(60,20,0,0.5),
+      0 0 0 2px rgba(255,180,40,0.6),
+      0 0 24px rgba(255,210,80,0.9),
+      0 0 48px rgba(255,160,40,0.35) !important;
+  }
+  body:not(.theme-active) .tfx-void .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #5a1080 0%, #2a0044 35%, #0a0010 80%, #000000 100%) !important;
+    border-color: #6622aa !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(140,80,200,0.35),
+      inset 0 0 18px rgba(80,0,140,0.55),
+      inset 0 0 30px rgba(0,0,0,0.85),
+      0 0 0 2px rgba(120,0,200,0.5),
+      0 0 22px rgba(120,0,200,0.7),
+      0 0 44px rgba(60,0,120,0.30) !important;
+  }
+  body:not(.theme-active) .tfx-godray .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #ffffff 0%, #fff4b0 18%, #ffb83a 50%, #c45a00 100%) !important;
+    border-color: #fff4b0 !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,230,0.55),
+      inset 0 0 16px rgba(255,235,160,0.6),
+      inset 0 -6px 14px rgba(120,40,0,0.45),
+      0 0 0 2px rgba(255,220,120,0.65),
+      0 0 28px rgba(255,235,160,1),
+      0 0 56px rgba(255,180,60,0.45) !important;
+  }
+  body:not(.theme-active) .tfx-blackhole .tile.burning {
+    background: radial-gradient(circle at 50% 50%, #000000 0%, #0a0015 35%, #1a0030 70%, #44008c 100%) !important;
+    border-color: #7700cc !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(170,80,230,0.4),
+      inset 0 0 18px rgba(0,0,0,0.9),
+      0 0 0 2px rgba(120,0,200,0.55),
+      0 0 24px rgba(140,0,220,0.7),
+      0 0 48px rgba(80,0,160,0.35) !important;
+  }
+  body:not(.theme-active) .tfx-supernova .tile.burning {
+    background: radial-gradient(circle at 50% 42%, #ffffff 0%, #ffe066 18%, #ff5a00 50%, #5a0000 100%) !important;
+    border-color: #ffffff !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.7),
+      inset 0 0 16px rgba(255,220,120,0.6),
+      inset 0 -6px 14px rgba(80,0,0,0.5),
+      0 0 0 2px rgba(255,200,100,0.65),
+      0 0 30px rgba(255,255,255,0.95),
+      0 0 60px rgba(255,140,40,0.4) !important;
+  }
+  body:not(.theme-active) .tfx-rainbow .tile.burning {
+    /* Keep the cycling effect — just tighten the halo */
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.35),
+      inset 0 0 14px rgba(255,180,180,0.4),
+      0 0 0 2px rgba(255,120,120,0.5),
+      0 0 22px rgba(255,140,140,0.8),
+      0 0 44px rgba(255,80,80,0.3) !important;
+  }
+
+  /* ─────────────────────────────────────────────
+     TAP EFFECTS — sharper, snappier
+  ───────────────────────────────────────────── */
+  /* Improved baseline ripple — cleaner falloff */
+  body:not(.theme-active) .tap-ripple {
+    border-radius: 50% !important;
+    background: radial-gradient(circle,
+      rgba(255,255,255,0.55) 0%,
+      rgba(255,255,255,0.18) 45%,
+      rgba(255,255,255,0) 75%) !important;
+    width: 130% !important; height: 130% !important;
+    left: -15% !important; top: -15% !important;
+    position: absolute !important;
+    animation: rippleAnim 0.42s cubic-bezier(0.22,1,0.36,1) forwards !important;
+  }
+  @keyframes rippleAnim {
+    0%   { transform: scale(0.15); opacity: 1; }
+    55%  { transform: scale(1.5);  opacity: 0.45; }
+    100% { transform: scale(2.6);  opacity: 0; }
+  }
+
+  /* Add a quick white-flash overlay on every tap — guarantees punch
+     regardless of which tap skin the player has equipped */
+  body:not(.theme-active) .tile.tapped {
+    position: relative;
+  }
+  body:not(.theme-active) .tile.tapped > div[class^="tap-"] {
+    z-index: 4;
+  }
+
+  /* ─────────────────────────────────────────────
+     TAPPED — clean "stamped" feel, success green
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) .tile.tapped {
+    border: 1px solid rgba(0,255,136,0.55) !important;
+    background:
+      radial-gradient(circle at 50% 38%, rgba(0,90,50,0.45), rgba(8,18,12,0.95)) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 0 14px rgba(0,255,136,0.18),
+      inset 0 0 0 1px rgba(0,255,136,0.14),
+      0 2px 6px rgba(0,0,0,0.45) !important;
+    filter: brightness(0.95) saturate(0.88) !important;
+    color: #66ffaa !important;
+    font-size: 26px !important;
+    font-weight: 800 !important;
+    text-shadow:
+      0 0 10px rgba(0,255,136,0.6),
+      0 0 2px rgba(255,255,255,0.4),
+      0 1px 2px rgba(0,0,0,0.5);
+    animation: tappedSettle 0.30s cubic-bezier(0.34,1.56,0.64,1) forwards !important;
+  }
+  @keyframes tappedSettle {
+    0%   { transform: scale(0.82); filter: brightness(1.4) saturate(1.2); }
+    55%  { transform: scale(1.06); filter: brightness(1.1) saturate(1.0); }
+    100% { transform: scale(1.00); filter: brightness(0.95) saturate(0.88); }
+  }
+  /* Kill the duplicate ✓ from CSS ::after (JS innerHTML already supplies it) */
+  body:not(.theme-active) .tile.tapped::after {
+    content: '' !important;
+    background: none !important;
+  }
+
+  /* ─────────────────────────────────────────────
+     MISSED — sharp red flash, faster snap-back
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) .tile.missed {
+    background: radial-gradient(circle at 50% 50%, #4a0808 0%, #1f0303 100%) !important;
+    border: 1px solid var(--red) !important;
+    box-shadow:
+      inset 0 0 16px rgba(255,40,40,0.45),
+      inset 0 0 0 1px rgba(255,80,80,0.3),
+      0 0 14px rgba(255,40,40,0.5) !important;
+    filter: brightness(0.85) !important;
+  }
+  @keyframes missedFlash {
+    0%   { background: radial-gradient(circle, #ff2a2a 0%, #ff4040 100%); }
+    100% { background: radial-gradient(circle, #4a0808 0%, #1f0303 100%); }
+  }
+
+  /* ─────────────────────────────────────────────
+     HEAT NEIGHBOR GLOW — opacity-based, lighter on GPU
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) .tile.heat-neighbor {
+    filter: none !important;
+    animation: vp2NeighborGlow 0.7s ease-in-out infinite alternate !important;
+  }
+  @keyframes vp2NeighborGlow {
+    0% {
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.10),
+        inset 0 -1px 0 rgba(0,0,0,0.50),
+        inset 0 0 8px rgba(255,80,0,0.10),
+        0 0 6px rgba(255,80,0,0.18);
+    }
+    100% {
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.10),
+        inset 0 -1px 0 rgba(0,0,0,0.50),
+        inset 0 0 14px rgba(255,80,0,0.22),
+        0 0 14px rgba(255,80,0,0.45);
+    }
+  }
+
+  /* ─────────────────────────────────────────────
+     POP RING — confident gold/amber instead of orange
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) .tile-pop-ring {
+    border-width: 2px !important;
+    border-color: rgba(255,200,80,0.85) !important;
+    box-shadow:
+      0 0 12px rgba(255,160,40,0.5),
+      inset 0 0 8px rgba(255,200,80,0.25);
+  }
+
+  /* ─────────────────────────────────────────────
+     HEADER readability — premium polish
+  ───────────────────────────────────────────── */
+  body:not(.theme-active) .game-timer {
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.65),
+      0 0 16px rgba(255,255,255,0.04);
+  }
+  body:not(.theme-active) .game-timer.urgent {
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.65),
+      0 0 14px rgba(255,60,60,0.7);
+  }
+  body:not(.theme-active) .game-mode-badge {
+    text-shadow: 0 0 10px rgba(255,69,0,0.35);
+  }
+  body:not(.theme-active) .players-left {
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+
+  /* ─────────────────────────────────────────────
+     ACCESSIBILITY — respect reduced motion preference
+  ───────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    body:not(.theme-active) .tile,
+    body:not(.theme-active) .tile.burning,
+    body:not(.theme-active) .tile.tapped,
+    body:not(.theme-active) .tile.missed,
+    body:not(.theme-active) .tile.heat-neighbor,
+    body:not(.theme-active) .tile.burning::before {
+      animation-duration: 0.001s !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+
+  /* End VISUAL POLISH v2 */
+
+
+  /* ════════════════════════════════════════════════════════════════
+     VISUAL POLISH v3 — Premium Table Atmospheres
+                      + Per-FX Tap Confirmations
+     Scope: body:not(.theme-active). Late cascade over v2.
+     Layering on #gameScreen:
+       z 0 — ::before (atmosphere, animated)
+       z 0 — #boardAtmosphere child canvas
+       z 1 — ::after  (theme-tinted vignette)
+       z 2 — game UI children (#tileGrid, header, etc)
+     ════════════════════════════════════════════════════════════════ */
+
+  /* ─────────────────────────────────────────────
+     PART A · PER-FX TAP CONFIRMATIONS
+     Each tile-effect skin gets a unique tap-confirm
+     ::after animation that replaces the green ✓.
+     Short (220–360ms), ends opacity 0 (forwards) so
+     the tile rests in the green "tapped" state.
+  ───────────────────────────────────────────── */
+
+  /* Hide the JS-set ✓ text (the FX confirm is the new mark) */
+  body:not(.theme-active) .tile.tapped {
+    color: transparent !important;
+    text-shadow: none !important;
+  }
+
+  /* Default fallback confirm (in case no .tfx- class is set) */
+  body:not(.theme-active) .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 22% !important;
+    border-radius: 50% !important;
+    background: radial-gradient(circle, rgba(0,255,136,0.9), rgba(0,255,136,0) 70%) !important;
+    box-shadow: 0 0 14px rgba(0,255,136,0.55) !important;
+    animation: vp3ConfirmDefault 0.30s cubic-bezier(0.22,1,0.36,1) forwards !important;
+    pointer-events: none !important;
+    z-index: 5 !important;
+  }
+  @keyframes vp3ConfirmDefault {
+    0%   { transform: scale(0.2); opacity: 1; }
+    60%  { transform: scale(1.2); opacity: 0.7; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+
+  /* FIRE — ember pop */
+  body:not(.theme-active) .tfx-fire .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 16% !important;
+    border-radius: 50% !important;
+    background: radial-gradient(circle, #ffea88 0%, #ff7a1a 35%, #ff3a00 60%, transparent 76%) !important;
+    box-shadow: 0 0 18px rgba(255,120,30,0.85), 0 0 36px rgba(255,80,0,0.4) !important;
+    animation: vp3FireConfirm 0.32s cubic-bezier(0.22,1,0.36,1) forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3FireConfirm {
+    0%   { transform: scale(0.10) rotate(-12deg); opacity: 1; }
+    45%  { transform: scale(1.30) rotate(5deg);   opacity: 0.85; }
+    100% { transform: scale(2.20) rotate(15deg);  opacity: 0; }
+  }
+
+  /* NEON BLUE — cyan ring */
+  body:not(.theme-active) .tfx-neonblue .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 16% !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    border: 3px solid #38c0ff !important;
+    box-shadow: 0 0 14px #38c0ff, inset 0 0 10px rgba(100,200,255,0.5) !important;
+    animation: vp3RingExpand 0.32s cubic-bezier(0.22,1,0.36,1) forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3RingExpand {
+    0%   { transform: scale(0.20); opacity: 1;   border-width: 3px; }
+    60%  { transform: scale(1.50); opacity: 0.7; border-width: 2px; }
+    100% { transform: scale(2.40); opacity: 0;   border-width: 1px; }
+  }
+
+  /* NEON PINK — magenta starburst */
+  body:not(.theme-active) .tfx-neonpink .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 12% !important;
+    background: radial-gradient(circle, #ffaadd 0%, #ff44aa 55%, transparent 82%) !important;
+    clip-path: polygon(50% 0%, 60% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 40% 35%) !important;
+    filter: drop-shadow(0 0 12px rgba(255,100,200,0.85)) !important;
+    animation: vp3PinkStar 0.32s ease-out forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3PinkStar {
+    0%   { transform: scale(0)    rotate(-30deg); opacity: 1; }
+    55%  { transform: scale(1.10) rotate(10deg);  opacity: 0.85; }
+    100% { transform: scale(1.85) rotate(30deg);  opacity: 0; }
+  }
+
+  /* ELECTRIC — lightning zigzag flash (short, sharp) */
+  body:not(.theme-active) .tfx-electric .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    left: 32% !important; right: 32% !important;
+    top: 0 !important; bottom: 0 !important;
+    background: linear-gradient(180deg, transparent 0%, #fff 18%, #ffff66 50%, #fff 82%, transparent 100%) !important;
+    box-shadow: 0 0 14px #ffeb44, 0 0 24px rgba(255,200,0,0.5) !important;
+    clip-path: polygon(50% 0%, 78% 18%, 28% 36%, 72% 52%, 25% 70%, 60% 86%, 50% 100%, 38% 86%, 75% 70%, 30% 52%, 70% 36%, 22% 18%) !important;
+    animation: vp3ElecSnap 0.22s ease-out forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+    transform-origin: center !important;
+  }
+  @keyframes vp3ElecSnap {
+    0%   { transform: scaleY(0)    scaleX(0.4); opacity: 1; }
+    35%  { transform: scaleY(1.05) scaleX(1.0); opacity: 1; }
+    100% { transform: scaleY(1.10) scaleX(0.8); opacity: 0; }
+  }
+
+  /* PLASMA — purple swirl */
+  body:not(.theme-active) .tfx-plasma .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 16% !important;
+    border-radius: 50% !important;
+    background: conic-gradient(from 0deg, #9900ff, #cc44ff, #4a008c, #cc44ff, #9900ff) !important;
+    box-shadow: 0 0 16px rgba(150,0,255,0.7) !important;
+    animation: vp3PlasmaSwirl 0.36s cubic-bezier(0.22,1,0.36,1) forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3PlasmaSwirl {
+    0%   { transform: scale(0.10) rotate(0deg);    opacity: 1; }
+    55%  { transform: scale(1.35) rotate(200deg);  opacity: 0.85; }
+    100% { transform: scale(2.00) rotate(400deg);  opacity: 0; }
+  }
+
+  /* ICE — frost crack (4-point star) */
+  body:not(.theme-active) .tfx-ice .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 10% !important;
+    background: radial-gradient(circle, #f0faff 0%, #8fcaff 35%, transparent 70%) !important;
+    clip-path: polygon(50% 0%, 56% 38%, 100% 50%, 56% 62%, 50% 100%, 44% 62%, 0% 50%, 44% 38%) !important;
+    filter: drop-shadow(0 0 12px rgba(180,220,255,0.9)) !important;
+    animation: vp3IceCrack 0.30s ease-out forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3IceCrack {
+    0%   { transform: scale(0)    rotate(0);    opacity: 1; }
+    50%  { transform: scale(1.00) rotate(15deg); opacity: 1; }
+    100% { transform: scale(1.60) rotate(30deg); opacity: 0; }
+  }
+
+  /* TOXIC — acid splash (organic blob) */
+  body:not(.theme-active) .tfx-toxic .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 16% !important;
+    border-radius: 60% 40% 50% 50% / 50% 60% 40% 50% !important;
+    background: radial-gradient(circle, #ccff88 0%, #66dd22 40%, #1a8800 70%, transparent 90%) !important;
+    box-shadow: 0 0 14px rgba(80,220,30,0.7), inset 0 0 8px rgba(40,150,0,0.6) !important;
+    animation: vp3ToxicSplash 0.34s cubic-bezier(0.22,1,0.36,1) forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3ToxicSplash {
+    0%   { transform: scale(0.10) rotate(-10deg); opacity: 1; }
+    55%  { transform: scale(1.25) rotate(8deg);   opacity: 0.9; }
+    100% { transform: scale(1.90) rotate(20deg);  opacity: 0; }
+  }
+
+  /* SOLAR — sun-flare (8-ray star) */
+  body:not(.theme-active) .tfx-solar .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 10% !important;
+    background: radial-gradient(circle, #ffffff 0%, #ffe066 30%, #ff8800 65%, transparent 85%) !important;
+    clip-path: polygon(50% 0%, 55% 30%, 80% 10%, 70% 40%, 100% 50%, 70% 60%, 80% 90%, 55% 70%, 50% 100%, 45% 70%, 20% 90%, 30% 60%, 0% 50%, 30% 40%, 20% 10%, 45% 30%) !important;
+    filter: drop-shadow(0 0 14px rgba(255,200,80,0.9)) !important;
+    animation: vp3SolarFlare 0.34s ease-out forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3SolarFlare {
+    0%   { transform: scale(0)    rotate(-25deg); opacity: 1; }
+    55%  { transform: scale(1.15) rotate(15deg);  opacity: 0.95; }
+    100% { transform: scale(1.85) rotate(40deg);  opacity: 0; }
+  }
+
+  /* VOID — dark implosion (starts large, collapses to 0) */
+  body:not(.theme-active) .tfx-void .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 0 !important;
+    border-radius: 50% !important;
+    background: radial-gradient(circle, #5a1a8c 0%, #1a0030 45%, transparent 80%) !important;
+    box-shadow: 0 0 18px rgba(100,0,180,0.7), inset 0 0 16px rgba(0,0,0,0.85) !important;
+    animation: vp3VoidImplode 0.34s cubic-bezier(0.65,0,0.35,1) forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3VoidImplode {
+    0%   { transform: scale(1.8); opacity: 0; }
+    30%  { transform: scale(1.3); opacity: 0.85; }
+    100% { transform: scale(0);   opacity: 1; }
+  }
+
+  /* RAINBOW — chroma ring */
+  body:not(.theme-active) .tfx-rainbow .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 10% !important;
+    border-radius: 50% !important;
+    background: conic-gradient(#ff0000, #ffaa00, #ffff00, #00ff66, #00aaff, #7700ff, #ff0099, #ff0000) !important;
+    -webkit-mask: radial-gradient(circle, transparent 36%, #000 40%, #000 100%) !important;
+            mask: radial-gradient(circle, transparent 36%, #000 40%, #000 100%) !important;
+    filter: drop-shadow(0 0 8px rgba(255,200,100,0.6)) !important;
+    animation: vp3RingExpand 0.34s ease-out forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+
+  /* GODRAY (whale) — radiant cross burst */
+  body:not(.theme-active) .tfx-godray .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 8% !important;
+    background:
+      radial-gradient(circle, #ffffff 0%, #fff4b0 30%, transparent 60%),
+      conic-gradient(from 0deg,
+        rgba(255,255,255,0.85) 0deg, transparent 22deg,
+        rgba(255,255,255,0.85) 90deg, transparent 112deg,
+        rgba(255,255,255,0.85) 180deg, transparent 202deg,
+        rgba(255,255,255,0.85) 270deg, transparent 292deg,
+        rgba(255,255,255,0.85) 360deg) !important;
+    filter: drop-shadow(0 0 16px rgba(255,235,160,1)) !important;
+    animation: vp3GodrayBurst 0.34s ease-out forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3GodrayBurst {
+    0%   { transform: scale(0)    rotate(0deg);   opacity: 1; }
+    50%  { transform: scale(1.25) rotate(45deg);  opacity: 0.9; }
+    100% { transform: scale(2.00) rotate(90deg);  opacity: 0; }
+  }
+
+  /* BLACKHOLE (whale) — spiral collapse */
+  body:not(.theme-active) .tfx-blackhole .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 4% !important;
+    border-radius: 50% !important;
+    background: conic-gradient(from 0deg, #44008c, #1a0030, #000000, #1a0030, #44008c) !important;
+    box-shadow: 0 0 18px rgba(120,0,200,0.7), inset 0 0 16px rgba(0,0,0,0.95) !important;
+    animation: vp3BlackholeCollapse 0.38s cubic-bezier(0.65,0,0.35,1) forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3BlackholeCollapse {
+    0%   { transform: scale(1.6) rotate(0deg);   opacity: 0; }
+    25%  { transform: scale(1.3) rotate(180deg); opacity: 0.9; }
+    100% { transform: scale(0)   rotate(720deg); opacity: 1; }
+  }
+
+  /* SUPERNOVA (prestige) — brilliant explosion */
+  body:not(.theme-active) .tfx-supernova .tile.tapped::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 8% !important;
+    border-radius: 50% !important;
+    background: radial-gradient(circle, #ffffff 0%, #ffe066 22%, #ff5a00 55%, transparent 82%) !important;
+    box-shadow: 0 0 22px rgba(255,255,255,0.85), 0 0 48px rgba(255,140,40,0.5) !important;
+    animation: vp3Supernova 0.30s cubic-bezier(0.22,1,0.36,1) forwards !important;
+    pointer-events: none !important; z-index: 5 !important;
+  }
+  @keyframes vp3Supernova {
+    0%   { transform: scale(0);    opacity: 1; }
+    30%  { transform: scale(1.40); opacity: 1; }
+    100% { transform: scale(2.60); opacity: 0; }
+  }
+
+
+  /* ════════════════════════════════════════════════════════════════
+     PART B · PREMIUM TABLE ATMOSPHERES — environmental identity
+     Each premium table layers:
+       BASE   — richer multi-stop gradient on the .table-* class
+       ::before — animated atmosphere (embers, stars, bubbles…)
+       ::after  — theme-tinted vignette (overrides v2 universal vignette)
+     ════════════════════════════════════════════════════════════════ */
+
+  /* ─── INFERNO — volcanic embers + magma cracks ─── */
+  body:not(.theme-active) #gameScreen.table-inferno {
+    background: radial-gradient(ellipse at 50% 110%, #6a0e00 0%, #3a0500 25%, #1a0200 55%, #0a0508 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-inferno::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 200%;
+    pointer-events: none; z-index: 0;
+    background:
+      linear-gradient(78deg, transparent 27.5%, rgba(255,80,0,0.07) 28%, transparent 28.5%),
+      linear-gradient(102deg, transparent 64.5%, rgba(255,100,30,0.06) 65%, transparent 65.5%),
+      linear-gradient(45deg, transparent 79.5%, rgba(255,120,40,0.05) 80%, transparent 80.5%),
+      radial-gradient(2px 2px at 12% 22%, rgba(255,140,40,0.95) 0%, transparent 80%),
+      radial-gradient(1.5px 1.5px at 78% 14%, rgba(255,180,80,0.85) 0%, transparent 80%),
+      radial-gradient(2.5px 2.5px at 22% 38%, rgba(255,100,30,0.95) 0%, transparent 80%),
+      radial-gradient(2px 2px at 62% 32%, rgba(255,160,60,0.85) 0%, transparent 80%),
+      radial-gradient(1.5px 1.5px at 88% 45%, rgba(255,180,80,0.75) 0%, transparent 80%),
+      radial-gradient(2px 2px at 45% 8%, rgba(255,140,40,0.9) 0%, transparent 80%);
+    animation: vp3InfernoEmbers 16s linear infinite;
+    will-change: transform;
+  }
+  @keyframes vp3InfernoEmbers {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(-50%); }
+  }
+  body:not(.theme-active) #gameScreen.table-inferno::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(ellipse 100% 60% at 50% 110%, rgba(255,80,0,0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 80% 65% at 50% 48%,
+        transparent 0%, transparent 52%,
+        rgba(40,0,0,0.50) 88%, rgba(20,0,0,0.72) 100%);
+  }
+
+  /* ─── GALAXY — deep space stars + nebula drift ─── */
+  body:not(.theme-active) #gameScreen.table-galaxy {
+    background:
+      radial-gradient(ellipse at 30% 30%, #200060 0%, #100040 18%, #050020 42%, #000010 75%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-galaxy::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 200%;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 35% at 25% 15%, rgba(180,80,255,0.12) 0%, transparent 65%),
+      radial-gradient(ellipse 55% 40% at 75% 60%, rgba(80,140,255,0.10) 0%, transparent 70%),
+      radial-gradient(1px 1px at 12% 8%, #fff 0%, transparent 80%),
+      radial-gradient(1px 1px at 85% 22%, #cce6ff 0%, transparent 80%),
+      radial-gradient(1.5px 1.5px at 42% 14%, #fff 0%, transparent 80%),
+      radial-gradient(1px 1px at 68% 41%, #fff 0%, transparent 80%),
+      radial-gradient(0.8px 0.8px at 25% 36%, #fff 0%, transparent 80%),
+      radial-gradient(1.5px 1.5px at 90% 8%, #ffeecc 0%, transparent 80%),
+      radial-gradient(1px 1px at 58% 28%, #fff 0%, transparent 80%),
+      radial-gradient(0.8px 0.8px at 8% 45%, #fff 0%, transparent 80%);
+    animation: vp3StarDrift 60s linear infinite;
+  }
+  @keyframes vp3StarDrift {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(-50%); }
+  }
+  body:not(.theme-active) #gameScreen.table-galaxy::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(ellipse 70% 50% at 70% 80%, rgba(100,40,200,0.12) 0%, transparent 65%),
+      radial-gradient(ellipse 75% 60% at 50% 48%,
+        transparent 0%, transparent 50%,
+        rgba(0,0,20,0.55) 90%, rgba(0,0,15,0.75) 100%);
+  }
+
+  /* ─── COSMOS (prestige) — larger nebula, dense field ─── */
+  body:not(.theme-active) #gameScreen.table-cosmos {
+    background:
+      radial-gradient(ellipse at 50% 50%, #0a0040 0%, #050022 35%, #02000c 70%, #000005 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-cosmos::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 200%;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 30% 25%, rgba(220,60,180,0.14) 0%, transparent 65%),
+      radial-gradient(ellipse 75% 45% at 75% 70%, rgba(40,180,220,0.12) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 30% at 50% 50%, rgba(180,100,255,0.09) 0%, transparent 75%),
+      radial-gradient(1.5px 1.5px at 15% 12%, #fff 0%, transparent 80%),
+      radial-gradient(1px 1px at 70% 28%, #fff 0%, transparent 80%),
+      radial-gradient(0.8px 0.8px at 38% 18%, #ccc6ff 0%, transparent 80%),
+      radial-gradient(2px 2px at 85% 8%, #ffffcc 0%, transparent 80%),
+      radial-gradient(1px 1px at 58% 35%, #fff 0%, transparent 80%),
+      radial-gradient(1.2px 1.2px at 28% 42%, #ddccff 0%, transparent 80%);
+    animation: vp3StarDrift 80s linear infinite;
+  }
+  body:not(.theme-active) #gameScreen.table-cosmos::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(ellipse 75% 60% at 50% 48%,
+        transparent 0%, transparent 50%,
+        rgba(0,0,15,0.55) 90%, rgba(0,0,10,0.78) 100%);
+  }
+
+  /* ─── TOXIC WASTE — radioactive sludge + green gas bubbles ─── */
+  body:not(.theme-active) #gameScreen.table-toxic_waste {
+    background: radial-gradient(ellipse at 50% 110%, #003a00 0%, #002000 25%, #001000 60%, #000a08 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-toxic_waste::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 200%;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 35% at 15% 80%, rgba(80,200,40,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 55% 30% at 85% 60%, rgba(120,220,50,0.10) 0%, transparent 65%),
+      radial-gradient(3px 3px at 22% 35%, rgba(150,255,80,0.7) 0%, transparent 80%),
+      radial-gradient(2px 2px at 68% 22%, rgba(120,230,60,0.65) 0%, transparent 80%),
+      radial-gradient(4px 4px at 38% 12%, rgba(150,255,80,0.7) 0%, transparent 80%),
+      radial-gradient(2.5px 2.5px at 85% 42%, rgba(120,230,60,0.6) 0%, transparent 80%),
+      radial-gradient(2px 2px at 12% 8%, rgba(140,240,70,0.6) 0%, transparent 80%),
+      radial-gradient(3px 3px at 50% 28%, rgba(150,255,80,0.65) 0%, transparent 80%);
+    animation: vp3ToxicBubbles 12s linear infinite;
+  }
+  @keyframes vp3ToxicBubbles {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(-50%); }
+  }
+  body:not(.theme-active) #gameScreen.table-toxic_waste::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(ellipse 90% 60% at 50% 110%, rgba(80,200,40,0.18) 0%, transparent 60%),
+      radial-gradient(circle at 12% 12%, rgba(180,255,80,0.08) 0%, transparent 40%),
+      radial-gradient(circle at 88% 18%, rgba(180,255,80,0.07) 0%, transparent 40%),
+      radial-gradient(ellipse 80% 65% at 50% 48%,
+        transparent 0%, transparent 52%,
+        rgba(0,30,0,0.50) 88%, rgba(0,15,0,0.72) 100%);
+    animation: vp3ToxicFlicker 3.5s ease-in-out infinite alternate;
+  }
+  @keyframes vp3ToxicFlicker {
+    0%   { opacity: 1; }
+    100% { opacity: 0.92; }
+  }
+
+  /* ─── DISCO NIGHT — synthwave grid + neon glow ─── */
+  body:not(.theme-active) #gameScreen.table-disco {
+    background: linear-gradient(180deg, #1a0028 0%, #0a0020 35%, #050015 70%, #02000a 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-disco::before {
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: 0; height: 55%;
+    pointer-events: none; z-index: 0;
+    background:
+      repeating-linear-gradient(90deg,
+        transparent 0 11.9%,
+        rgba(0,220,255,0.18) 12%,
+        transparent 12.1% 12.1%),
+      repeating-linear-gradient(180deg,
+        transparent 0 13.9%,
+        rgba(255,80,200,0.18) 14%,
+        transparent 14.1% 14.1%);
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 55%, #000 100%);
+            mask-image: linear-gradient(180deg, transparent 0%, #000 55%, #000 100%);
+    animation: vp3DiscoGridScroll 4s linear infinite;
+  }
+  @keyframes vp3DiscoGridScroll {
+    0%   { background-position: 0 0, 0 0; }
+    100% { background-position: 0 0, 0 28%; }
+  }
+  body:not(.theme-active) #gameScreen.table-disco::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(circle at 8% 14%, rgba(255,30,200,0.14) 0%, transparent 35%),
+      radial-gradient(circle at 92% 18%, rgba(30,220,255,0.12) 0%, transparent 38%),
+      radial-gradient(circle at 50% 100%, rgba(255,80,220,0.10) 0%, transparent 50%),
+      radial-gradient(ellipse 80% 65% at 50% 45%,
+        transparent 0%, transparent 50%,
+        rgba(10,0,30,0.55) 90%, rgba(5,0,20,0.78) 100%);
+    animation: vp3DiscoPulse 2.4s ease-in-out infinite alternate;
+  }
+  @keyframes vp3DiscoPulse {
+    0%   { opacity: 0.9; }
+    100% { opacity: 1.0; }
+  }
+
+  /* ─── MONEY MOVES — luxury casino green felt + gold sparkle ─── */
+  body:not(.theme-active) #gameScreen.table-money {
+    background: radial-gradient(ellipse at 50% 50%, #0a3a1a 0%, #052810 35%, #021808 70%, #010a05 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-money::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 200%;
+    pointer-events: none; z-index: 0;
+    background:
+      repeating-linear-gradient(45deg,
+        transparent 0 14px,
+        rgba(255,215,80,0.028) 14px 15px),
+      repeating-linear-gradient(-45deg,
+        transparent 0 14px,
+        rgba(255,215,80,0.028) 14px 15px),
+      radial-gradient(1.5px 1.5px at 22% 18%, rgba(255,215,80,0.85) 0%, transparent 75%),
+      radial-gradient(1px 1px at 78% 32%, rgba(255,200,60,0.8) 0%, transparent 75%),
+      radial-gradient(2px 2px at 14% 38%, rgba(255,235,120,0.85) 0%, transparent 75%),
+      radial-gradient(1.5px 1.5px at 62% 8%, rgba(255,215,80,0.75) 0%, transparent 75%),
+      radial-gradient(1px 1px at 88% 22%, rgba(255,200,60,0.8) 0%, transparent 75%),
+      radial-gradient(1.5px 1.5px at 38% 44%, rgba(255,235,120,0.8) 0%, transparent 75%);
+    animation: vp3StarDrift 25s linear infinite;
+  }
+  body:not(.theme-active) #gameScreen.table-money::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(255,215,80,0.10) 0%, transparent 30%),
+      radial-gradient(circle at 85% 85%, rgba(255,215,80,0.09) 0%, transparent 30%),
+      radial-gradient(ellipse 80% 65% at 50% 48%,
+        transparent 0%, transparent 50%,
+        rgba(0,15,5,0.55) 88%, rgba(0,8,2,0.78) 100%);
+  }
+
+  /* ─── AURORA — arctic sky with flowing bands ─── */
+  body:not(.theme-active) #gameScreen.table-aurora {
+    background: linear-gradient(180deg, #001a20 0%, #001218 30%, #000a10 65%, #000508 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-aurora::before {
+    content: '';
+    position: absolute; top: 0; left: -30%; right: -30%; height: 60%;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 90% at 25% 100%, rgba(80,255,160,0.18) 0%, transparent 65%),
+      radial-gradient(ellipse 55% 95% at 55% 100%, rgba(60,180,255,0.15) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 85% at 80% 100%, rgba(160,80,255,0.12) 0%, transparent 70%);
+    animation: vp3AuroraDrift 14s ease-in-out infinite alternate;
+  }
+  @keyframes vp3AuroraDrift {
+    0%   { transform: translateX(0)    skewX(0deg);   opacity: 0.85; }
+    100% { transform: translateX(36px) skewX(-2.5deg); opacity: 1.0; }
+  }
+  body:not(.theme-active) #gameScreen.table-aurora::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(1px 1px at 12% 6%, #cce6ff 0%, transparent 80%),
+      radial-gradient(1px 1px at 78% 4%, #fff 0%, transparent 80%),
+      radial-gradient(0.8px 0.8px at 38% 10%, #fff 0%, transparent 80%),
+      radial-gradient(1.5px 1.5px at 90% 9%, #cce6ff 0%, transparent 80%),
+      radial-gradient(0.8px 0.8px at 22% 14%, #fff 0%, transparent 80%),
+      radial-gradient(1px 1px at 60% 12%, #cce6ff 0%, transparent 80%),
+      radial-gradient(ellipse 80% 65% at 50% 52%,
+        transparent 0%, transparent 50%,
+        rgba(0,15,25,0.55) 88%, rgba(0,8,15,0.75) 100%);
+  }
+
+  /* ─── OBSIDIAN — black crystal + slow energy pulse ─── */
+  body:not(.theme-active) #gameScreen.table-obsidian {
+    background: radial-gradient(ellipse at 50% 50%, #0a0010 0%, #050008 50%, #02000a 80%, #000005 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-obsidian::before {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none; z-index: 0;
+    background:
+      linear-gradient(125deg, transparent 0%, transparent 40%, rgba(120,40,200,0.06) 50%, transparent 60%),
+      linear-gradient(65deg,  transparent 0%, transparent 50%, rgba(100,20,160,0.05) 60%, transparent 70%),
+      linear-gradient(95deg,  transparent 0%, transparent 70%, rgba(140,60,220,0.05) 80%, transparent 90%);
+    animation: vp3ObsidianPulse 5s ease-in-out infinite alternate;
+  }
+  @keyframes vp3ObsidianPulse {
+    0%   { opacity: 0.65; }
+    100% { opacity: 1.0; }
+  }
+  body:not(.theme-active) #gameScreen.table-obsidian::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(circle at 15% 15%, rgba(140,60,220,0.10) 0%, transparent 35%),
+      radial-gradient(circle at 85% 85%, rgba(100,20,180,0.10) 0%, transparent 35%),
+      radial-gradient(ellipse 75% 60% at 50% 50%,
+        transparent 0%, transparent 50%,
+        rgba(0,0,8,0.65) 88%, rgba(0,0,5,0.85) 100%);
+  }
+
+  /* ─── CANDY — pastel cosmos with sparkles ─── */
+  body:not(.theme-active) #gameScreen.table-candy {
+    background: radial-gradient(ellipse at 50% 50%, #2a0035 0%, #1a0028 40%, #100018 80%, #050010 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-candy::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 200%;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 50% 30% at 20% 20%, rgba(255,140,200,0.14) 0%, transparent 65%),
+      radial-gradient(ellipse 55% 35% at 80% 60%, rgba(140,180,255,0.12) 0%, transparent 70%),
+      radial-gradient(2px 2px at 18% 22%, #ff99cc 0%, transparent 78%),
+      radial-gradient(1.5px 1.5px at 72% 14%, #99ccff 0%, transparent 78%),
+      radial-gradient(2.5px 2.5px at 36% 38%, #ffaaff 0%, transparent 78%),
+      radial-gradient(1.5px 1.5px at 88% 32%, #aaffcc 0%, transparent 78%),
+      radial-gradient(1.5px 1.5px at 56% 8%, #ffcc99 0%, transparent 78%),
+      radial-gradient(2px 2px at 12% 44%, #ffaadd 0%, transparent 78%);
+    animation: vp3StarDrift 30s linear infinite;
+  }
+  body:not(.theme-active) #gameScreen.table-candy::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(circle at 10% 10%, rgba(255,140,200,0.10) 0%, transparent 35%),
+      radial-gradient(circle at 90% 90%, rgba(140,180,255,0.10) 0%, transparent 35%),
+      radial-gradient(ellipse 80% 65% at 50% 48%,
+        transparent 0%, transparent 50%,
+        rgba(20,0,30,0.55) 88%, rgba(10,0,20,0.78) 100%);
+  }
+
+  /* ─── CHEESE — warm yellow + holes ─── */
+  body:not(.theme-active) #gameScreen.table-cheese {
+    background: radial-gradient(ellipse at 50% 50%, #3d2800 0%, #2a1c00 40%, #1a1100 80%, #100800 100%) !important;
+  }
+  body:not(.theme-active) #gameScreen.table-cheese::before {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(circle 18px at 12% 18%, rgba(40,20,0,0.6) 0%, transparent 90%),
+      radial-gradient(circle 14px at 78% 28%, rgba(40,20,0,0.55) 0%, transparent 90%),
+      radial-gradient(circle 22px at 28% 78%, rgba(40,20,0,0.55) 0%, transparent 90%),
+      radial-gradient(circle 12px at 82% 68%, rgba(40,20,0,0.55) 0%, transparent 90%),
+      radial-gradient(circle 16px at 58% 42%, rgba(40,20,0,0.5) 0%, transparent 90%),
+      radial-gradient(circle 10px at 88% 88%, rgba(40,20,0,0.5) 0%, transparent 90%);
+  }
+  body:not(.theme-active) #gameScreen.table-cheese::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 1;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(255,200,80,0.14) 0%, transparent 30%),
+      radial-gradient(circle at 0% 50%, rgba(255,180,60,0.07) 0%, transparent 30%),
+      radial-gradient(ellipse 80% 65% at 50% 48%,
+        transparent 0%, transparent 50%,
+        rgba(20,12,0,0.55) 88%, rgba(10,6,0,0.78) 100%);
+  }
+
+  /* Reduced-motion: pause atmosphere drift */
+  @media (prefers-reduced-motion: reduce) {
+    body:not(.theme-active) #gameScreen.table-inferno::before,
+    body:not(.theme-active) #gameScreen.table-galaxy::before,
+    body:not(.theme-active) #gameScreen.table-cosmos::before,
+    body:not(.theme-active) #gameScreen.table-toxic_waste::before,
+    body:not(.theme-active) #gameScreen.table-disco::before,
+    body:not(.theme-active) #gameScreen.table-money::before,
+    body:not(.theme-active) #gameScreen.table-aurora::before,
+    body:not(.theme-active) #gameScreen.table-obsidian::before,
+    body:not(.theme-active) #gameScreen.table-candy::before {
+      animation: none !important;
+    }
+    body:not(.theme-active) #gameScreen.table-toxic_waste::after,
+    body:not(.theme-active) #gameScreen.table-disco::after {
+      animation: none !important;
+    }
+  }
+
+  /* End VISUAL POLISH v3 */

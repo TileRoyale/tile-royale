@@ -1,0 +1,353 @@
+  /* ===== TABLE SKINS (game background) ===== */
+  #gameScreen.table-dark_void    { background: var(--bg); }
+  #gameScreen.table-lava_field   { background: radial-gradient(ellipse at bottom, #3a0a00 0%, #0a0a0f 70%); }
+  #gameScreen.table-arctic_ice   { background: radial-gradient(ellipse at top, #001a2e 0%, #0a0a0f 70%); }
+  #gameScreen.table-neon_grid    { background: #050a05;
+    background-image: linear-gradient(rgba(0,255,80,0.06) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0,255,80,0.06) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  #gameScreen.table-galaxy       { background: radial-gradient(ellipse at 30% 40%, #0d0030 0%, #0a0a0f 60%); }
+  #gameScreen.table-desert_sand  { background: radial-gradient(ellipse at bottom, #2a1a00 0%, #0a0a0f 70%); }
+  #gameScreen.table-circuit_board { background: #030d03;
+    background-image: linear-gradient(rgba(0,200,60,0.08) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0,200,60,0.08) 1px, transparent 1px);
+    background-size: 20px 20px; }
+  #gameScreen.table-marble       { background: linear-gradient(135deg, #0f0f12 25%, #1a1a22 50%, #0f0f12 75%); }
+  #gameScreen.table-deep_ocean   { background: radial-gradient(ellipse at top, #001525 0%, #0a0a0f 70%); }
+  #gameScreen.table-toxic_waste  { background: radial-gradient(ellipse at bottom, #001a00 0%, #0a0a0f 70%); }
+
+  /* ===== TILE SKINS ===== */
+  .tile { aspect-ratio: 1; border-radius: 8px; background: var(--panel); border: 1px solid var(--border);
+    cursor: pointer; transition: background 0.1s, transform 0.1s, box-shadow 0.1s;
+    position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .tile:active { transform: scale(0.92); }
+
+  /* Tile skin overrides (idle state) */
+  .tskin-gold      .tile { background: #1a1400; border-color: #8a6a00; }
+  .tskin-chrome    .tile { background: #111318; border-color: #444466; }
+  .tskin-wood      .tile { background: #1a0e06; border-color: #6b3a1a; }
+  .tskin-stone     .tile { background: #111114; border-color: #444448; }
+  .tskin-glass     .tile { background: rgba(20,30,50,0.6); border-color: #334466; backdrop-filter: blur(2px); }
+  .tskin-holo      .tile { background: #050a1a; border-color: #003366; }
+  .tskin-lava      .tile { background: #1a0500; border-color: #6b1500; }
+  .tskin-ice       .tile { background: #050e1a; border-color: #1a4466; }
+  .tskin-toxic     .tile { background: #050f05; border-color: #1a5a1a; }
+
+  /* ===== BURNING STATE — base ===== */
+  .tile.burning { border-color: #ff4500; animation: burnFlicker 0.15s infinite alternate;
+    box-shadow: 0 0 16px rgba(255,69,0,0.8), inset 0 0 12px rgba(255,200,0,0.3);
+    background: linear-gradient(135deg, #ff2200, #ff6600, #ffaa00); }
+
+  /* TILE EFFECT: Fire (default) */
+  .tfx-fire .tile.burning { background: linear-gradient(135deg, #ff2200, #ff6600, #ffaa00); }
+  .tfx-fire .tile.burning::after { content: '🔥'; position: absolute; font-size: 36px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.3s infinite alternate; pointer-events:none; }
+  @keyframes fireFloat { 0% { transform: translate(-50%,-50%) scale(0.9) rotate(-5deg); } 100% { transform: translate(-50%,-50%) scale(1.1) rotate(5deg); } }
+  .tfx-neonblue .tile.burning::after  { content: '💙'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.4s infinite alternate; pointer-events:none; }
+  .tfx-neonpink .tile.burning::after  { content: '🩷'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.4s infinite alternate; pointer-events:none; }
+  .tfx-electric .tile.burning::after  { content: '⚡'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.15s infinite alternate; pointer-events:none; }
+  .tfx-plasma .tile.burning::after    { content: '🟣'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.35s infinite alternate; pointer-events:none; }
+  .tfx-ice .tile.burning::after       { content: '❄️'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.6s infinite alternate; pointer-events:none; }
+  .tfx-toxic .tile.burning::after     { content: '☣️'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.3s infinite alternate; pointer-events:none; }
+  .tfx-solar .tile.burning::after     { content: '☀️'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.2s infinite alternate; pointer-events:none; }
+  .tfx-rainbow .tile.burning::after   { content: '🌈'; position: absolute; font-size: 30px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.3s infinite alternate; pointer-events:none; }
+  .tfx-void .tile.burning::after      { content: '🌑'; position: absolute; font-size: 36px; top:50%; left:50%; transform:translate(-50%,-50%); animation: voidSpin 1s linear infinite; pointer-events:none; }
+  @keyframes voidSpin { 0% { transform: translate(-50%,-50%) rotate(0deg) scale(0.8); } 100% { transform: translate(-50%,-50%) rotate(360deg) scale(1.2); } }
+  .tfx-godray .tile.burning::after    { content: '✨'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.2s infinite alternate; pointer-events:none; }
+  .tfx-blackhole .tile.burning::after { content: '🌀'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: voidSpin 0.8s linear infinite; pointer-events:none; }
+  .tfx-supernova .tile.burning::after { content: '💥'; position: absolute; font-size: 34px; top:50%; left:50%; transform:translate(-50%,-50%); animation: fireFloat 0.1s infinite alternate; pointer-events:none; }
+
+  /* TILE EFFECT: Neon Blue */
+  .tfx-neonblue .tile.burning {
+    background: linear-gradient(135deg, #001aff, #00aaff, #00ffee);
+    border-color: #00aaff; animation: neonBlueFlicker 0.2s infinite alternate;
+    box-shadow: 0 0 20px rgba(0,170,255,0.9); }
+  @keyframes neonBlueFlicker {
+    0%   { box-shadow: 0 0 14px rgba(0,100,255,0.8); }
+    100% { box-shadow: 0 0 28px rgba(0,220,255,1); }
+  }
+
+  /* TILE EFFECT: Neon Pink */
+  .tfx-neonpink .tile.burning {
+    background: linear-gradient(135deg, #aa00ff, #ff00aa, #ff66cc);
+    border-color: #ff00aa; animation: neonPinkFlicker 0.2s infinite alternate;
+    box-shadow: 0 0 20px rgba(255,0,170,0.9); }
+  @keyframes neonPinkFlicker {
+    0%   { box-shadow: 0 0 14px rgba(200,0,150,0.8); }
+    100% { box-shadow: 0 0 28px rgba(255,100,200,1); }
+  }
+
+  /* TILE EFFECT: Electric */
+  .tfx-electric .tile.burning {
+    background: linear-gradient(135deg, #554400, #aaaa00, #ffff00);
+    border-color: #dddd00; animation: electricFlicker 0.08s infinite alternate;
+    box-shadow: 0 0 20px rgba(255,255,0,0.9); }
+  @keyframes electricFlicker {
+    0%   { box-shadow: 0 0 10px rgba(200,200,0,0.6); opacity: 0.9; }
+    100% { box-shadow: 0 0 30px rgba(255,255,100,1); opacity: 1; }
+  }
+
+  /* TILE EFFECT: Plasma */
+  .tfx-plasma .tile.burning {
+    background: linear-gradient(135deg, #330066, #9900ff, #cc44ff);
+    border-color: #9900ff; animation: plasmaFlicker 0.25s infinite alternate;
+    box-shadow: 0 0 20px rgba(150,0,255,0.9); }
+  @keyframes plasmaFlicker {
+    0%   { box-shadow: 0 0 14px rgba(100,0,200,0.7); }
+    100% { box-shadow: 0 0 28px rgba(200,100,255,1); }
+  }
+
+  /* TILE EFFECT: Ice Freeze */
+  .tfx-ice .tile.burning {
+    background: linear-gradient(135deg, #003366, #0066aa, #aaddff);
+    border-color: #66ccff; animation: iceFlicker 0.4s infinite alternate;
+    box-shadow: 0 0 20px rgba(100,200,255,0.9); }
+  @keyframes iceFlicker {
+    0%   { box-shadow: 0 0 10px rgba(100,180,255,0.5); }
+    100% { box-shadow: 0 0 24px rgba(180,230,255,1); }
+  }
+
+  /* TILE EFFECT: Toxic Glow */
+  .tfx-toxic .tile.burning {
+    background: linear-gradient(135deg, #003300, #00aa00, #88ff00);
+    border-color: #00ff44; animation: toxicFlicker 0.2s infinite alternate;
+    box-shadow: 0 0 20px rgba(0,255,60,0.9); }
+  @keyframes toxicFlicker {
+    0%   { box-shadow: 0 0 12px rgba(0,180,40,0.7); }
+    100% { box-shadow: 0 0 26px rgba(100,255,80,1); }
+  }
+
+  /* TILE EFFECT: Solar Flare */
+  .tfx-solar .tile.burning {
+    background: linear-gradient(135deg, #553300, #ffaa00, #ffffff);
+    border-color: #ffdd00; animation: solarFlicker 0.12s infinite alternate;
+    box-shadow: 0 0 24px rgba(255,220,0,1); }
+  @keyframes solarFlicker {
+    0%   { box-shadow: 0 0 16px rgba(255,180,0,0.8); }
+    100% { box-shadow: 0 0 36px rgba(255,240,100,1); }
+  }
+
+  /* TILE EFFECT: Void */
+  .tfx-void .tile.burning {
+    background: radial-gradient(circle, #220033 0%, #000000 100%);
+    border-color: #440066; animation: voidPulse 0.6s infinite alternate;
+    box-shadow: 0 0 20px rgba(60,0,80,0.9), inset 0 0 20px rgba(0,0,0,1); }
+  @keyframes voidPulse {
+    0%   { box-shadow: 0 0 10px rgba(40,0,60,0.6); }
+    100% { box-shadow: 0 0 30px rgba(100,0,150,1); }
+  }
+  @keyframes voidSpin { 0% { transform: rotate(0deg) scale(0.8); } 100% { transform: rotate(360deg) scale(1.2); } }
+
+  /* TILE EFFECT: Rainbow */
+  .tfx-rainbow .tile.burning {
+    border-color: #ff0000; animation: rainbowCycle 0.5s linear infinite;
+    box-shadow: 0 0 20px rgba(255,100,100,0.8); }
+  @keyframes rainbowCycle {
+    0%   { background: linear-gradient(135deg,#ff0000,#ff8800); border-color: #ff0000; }
+    20%  { background: linear-gradient(135deg,#ffff00,#88ff00); border-color: #ffff00; }
+    40%  { background: linear-gradient(135deg,#00ff88,#00ffff); border-color: #00ffff; }
+    60%  { background: linear-gradient(135deg,#0088ff,#8800ff); border-color: #8800ff; }
+    80%  { background: linear-gradient(135deg,#ff00ff,#ff0088); border-color: #ff00ff; }
+    100% { background: linear-gradient(135deg,#ff0000,#ff8800); border-color: #ff0000; }
+  }
+
+  /* ===== TAPPED STATE ===== */
+  /* ===== WHALE EXCLUSIVE TABLE SKINS ===== */
+  #gameScreen.table-obsidian {
+    background: #000000;
+    background-image: linear-gradient(rgba(80,0,120,0.06) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(80,0,120,0.06) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+  #gameScreen.table-aurora {
+    background: radial-gradient(ellipse at 20% 30%, #001a0d 0%, #0a0a0f 40%),
+                radial-gradient(ellipse at 80% 70%, #001530 0%, transparent 50%);
+    animation: auroraPulse 6s ease-in-out infinite alternate;
+  }
+  @keyframes auroraPulse {
+    0%   { background-position: 0 0, 100% 100%; }
+    100% { background-position: 10px 5px, 90% 95%; }
+  }
+
+  /* ===== WHALE EXCLUSIVE TILE SKINS ===== */
+
+  /* ===== ONLYWHALES TAB ===== */
+  .onlywhales-tab {
+    border-color: rgba(0,229,255,0.3) !important;
+    color: var(--diamond) !important;
+    background: rgba(0,229,255,0.05) !important;
+  }
+  .onlywhales-tab.active {
+    border-color: var(--diamond) !important;
+    background: rgba(0,229,255,0.12) !important;
+    box-shadow: 0 0 12px rgba(0,229,255,0.2);
+  }
+  .onlywhales-hero {
+    width:100%; text-align:center; padding:20px 0 16px;
+    border-bottom:1px solid rgba(0,229,255,0.15); margin-bottom:16px;
+  }
+  .onlywhales-crown { font-size:48px; animation:iconBounce 0.5s cubic-bezier(0.34,1.56,0.64,1); }
+  .onlywhales-title {
+    font-family:'Bebas Neue',sans-serif; font-size:32px; letter-spacing:5px;
+    color:var(--diamond); filter:drop-shadow(0 0 16px rgba(0,229,255,0.5)); margin:6px 0 4px;
+  }
+  .onlywhales-sub { font-size:11px; color:var(--muted); letter-spacing:2px; line-height:1.6; }
+  .onlywhales-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    background:linear-gradient(135deg,rgba(0,229,255,0.1),rgba(0,100,200,0.1));
+    border:1px solid rgba(0,229,255,0.3); border-radius:20px;
+    padding:5px 14px; font-size:11px; letter-spacing:2px; color:var(--diamond);
+    margin-top:8px; animation:whalePulse 2s ease-in-out infinite;
+  }
+  .onlywhales-locked {
+    width:100%; background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.15);
+    border-radius:14px; padding:24px; text-align:center; margin-bottom:16px;
+  }
+  .onlywhales-locked-icon { font-size:40px; margin-bottom:12px; }
+  .onlywhales-locked-title {
+    font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:3px;
+    color:var(--muted); margin-bottom:8px;
+  }
+  .onlywhales-locked-desc { font-size:12px; color:var(--muted); letter-spacing:1px; line-height:1.6; }
+
+  .tskin-diamond .tile { background: #001a1a; border-color: #00e5ff; box-shadow: inset 0 0 6px rgba(0,229,255,0.15); }
+  .tskin-obsidian .tile { background: #050005; border-color: #220033; }
+
+  /* ===== WHALE EXCLUSIVE TILE EFFECTS ===== */
+  /* God Ray — brilliant white-gold burst */
+  .tfx-godray .tile.burning {
+    background: radial-gradient(circle, #ffffff 0%, #ffee88 30%, #ffaa00 70%, #ff6600 100%);
+    border-color: #ffffff;
+    animation: godrayFlicker 0.1s infinite alternate;
+    box-shadow: 0 0 30px rgba(255,255,200,1), 0 0 60px rgba(255,200,0,0.6);
+  }
+  @keyframes godrayFlicker {
+    0%   { box-shadow: 0 0 24px rgba(255,255,200,0.9); }
+    100% { box-shadow: 0 0 40px rgba(255,255,255,1), 0 0 60px rgba(255,200,0,0.8); }
+  }
+
+  /* Black Hole — dark gravitational pull */
+  .tfx-blackhole .tile.burning {
+    background: radial-gradient(circle, #000000 0%, #0a0015 40%, #1a0030 80%, #330066 100%);
+    border-color: #6600aa;
+    animation: blackholePulse 0.8s infinite alternate;
+    box-shadow: 0 0 20px rgba(100,0,150,0.8), inset 0 0 20px rgba(0,0,0,1);
+  }
+  @keyframes blackholePulse {
+    0%   { box-shadow: 0 0 14px rgba(80,0,120,0.6), inset 0 0 16px black; transform: scale(0.97); }
+    100% { box-shadow: 0 0 28px rgba(140,0,200,1), inset 0 0 24px black; transform: scale(1.02); }
+  }
+
+  /* ===== WHALE EXCLUSIVE TAP EFFECTS ===== */
+  /* Shockwave — expanding concentric rings */
+  @keyframes shockwaveAnim {
+    0%   { transform: scale(0);   opacity: 1; border-width: 4px; }
+    50%  { transform: scale(1.5); opacity: 0.6; border-width: 2px; }
+    100% { transform: scale(3);   opacity: 0; border-width: 1px; }
+  }
+  .tap-shockwave {
+    border-radius: 50%; border: 3px solid #00e5ff;
+    box-shadow: 0 0 12px #00e5ff, inset 0 0 8px rgba(0,229,255,0.2);
+    width: 100%; height: 100%;
+    animation: shockwaveAnim 0.5s ease-out forwards;
+  }
+
+  /* Gold Crack — shattering gold fracture */
+  @keyframes goldcrackAnim {
+    0%   { transform: scale(1) rotate(0deg);   opacity: 1; }
+    40%  { transform: scale(1.4) rotate(5deg);  opacity: 0.9; }
+    100% { transform: scale(2.5) rotate(-5deg); opacity: 0; }
+  }
+  .tap-goldcrack {
+    border-radius: 8px;
+    background: conic-gradient(#ffd700, #ffaa00, #ff8c00, #ffd700, #ffe066, #ffd700);
+    box-shadow: 0 0 16px rgba(255,215,0,0.8);
+    width: 100%; height: 100%;
+    animation: goldcrackAnim 0.45s ease-out forwards;
+  }
+
+  /* Also add whale table skin backgrounds to applyTableBgToEl */
+  .tskin-diamond .tile.burning { box-shadow: 0 0 16px rgba(255,69,0,0.8), 0 0 8px rgba(0,229,255,0.4); }
+  /* Prestige skins — animated border */
+  .skin-card.prestige {
+    border-color: rgba(255,215,0,0.4);
+    background: linear-gradient(135deg, rgba(255,215,0,0.03), var(--panel));
+  }
+
+  /* Prestige table skins */
+  #gameScreen.table-inferno {
+    background: radial-gradient(ellipse at bottom, #2a0500 0%, #0a0a0f 60%),
+                radial-gradient(ellipse at top right, #1a0800 0%, transparent 50%);
+  }
+  #gameScreen.table-cosmos {
+    background: radial-gradient(ellipse at 40% 60%, #0a0020 0%, #050010 60%),
+                radial-gradient(ellipse at 80% 20%, #001a10 0%, transparent 50%);
+  }
+
+  /* Phoenix tile */
+  .tskin-phoenix .tile { background: #1a0800; border-color: #ff6600; }
+  .tskin-phoenix .tile.burning { box-shadow: 0 0 20px rgba(255,100,0,1), 0 0 40px rgba(255,50,0,0.5); }
+
+  /* Abyss tile */
+  .tskin-abyss .tile { background: #000510; border-color: #003366; }
+
+  /* Supernova effect */
+  .tfx-supernova .tile.burning {
+    background: radial-gradient(circle, #ffffff 0%, #ffff88 20%, #ff8800 60%, #ff0000 100%);
+    border-color: #ffffff;
+    box-shadow: 0 0 30px rgba(255,255,255,1), 0 0 60px rgba(255,200,0,0.8);
+    animation: supernovaFlicker 0.08s infinite alternate;
+  }
+  @keyframes supernovaFlicker {
+    0%   { box-shadow: 0 0 20px rgba(255,255,200,0.8); transform: scale(0.98); }
+    100% { box-shadow: 0 0 40px rgba(255,255,255,1);   transform: scale(1.02); }
+  }
+
+  /* Meteor tap effect */
+  @keyframes meteorAnim {
+    0%   { transform: scale(0) rotate(-45deg); opacity: 1; }
+    60%  { transform: scale(1.8) rotate(10deg); opacity: 0.8; }
+    100% { transform: scale(3) rotate(20deg);  opacity: 0; }
+  }
+  .tap-meteor {
+    border-radius: 30% 70% 70% 30%; border: 2px solid #ff6600;
+    background: linear-gradient(135deg, #ff2200, #ff8800, #ffcc00);
+    box-shadow: 0 0 16px rgba(255,100,0,0.8);
+    width: 100%; height: 100%;
+    animation: meteorAnim 0.5s ease-out forwards;
+  }
+
+  /* Skin tier badges */
+  .skin-tier-badge {
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 6px; font-weight: 700; flex-shrink: 0;
+  }
+  .tier-common    { background: rgba(150,150,150,0.15); color: #aaa; }
+  .tier-rare      { background: rgba(0,120,255,0.15);   color: #4488ff; }
+  .tier-epic      { background: rgba(150,0,255,0.15);   color: #bb44ff; }
+  .tier-legendary { background: rgba(255,140,0,0.15);   color: #ffaa00; }
+  .tier-prestige  {
+    background: linear-gradient(135deg,rgba(255,215,0,0.2),rgba(255,100,0,0.2));
+    color: var(--gold); border: 1px solid rgba(255,215,0,0.3);
+    animation: whalePulse 2s ease-in-out infinite;
+  }
+
+  /* Shadow tile = visually identical to burning tile (no giveaway) */
+  .tile.shadow-trap {
+    border-color: #ff4500;
+    animation: burnFlicker 0.15s infinite alternate;
+    box-shadow: 0 0 12px rgba(255,69,0,0.7), 0 0 4px rgba(255,100,0,0.5);
+    cursor: pointer;
+  }
+  /* Inherit all tile-skin burning overrides automatically via parent class cascade */
+  @keyframes shadowPulse {
+    0%   { box-shadow: 0 0 8px rgba(80,0,120,0.5); border-color: #330055; }
+    100% { box-shadow: 0 0 18px rgba(140,0,200,0.8); border-color: #6600aa; }
+  }
+
+  .tile.tapped { background: #1a2a1a; border-color: var(--green); box-shadow: 0 0 8px rgba(0,255,136,0.3); }
+  .tile.tapped::after { content: '✓'; color: var(--green); font-size: 20px; font-weight: bold; }
+
+  /* ===== MISSED STATE ===== */
+  .tile.missed { background: #2a0a0a; border-color: var(--red); animation: missedFlash 0.5s ease-out; }
+  @keyframes missedFlash { 0% { background: #ff0000; } 100% { background: #2a0a0a; } }
+

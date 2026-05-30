@@ -1,0 +1,301 @@
+  /* ===== TAP EFFECTS ===== */
+  @keyframes rippleAnim   { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
+  @keyframes explodeAnim  { 0% { transform: scale(0) rotate(0deg); opacity: 1; } 100% { transform: scale(2.5) rotate(45deg); opacity: 0; } }
+  @keyframes starAnim     { 0% { transform: scale(0); opacity: 1; } 60% { transform: scale(2.2); opacity: 0.8; } 100% { transform: scale(3); opacity: 0; } }
+  @keyframes shatterAnim  { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2) skew(10deg); opacity: 0; } }
+  @keyframes lightningAnim{ 0% { transform: scaleY(0); opacity: 1; } 100% { transform: scaleY(3); opacity: 0; } }
+  @keyframes smokeAnim    { 0% { transform: scale(0.5) translateY(0); opacity: 0.8; } 100% { transform: scale(2) translateY(-20px); opacity: 0; } }
+  @keyframes confettiAnim { 0% { transform: scale(0) rotate(0deg); opacity: 1; } 100% { transform: scale(2.5) rotate(180deg); opacity: 0; } }
+  @keyframes icecrackAnim { 0% { transform: scale(1); opacity: 1; border-radius: 0; } 100% { transform: scale(2.5); opacity: 0; border-radius: 50%; } }
+  @keyframes portalAnim   { 0% { transform: scale(0) rotate(0deg); opacity: 1; } 100% { transform: scale(3) rotate(720deg); opacity: 0; } }
+  @keyframes neonpulseAnim{ 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3.5); opacity: 0; } }
+
+  .tap-ripple    { border-radius: 50%; background: rgba(255,255,255,0.3); width: 100%; height: 100%; animation: rippleAnim 0.4s ease-out forwards; }
+  .tap-explosion { border-radius: 20%; background: radial-gradient(circle, #ff8800, #ff2200); width: 100%; height: 100%; animation: explodeAnim 0.4s ease-out forwards; }
+  .tap-starburst { background: radial-gradient(circle, #ffff00, #ffaa00); clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%); width: 100%; height: 100%; animation: starAnim 0.45s ease-out forwards; }
+  .tap-shatter   { border: 3px solid #aaddff; border-radius: 4px; width: 90%; height: 90%; animation: shatterAnim 0.4s ease-out forwards; }
+  .tap-lightning { width: 4px; height: 100%; background: linear-gradient(to bottom, #ffff00, #ffffff); box-shadow: 0 0 8px #ffff00; animation: lightningAnim 0.3s ease-out forwards; }
+  .tap-smoke     { border-radius: 50%; background: radial-gradient(circle, rgba(180,180,180,0.6), transparent); width: 100%; height: 100%; animation: smokeAnim 0.5s ease-out forwards; }
+  .tap-confetti  { border-radius: 30%; background: conic-gradient(#ff0000,#ffff00,#00ff00,#0000ff,#ff00ff,#ff0000); width: 80%; height: 80%; animation: confettiAnim 0.5s ease-out forwards; }
+  .tap-icecrack  { border: 3px solid #aaddff; background: rgba(150,200,255,0.3); width: 100%; height: 100%; animation: icecrackAnim 0.4s ease-out forwards; }
+  .tap-portal    { border-radius: 50%; background: conic-gradient(#8800ff,#0044ff,#8800ff); width: 100%; height: 100%; animation: portalAnim 0.5s ease-out forwards; }
+  .tap-neonpulse { border-radius: 50%; border: 3px solid #00ffff; box-shadow: 0 0 12px #00ffff; width: 100%; height: 100%; animation: neonpulseAnim 0.4s ease-out forwards; }
+
+  /* ===== BOT ACTIVITY INDICATOR ===== */
+  .bot-feed {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    height: 36px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .feed-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fire); flex-shrink: 0; animation: feedPulse 1s infinite; }
+  @keyframes feedPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* ===== ELIMINATION TOAST ===== */
+  .toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    background: var(--panel);
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--red);
+    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ===== RESULT SCREEN ===== */
+  .result-crown { font-size: 72px; margin-bottom: 8px; animation: crownBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  @keyframes crownBounce { 0% { transform: scale(0) rotate(-20deg); } 100% { transform: scale(1) rotate(0deg); } }
+
+  .result-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 56px;
+    letter-spacing: 4px;
+    margin-bottom: 4px;
+  }
+  .result-title.win { background: linear-gradient(135deg, var(--gold), var(--fire2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .result-title.lose { color: var(--red); }
+
+  .result-place {
+    font-size: 16px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    margin-bottom: 32px;
+  }
+
+  .rewards-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    width: 100%;
+    margin-bottom: 24px;
+  }
+  .rewards-title {
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .reward-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .reward-row:last-child { border-bottom: none; }
+  .reward-lbl { font-size: 14px; color: var(--muted); }
+  .reward-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+  }
+  .reward-val.diamond { color: var(--diamond); }
+  .reward-val.xp { color: var(--green); }
+  .reward-val.zero { color: var(--muted); }
+
+  .leaderboard {
+    width: 100%;
+    margin-bottom: 24px;
+  }
+  .lb-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
+  .lb-row.you-row { border-color: var(--gold); }
+  .lb-place {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    width: 28px;
+    text-align: center;
+  }
+  .lb-avatar { font-size: 20px; }
+  .lb-name { flex: 1; font-size: 14px; }
+  .lb-diamond {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    color: var(--diamond);
+    letter-spacing: 1px;
+  }
+
+  /* Game Summary table */
+  .game-summary { margin: 12px 0 4px; width: 100%; }
+  .summary-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 2px;
+    color: var(--muted); margin-bottom: 6px; text-align: center;
+  }
+  .summary-table { width: 100%; max-height: 220px; overflow-y: auto; }
+  .summary-row {
+    display: grid; grid-template-columns: 26px 1fr 46px 68px;
+    gap: 4px; padding: 5px 6px; border-radius: 6px;
+    font-size: 12px; align-items: center;
+  }
+  .summary-header {
+    font-size: 9px; letter-spacing: 1px; color: var(--muted);
+    padding-bottom: 3px; border-bottom: 1px solid rgba(255,255,255,0.07);
+    margin-bottom: 2px; position: sticky; top: 0; background: var(--bg);
+  }
+  .summary-you { background: rgba(255,215,0,0.07); border: 1px solid rgba(255,215,0,0.15); }
+  .summary-place { color: var(--muted); text-align: center; font-size: 10px; }
+  .summary-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .summary-taps {
+    text-align: center; color: var(--fire2);
+    font-family: 'Bebas Neue', sans-serif; font-size: 14px;
+  }
+  .summary-speed { text-align: right; color: var(--muted); font-size: 10px; }
+  .summary-you-tag { color: var(--gold); font-size: 9px; }
+
+  .btn-secondary {
+    width: 100%;
+    padding: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 3px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 10px;
+  }
+  .btn-secondary:hover { border-color: var(--fire); color: var(--fire); }
+
+  /* ===== ELIMINATED OVERLAY ===== */
+  .elim-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .elim-overlay.show { opacity: 1; pointer-events: all; }
+  .elim-emoji { font-size: 64px; animation: elimBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  @keyframes elimBounce { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+  .elim-text {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 48px;
+    color: var(--red);
+    letter-spacing: 4px;
+    margin-top: 12px;
+  }
+  .elim-sub { color: var(--muted); font-size: 14px; letter-spacing: 2px; margin-top: 8px; }
+  .elim-place {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    color: var(--gold);
+    letter-spacing: 3px;
+    margin-top: 16px;
+  }
+
+  /* ===== WATCHING OVERLAY (after elim) ===== */
+  .watch-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0; right: 0;
+    background: rgba(10,10,15,0.97);
+    border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    z-index: 10;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .watch-bar.show { display: flex; }
+  .watch-info { flex: 1; }
+  .watch-label { font-size: 11px; color: var(--muted); letter-spacing: 3px; margin-bottom: 2px; }
+  .watch-place {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    color: var(--red);
+    letter-spacing: 2px;
+  }
+  .watch-leave {
+    background: linear-gradient(135deg, var(--fire), var(--fire2));
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: white;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    box-shadow: 0 2px 12px rgba(255,69,0,0.4);
+  }
+  .watch-leave:active { opacity: 0.8; }
+
+  /* ===== TILE RIPPLE ===== */
+  @keyframes ripple {
+    0% { transform: scale(0); opacity: 1; }
+    100% { transform: scale(3); opacity: 0; }
+  }
+  .ripple-effect {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    width: 100%;
+    height: 100%;
+    animation: ripple 0.4s ease-out forwards;
+  }
+
+  /* ===== COUNTDOWN OVERLAY ===== */
+  .countdown-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    flex-direction: column;
+  }
+  .countdown-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 140px;
+    color: var(--fire);
+    letter-spacing: 8px;
+    animation: countAnim 0.9s ease-out;
+    filter: drop-shadow(0 0 40px rgba(255,69,0,0.8));
+  }
+  @keyframes countAnim {
+    0% { transform: scale(1.5); opacity: 0; }
+    20% { transform: scale(1); opacity: 1; }
+    80% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.8); opacity: 0; }
+  }
+  .countdown-label { font-size: 14px; letter-spacing: 6px; color: var(--muted); margin-top: -20px; }
+

@@ -1,0 +1,11 @@
+<!--
+  ADMOB PATCH — Lisa see blokk oma android/app/src/main/AndroidManifest.xml faili
+  <application> tagi SISSE, teiste <meta-data> tagide kõrvale.
+
+  Käivita pärast: npx cap add android
+  Fail asub:     android/app/src/main/AndroidManifest.xml
+-->
+
+<meta-data
+    android:name="com.google.android.gms.ads.APPLICATION_ID"
+    android:value="ca-app-pub-1687381057809117~9075174731"/>

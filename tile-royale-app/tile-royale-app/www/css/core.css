@@ -1,0 +1,414 @@
+  :root {
+    --fire: #ff4500;
+    --fire2: #ff8c00;
+    --gold: #ffd700;
+    --diamond: #00e5ff;
+    --bg: #0a0a0f;
+    --panel: #12121a;
+    --border: #1e1e2e;
+    --text: #e0e0f0;
+    --muted: #555570;
+    --green: #00ff88;
+    --red: #ff3355;
+    --purple: #9b59b6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { overflow-x: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+    user-select: none;
+  }
+
+  /* BACKGROUND GRID EFFECT */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,69,0,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,69,0,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ===== SCREENS ===== */
+  .screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 520px;
+    padding: 20px;
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    justify-content: flex-start;
+    padding-bottom: 40px;
+    overflow-x: hidden;
+  }
+  /* Game/lobby screens should be centered vertically */
+  #gameScreen, #lobbyScreen, #onboardingScreen {
+    justify-content: center;
+  }
+  .screen.active { display: flex; }
+
+  /* ===== LOGO ===== */
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 64px;
+    letter-spacing: 4px;
+    line-height: 1;
+    width: 100%;
+    text-align: center;
+    background: linear-gradient(135deg, var(--fire) 0%, var(--fire2) 50%, var(--gold) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 30px rgba(255,69,0,0.5));
+    animation: logoPulse 3s ease-in-out infinite;
+  }
+  @keyframes logoPulse {
+    0%, 100% { filter: drop-shadow(0 0 20px rgba(255,69,0,0.4)); }
+    50% { filter: drop-shadow(0 0 40px rgba(255,140,0,0.8)); }
+  }
+
+  .tagline {
+    font-size: 14px;
+    letter-spacing: 6px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 4px;
+    margin-bottom: 40px;
+  }
+
+  /* ===== MODE CARDS ===== */
+  .mode-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    width: 100%;
+    margin-bottom: 32px;
+  }
+
+  .mode-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .mode-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 60%, rgba(255,69,0,0.08));
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .mode-card:hover::before, .mode-card.selected::before { opacity: 1; }
+  .mode-card:hover, .mode-card.selected {
+    border-color: var(--fire);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255,69,0,0.2);
+  }
+  .mode-card.selected { border-color: var(--gold); }
+
+  .mode-icon { font-size: 28px; margin-bottom: 6px; }
+  .mode-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--gold);
+  }
+  .mode-time {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* ===== GRID SIZE SELECTOR ===== */
+  .section-label {
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    align-self: flex-start;
+  }
+
+  .size-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 32px;
+  }
+
+  .size-btn {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    color: var(--text);
+    letter-spacing: 2px;
+  }
+  .size-btn:hover, .size-btn.selected {
+    border-color: var(--fire);
+    color: var(--fire);
+    background: rgba(255,69,0,0.08);
+  }
+  .size-btn.selected { border-color: var(--gold); color: var(--gold); }
+
+  .size-sub {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  /* ===== PLAY BUTTON ===== */
+  .btn-play {
+    width: 100%;
+    padding: 18px;
+    background: linear-gradient(135deg, var(--fire) 0%, var(--fire2) 100%);
+    border: none;
+    border-radius: 12px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(255,69,0,0.4);
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-play::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -60%;
+    width: 40%;
+    height: 200%;
+    background: rgba(255,255,255,0.15);
+    transform: skewX(-20deg);
+    animation: btnShine 3s infinite;
+  }
+  @keyframes btnShine {
+    0% { left: -60%; }
+    100% { left: 140%; }
+  }
+  .btn-play:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(255,69,0,0.6);
+  }
+  .btn-play:active { transform: translateY(0); }
+
+  /* ===== STATS BAR ===== */
+  .stats-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 32px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 10px;
+    width: 100%;
+    align-items: center;
+  }
+  .stat { text-align: center; flex: 1; }
+  .stat-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    color: var(--diamond);
+    letter-spacing: 2px;
+  }
+  .stat-lbl {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .stat-div { width: 1px; background: var(--border); }
+
+  /* ===== LOBBY SCREEN ===== */
+  .lobby-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    letter-spacing: 3px;
+    color: var(--gold);
+    margin-bottom: 4px;
+  }
+  .lobby-sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+
+  .players-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .player-slot {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 2px;
+    text-align: center;
+    font-size: 9px;
+    color: var(--muted);
+    transition: all 0.3s;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .player-slot.filled {
+    border-color: var(--fire);
+    color: var(--text);
+    background: rgba(255,69,0,0.08);
+  }
+  .player-slot.you {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: rgba(255,215,0,0.08);
+  }
+  .player-avatar { font-size: 15px; margin-bottom: 1px; }
+  .player-name { font-size: 8px; letter-spacing: 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .lobby-timer {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 48px;
+    color: var(--fire);
+    letter-spacing: 4px;
+    animation: timerPulse 1s ease-in-out infinite;
+  }
+  @keyframes timerPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .lobby-timer-label { color: var(--muted); font-size: 12px; letter-spacing: 3px; margin-bottom: 8px; }
+
+  /* ===== GAME SCREEN ===== */
+  #gameScreen {
+    display: none;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+    padding: 0;
+    justify-content: flex-start;
+    min-height: unset;
+  }
+  #gameScreen.active {
+    display: flex;
+  }
+  .game-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.3);
+    width: 100%;
+  }
+  .item-hud {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 6px;
+    background: rgba(0,0,0,0.4);
+    flex-shrink: 0;
+    width: 100%;
+  }
+  .item-hud-btn {
+    flex: 0 0 calc(25% - 4px);
+    max-width: 80px;
+    padding: 4px 2px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+  .item-hud-icon  { font-size: 18px; line-height: 1; }
+  .item-hud-label { font-size: 9px; letter-spacing: 1px; color: var(--muted); }
+  .item-hud-btn.active { border-color: var(--gold); background: rgba(255,215,0,0.1); }
+  .item-hud-btn.active .item-hud-label { color: var(--gold); }
+  .item-hud-btn.used { opacity: 0.35; }
+  .bot-feed {
+    font-size: 10px;
+    padding: 3px 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+
+  .game-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .game-mode-badge {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: var(--fire);
+  }
+  .game-timer {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    color: var(--gold);
+    letter-spacing: 3px;
+  }
+  .game-timer.urgent { color: var(--red); animation: timerPulse 0.5s infinite; }
+  .players-left {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 1px;
+    color: var(--diamond);
+  }
+
+  /* ===== TILE GRID ===== */
+  #tileGrid {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    padding: 8px;
+    align-content: center;
+    box-sizing: border-box;
+  }
+

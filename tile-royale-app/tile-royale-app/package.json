@@ -1,0 +1,26 @@
+{
+  "name": "tile-royale",
+  "version": "1.0.0",
+  "description": "Tile Royale — Last tap standing",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'No build step needed for HTML app'",
+    "android": "npx cap run android",
+    "ios": "npx cap run ios",
+    "sync": "npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^5.0.0",
+    "@capacitor/android": "^5.7.0",
+    "@capacitor/app": "^5.0.7",
+    "@capacitor/core": "^5.7.0",
+    "@capacitor/haptics": "^5.0.7",
+    "@capacitor/ios": "^5.7.0",
+    "@capacitor/push-notifications": "^5.1.1",
+    "@capacitor/splash-screen": "^5.0.7",
+    "@capacitor/status-bar": "^5.0.7"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,537 @@
+// ===== SKIN DATA =====
+const SKINS = {
+  table: [
+    { id: 'table_dark',       name: 'Dark Void',       icon: '⬛', price: 0,    owned: true,  tier:'default' },
+    { id: 'table_desert',     name: 'Desert Sand',     icon: '🏜️', price: 80,   owned: false, tier:'common' },
+    { id: 'table_arctic',     name: 'Arctic Ice',      icon: '🧊', price: 80,   owned: false, tier:'common' },
+    { id: 'table_ocean',      name: 'Deep Ocean',      icon: '🌊', price: 80,   owned: false, tier:'common' },
+    { id: 'table_marble',     name: 'Marble',          icon: '⚪', price: 200,  owned: false, tier:'rare' },
+    { id: 'table_neon',       name: 'Neon Grid',       icon: '🟩', price: 200,  owned: false, tier:'rare' },
+    { id: 'table_lava',       name: 'Lava Field',      icon: '🌋', price: 400,  owned: false, tier:'epic' },
+    { id: 'table_circuit',    name: 'Circuit Board',   icon: '💚', price: 400,  owned: false, tier:'epic' },
+    { id: 'table_galaxy',     name: 'Galaxy',          icon: '🌌', price: 800,  owned: false, tier:'legendary' },
+    { id: 'table_toxic',      name: 'Toxic Waste',     icon: '☢️', price: 800,  owned: false, tier:'legendary' },
+    { id: 'table_inferno',    name: 'Inferno',         icon: '🔥', price: 1500, owned: false, tier:'prestige', prestige:true },
+    { id: 'table_cosmos',     name: 'Cosmos',          icon: '🌙', price: 1500, owned: false, tier:'prestige', prestige:true },
+    { id: 'table_candy',      name: 'Candy Land',      icon: '🍬', price: 400,  owned: false, tier:'epic' },
+    { id: 'table_cheese',     name: 'Cheese Floor',    icon: '🧀', price: 200,  owned: false, tier:'rare' },
+    { id: 'table_disco',      name: 'Disco Night',     icon: '🪩', price: 800,  owned: false, tier:'legendary' },
+    { id: 'table_money',      name: 'Money Moves',     icon: '💵', price: 800,  owned: false, tier:'legendary' },
+    { id: 'table_obsidian',   name: 'Obsidian',        icon: '⬛', price: 0,    owned: false, whale: true },
+    { id: 'table_aurora',     name: 'Aurora',          icon: '🌠', price: 0,    owned: false, whale: true },
+  ],
+  tile: [
+    { id: 'tile_dark',     name: 'Classic Dark',  icon: '⬜', price: 0,    owned: true,  tier:'default' },
+    { id: 'tile_wood',     name: 'Wooden',        icon: '🟫', price: 80,   owned: false, tier:'common' },
+    { id: 'tile_stone',    name: 'Stone',         icon: '🪨', price: 80,   owned: false, tier:'common' },
+    { id: 'tile_ice',      name: 'Ice',           icon: '🟦', price: 80,   owned: false, tier:'common' },
+    { id: 'tile_gold',     name: 'Gold',          icon: '🟨', price: 200,  owned: false, tier:'rare' },
+    { id: 'tile_glass',    name: 'Glass',         icon: '💠', price: 200,  owned: false, tier:'rare' },
+    { id: 'tile_chrome',   name: 'Chrome',        icon: '🔲', price: 400,  owned: false, tier:'epic' },
+    { id: 'tile_lava',     name: 'Lava',          icon: '🟧', price: 400,  owned: false, tier:'epic' },
+    { id: 'tile_holo',     name: 'Hologram',      icon: '🔷', price: 800,  owned: false, tier:'legendary' },
+    { id: 'tile_toxic',    name: 'Toxic',         icon: '🟩', price: 800,  owned: false, tier:'legendary' },
+    { id: 'tile_phoenix',  name: 'Phoenix',       icon: '🦅', price: 1500, owned: false, tier:'prestige', prestige:true },
+    { id: 'tile_abyss',    name: 'Abyss',         icon: '🌊', price: 1500, owned: false, tier:'prestige', prestige:true },
+    { id: 'tile_diamond',  name: 'Diamond',       icon: '💎', price: 0,    owned: false, whale: true },
+    { id: 'tile_obsidian', name: 'Obsidian',      icon: '🖤', price: 0,    owned: false, whale: true },
+  ],
+  tileeffect: [
+    { id: 'fx_fire',       name: 'Fire',          icon: '🔥', price: 0,    owned: true,  tier:'default' },
+    { id: 'fx_neonblue',   name: 'Neon Blue',     icon: '🔵', price: 80,   owned: false, tier:'common' },
+    { id: 'fx_ice',        name: 'Ice Freeze',    icon: '❄️', price: 80,   owned: false, tier:'common' },
+    { id: 'fx_neonpink',   name: 'Neon Pink',     icon: '🩷', price: 200,  owned: false, tier:'rare' },
+    { id: 'fx_electric',   name: 'Electric',      icon: '⚡', price: 200,  owned: false, tier:'rare' },
+    { id: 'fx_plasma',     name: 'Plasma',        icon: '🟣', price: 400,  owned: false, tier:'epic' },
+    { id: 'fx_toxic',      name: 'Toxic Glow',    icon: '☣️', price: 400,  owned: false, tier:'epic' },
+    { id: 'fx_solar',      name: 'Solar Flare',   icon: '☀️', price: 800,  owned: false, tier:'legendary' },
+    { id: 'fx_void',       name: 'Void',          icon: '🌑', price: 800,  owned: false, tier:'legendary' },
+    { id: 'fx_rainbow',    name: 'Rainbow',       icon: '🌈', price: 800,  owned: false, tier:'legendary' },
+    { id: 'fx_supernova',  name: 'Supernova',     icon: '💥', price: 1500, owned: false, tier:'prestige', prestige:true },
+    { id: 'fx_godray',     name: 'God Ray',       icon: '✨', price: 0,    owned: false, whale: true },
+    { id: 'fx_blackhole',  name: 'Black Hole',    icon: '🌀', price: 0,    owned: false, whale: true },
+  ],
+  victory: [
+    { id:'vic_classic',   name:'Classic',       icon:'🏆', price:0,    owned:true,  tier:'default', preview:'gold' },
+    { id:'vic_neon',      name:'Neon Blaze',    icon:'⚡', price:80,   owned:false, tier:'common',  preview:'neon' },
+    { id:'vic_confetti',  name:'Confetti Pop',  icon:'🎊', price:80,   owned:false, tier:'common',  preview:'confetti' },
+    { id:'vic_fire',      name:'Fire Storm',    icon:'🔥', price:200,  owned:false, tier:'rare',    preview:'fire' },
+    { id:'vic_ice',       name:'Ice Crown',     icon:'❄️', price:200,  owned:false, tier:'rare',    preview:'ice' },
+    { id:'vic_galaxy',    name:'Galaxy Burst',  icon:'🌌', price:400,  owned:false, tier:'epic',    preview:'galaxy' },
+    { id:'vic_lightning', name:'Lightning God', icon:'🌩️', price:400,  owned:false, tier:'epic',    preview:'lightning' },
+    { id:'vic_void',      name:'Void King',     icon:'🌑', price:800,  owned:false, tier:'legendary', preview:'void' },
+    { id:'vic_rainbow',   name:'Rainbow Slam',  icon:'🌈', price:800,  owned:false, tier:'legendary', preview:'rainbow' },
+    { id:'vic_inferno',   name:'Inferno Crown',     icon:'👑', price:1500, owned:false, tier:'prestige', prestige:true, preview:'inferno' },
+    { id:'vic_bacon',     name:'All The Bacon',     icon:'🥓', price:80,   owned:false, tier:'common',   preview:'bacon' },
+    { id:'vic_pizza',     name:'Pizza Champion',    icon:'🍕', price:80,   owned:false, tier:'common',   preview:'pizza' },
+    { id:'vic_grandma',   name:'Grandma Approved',  icon:'👵', price:200,  owned:false, tier:'rare',     preview:'grandma' },
+    { id:'vic_disco',     name:'Disco Survivor',    icon:'🕺', price:200,  owned:false, tier:'rare',     preview:'disco' },
+    { id:'vic_goat',      name:'Greatest Of All Taps',icon:'🐐',price:400, owned:false, tier:'epic',     preview:'goat' },
+    { id:'vic_cheese',    name:'Big Cheese Energy', icon:'🧀', price:400,  owned:false, tier:'epic',     preview:'cheese' },
+    { id:'vic_404',       name:'404: Skill Found',  icon:'💻', price:800,  owned:false, tier:'legendary',preview:'404' },
+    { id:'vic_humble',    name:'Humble Brag',       icon:'🙄', price:800,  owned:false, tier:'legendary',preview:'humble' },
+    { id:'vic_mobydick',  name:'Moby Dick',         icon:'🐋', price:0,    owned:false, tier:'default',  whale:true, preview:'mobydick' },
+  ],
+  tapeffect: [
+    { id: 'tap_ripple',    name: 'Ripple',        icon: '💧', price: 0,    owned: true,  tier:'default' },
+    { id: 'tap_smoke',     name: 'Smoke Puff',    icon: '💨', price: 80,   owned: false, tier:'common' },
+    { id: 'tap_explosion', name: 'Explosion',     icon: '💥', price: 80,   owned: false, tier:'common' },
+    { id: 'tap_starburst', name: 'Star Burst',    icon: '⭐', price: 200,  owned: false, tier:'rare' },
+    { id: 'tap_icecrack',  name: 'Ice Crack',     icon: '🧊', price: 200,  owned: false, tier:'rare' },
+    { id: 'tap_shatter',   name: 'Shatter',       icon: '🪟', price: 400,  owned: false, tier:'epic' },
+    { id: 'tap_lightning', name: 'Lightning',     icon: '🌩️', price: 400,  owned: false, tier:'epic' },
+    { id: 'tap_confetti',  name: 'Confetti',      icon: '🎊', price: 800,  owned: false, tier:'legendary' },
+    { id: 'tap_neonpulse', name: 'Neon Pulse',    icon: '🔆', price: 800,  owned: false, tier:'legendary' },
+    { id: 'tap_portal',    name: 'Portal',        icon: '🌀', price: 800,  owned: false, tier:'legendary' },
+    { id: 'tap_meteor',    name: 'Meteor',        icon: '☄️', price: 1500, owned: false, tier:'prestige', prestige:true },
+    { id: 'tap_shockwave', name: 'Shockwave',     icon: '💫', price: 0,    owned: false, whale: true },
+    { id: 'tap_goldcrack', name: 'Gold Crack',    icon: '🥇', price: 0,    owned: false, whale: true },
+  ]
+};
+
+// Active skins
+// activeSkins moved to top
+
+let currentSkinTab = 'table';
+
+function openProfile() {
+  Object.values(miniAnimIntervals).forEach(clearInterval);
+  miniAnimIntervals = {};
+  updateProfileUI();
+  document.querySelectorAll('.skin-grid').forEach(g => g.style.display = 'none');
+  document.querySelectorAll('.skin-grid, #skinGrid-theme').forEach(g => g.style.display = 'none');
+  document.getElementById('skinGrid-table').style.display = 'flex';
+  document.querySelectorAll('.skin-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.skin-tab').classList.add('active');
+  currentSkinTab = 'table';
+  renderSkinGrid('table');
+  showScreen('profileScreen');
+}
+
+function updateProfileUI() {
+  updateProfileAvatar();
+  document.getElementById('profileNameDisplay').textContent = gameState.playerName || 'Player';
+  document.getElementById('profileLevel').textContent = gameState.level || 1;
+  document.getElementById('profileWins').textContent = gameState.wins || 0;
+  document.getElementById('profileGames').textContent = gameState.games || 0;
+  const xp            = gameState.xp || 0;
+  const level         = gameState.level || 1;
+  const curLevelXP    = getXPForLevel(level);
+  const nextLevelXP   = getXPForLevel(level + 1);
+  const xpInLevel     = xp - curLevelXP;
+  const xpNeeded      = nextLevelXP - curLevelXP;
+  const progress      = Math.max(0, Math.min(1, xpInLevel / xpNeeded));
+  document.getElementById('profileXPText').textContent = `${xpInLevel} / ${xpNeeded} XP`;
+  document.getElementById('profileXPBar').style.width = (progress * 100).toFixed(1) + '%';
+  document.getElementById('profileDiamonds').textContent = (gameState.diamonds || 0).toLocaleString();
+  const refProg = document.getElementById('referralProgress');
+  if (refProg) {
+    const referred = gameState.friendsReferred || 0;
+    refProg.textContent = `Friends referred: ${referred} / 100 · Earned: 💎 ${(referred * 100).toLocaleString()}`;
+    refProg.style.color = referred >= 100 ? 'var(--muted)' : 'var(--gold)';
+  }
+  // Whale badge
+  const whaleBadgeEl = document.getElementById('profileWhaleBadge');
+  if (whaleBadgeEl) whaleBadgeEl.style.display = gameState.whaleBadge ? 'inline-flex' : 'none';
+  const renames = gameState.renames || 0;
+  const costEl = document.getElementById('profileRenameCost');
+  if (renames < 3) {
+    costEl.textContent = `${3 - renames} free rename${3 - renames !== 1 ? 's' : ''} remaining`;
+    costEl.style.color = 'var(--green)';
+  } else {
+    costEl.textContent = 'Next rename costs 💎 500';
+    costEl.style.color = 'var(--diamond)';
+  }
+}
+
+function toggleNameEdit() {
+  const editDiv = document.getElementById('profileNameEdit');
+  const isShowing = editDiv.style.display !== 'none';
+  editDiv.style.display = isShowing ? 'none' : 'flex';
+  if (!isShowing) {
+    const input = document.getElementById('profileNameInput');
+    input.value = gameState.playerName || '';
+    input.focus();
+  }
+}
+
+function savePlayerName() {
+  const input = document.getElementById('profileNameInput');
+  const newName = input.value.trim();
+  if (!newName || newName.length < 2) {
+    showToast('Name must be at least 2 characters!', 'var(--red)');
+    return;
+  }
+  const renames = gameState.renames || 0;
+  if (renames >= 3) {
+    // Costs 500 diamonds
+    if (gameState.diamonds < 500) {
+      showToast('Not enough diamonds! Need 💎 500', 'var(--red)');
+      return;
+    }
+    gameState.diamonds -= 500;
+  }
+  gameState.playerName = newName;
+  gameState.renames = renames + 1;
+  saveState();
+  document.getElementById('profileNameDisplay').textContent = newName;
+  document.getElementById('profileNameEdit').style.display = 'none';
+  updateProfileUI();
+  updateMenuStats();
+  showToast('✅ Name updated!', 'var(--green)');
+}
+
+function switchSkinTab(tab, el) {
+  (Object.values(miniAnimIntervals)||[]).forEach(clearInterval);
+  miniAnimIntervals = {};
+  document.querySelectorAll('.skin-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  // Hide ALL grids including theme
+  document.querySelectorAll('.skin-grid').forEach(g => g.style.display = 'none');
+  const themeGrid = document.getElementById('skinGrid-theme');
+  if (themeGrid) themeGrid.style.display = 'none';
+
+  currentSkinTab = tab;
+
+  if (tab === 'theme') {
+    if (themeGrid) themeGrid.style.display = 'flex';
+    renderThemeStore();
+  } else if (tab === 'victory') {
+    const g = document.getElementById('skinGrid-victory');
+    if (g) g.style.display = 'flex';
+    renderVictorySkins(g);
+  } else {
+    const g = document.getElementById('skinGrid-' + tab);
+    if (g) g.style.display = 'flex';
+    renderSkinGrid(tab);
+  }
+}
+
+function renderSkinGrid(tab) {
+  if (tab === 'theme') { renderThemeStore(); return; } // safety redirect
+  const grid = document.getElementById('skinGrid-' + tab);
+  if (!grid) return;
+  grid.innerHTML = '';
+  const skins = SKINS[tab];
+  const owned = gameState.ownedSkins || {};
+  (skins||[]).forEach(skin => {
+    const isOwned = skin.owned || owned[skin.id];
+    const isActive = activeSkins[tab] === skin.id;
+    const isPrestige = skin.prestige;
+    const isWhale = skin.whale;
+    const card = document.createElement('div');
+    card.className = 'skin-card'
+      + (isActive ? ' active' : '')
+      + (isOwned ? '' : ' locked')
+      + (isPrestige ? ' prestige' : '');
+    card.onclick = () => selectSkin(tab, skin, isOwned);
+
+    const tierLabels = { common:'Common', rare:'Rare', epic:'Epic', legendary:'Legendary', prestige:'Prestige', default:'' };
+    const tierColors  = { common:'tier-common', rare:'tier-rare', epic:'tier-epic', legendary:'tier-legendary', prestige:'tier-prestige' };
+    const tierBadge = skin.tier && skin.tier !== 'default'
+      ? `<span class="skin-tier-badge ${tierColors[skin.tier]||''}">${tierLabels[skin.tier]||''}</span>`
+      : '';
+
+    const priceText = isWhale ? '🐋 Whale Only'
+      : isOwned ? (isActive ? '✓ Equipped' : 'Owned')
+      : isPrestige ? `⭐ ${skin.price} 💎`
+      : `💎 ${skin.price}`;
+    const priceClass = (skin.price === 0 && !isWhale) ? 'free' : isWhale ? '' : '';
+
+    card.innerHTML = `
+      <div class="skin-mini-preview" id="mini-${skin.id}"></div>
+      <div class="skin-card-info">
+        <div class="skin-name">${skin.name}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+          <div class="skin-price ${priceClass}">${priceText}</div>
+          ${tierBadge}
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+
+    // Build the mini preview
+    buildMiniPreview(skin.id, tab);
+  });
+
+  // Start animating active skin's burning tile
+  startMiniAnimations(tab);
+}
+
+function buildMiniPreview(skinId, tab) {
+  const el = document.getElementById('mini-' + skinId);
+  if (!el) return;
+  el.innerHTML = '';
+  el.className = 'skin-mini-preview';
+
+  const tableSkin = tab === 'table' ? skinId : (activeSkins.table || 'table_dark');
+  applyTableBgToEl(el, tableSkin);
+
+  // Table skin: show only background, no tiles
+  if (tab === 'table') {
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    return;
+  }
+
+  // Other tabs: 9 mini tiles
+  for (let i = 0; i < 9; i++) {
+    const t = document.createElement('div');
+    t.className = 'mini-tile';
+    t.id = `minitile-${skinId}-${i}`;
+    const tileSkin = tab === 'tile' ? skinId : (activeSkins.tile || 'tile_dark');
+    applyMiniTileSkin(t, tileSkin);
+    el.appendChild(t);
+  }
+}
+
+// Returns inline style object for a burning tile based on effect skin
+function getBurningStyle(fxSkinId) {
+  const styles = {
+    fx_fire:     { background: 'linear-gradient(135deg,#ff2200,#ff6600,#ffaa00)', borderColor: '#ff4500', boxShadow: '0 0 8px rgba(255,69,0,0.9)', icon: '🔥' },
+    fx_neonblue: { background: 'linear-gradient(135deg,#001aff,#00aaff,#00ffee)', borderColor: '#00aaff', boxShadow: '0 0 8px rgba(0,170,255,0.9)', icon: '💙' },
+    fx_neonpink: { background: 'linear-gradient(135deg,#aa00ff,#ff00aa,#ff66cc)', borderColor: '#ff00aa', boxShadow: '0 0 8px rgba(255,0,170,0.9)', icon: '🩷' },
+    fx_electric: { background: 'linear-gradient(135deg,#554400,#aaaa00,#ffff00)', borderColor: '#dddd00', boxShadow: '0 0 8px rgba(255,255,0,0.9)', icon: '⚡' },
+    fx_plasma:   { background: 'linear-gradient(135deg,#330066,#9900ff,#cc44ff)', borderColor: '#9900ff', boxShadow: '0 0 8px rgba(150,0,255,0.9)', icon: '🟣' },
+    fx_ice:      { background: 'linear-gradient(135deg,#003366,#0066aa,#aaddff)', borderColor: '#66ccff', boxShadow: '0 0 8px rgba(100,200,255,0.9)', icon: '❄️' },
+    fx_toxic:    { background: 'linear-gradient(135deg,#003300,#00aa00,#88ff00)', borderColor: '#00ff44', boxShadow: '0 0 8px rgba(0,255,60,0.9)', icon: '☣️' },
+    fx_solar:    { background: 'linear-gradient(135deg,#553300,#ffaa00,#ffffff)', borderColor: '#ffdd00', boxShadow: '0 0 10px rgba(255,220,0,1)', icon: '☀️' },
+    fx_void:     { background: 'radial-gradient(circle,#220033 0%,#000000 100%)', borderColor: '#440066', boxShadow: '0 0 8px rgba(60,0,80,0.9)', icon: '🌑' },
+    fx_rainbow:  { background: 'linear-gradient(135deg,#ff0000,#ffff00,#00ff00,#0000ff)', borderColor: '#ff00ff', boxShadow: '0 0 8px rgba(255,100,255,0.9)', icon: '🌈' },
+    // Whale exclusive
+    fx_godray:   { background: 'radial-gradient(circle,#ffffff 0%,#ffee88 40%,#ffaa00 100%)', borderColor: '#ffffff', boxShadow: '0 0 14px rgba(255,255,200,1)', icon: '✨' },
+    fx_blackhole:{ background: 'radial-gradient(circle,#000000 0%,#1a0030 60%,#330066 100%)', borderColor: '#6600aa', boxShadow: '0 0 12px rgba(100,0,150,0.9)', icon: '🌀' },
+    fx_supernova:{ background: 'radial-gradient(circle,#ffffff 0%,#ffff88 30%,#ff8800 70%,#ff0000 100%)', borderColor: '#ffffff', boxShadow: '0 0 20px rgba(255,255,255,1)', icon: '💥' },
+  };
+  return styles[fxSkinId] || styles.fx_fire;
+}
+
+// Returns inline style for tap effect overlay div
+function getTapStyle(tapSkinId) {
+  const styles = {
+    tap_ripple:    { borderRadius:'50%', background:'rgba(255,255,255,0.35)', animation:'rippleAnim 0.4s ease-out forwards' },
+    tap_explosion: { borderRadius:'20%', background:'radial-gradient(circle,#ff8800,#ff2200)', animation:'explodeAnim 0.4s ease-out forwards' },
+    tap_starburst: { background:'radial-gradient(circle,#ffff00,#ffaa00)', clipPath:'polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)', animation:'starAnim 0.45s ease-out forwards' },
+    tap_shatter:   { border:'2px solid #aaddff', borderRadius:'4px', animation:'shatterAnim 0.4s ease-out forwards' },
+    tap_lightning: { width:'3px', height:'100%', left:'50%', transform:'translateX(-50%)', background:'linear-gradient(to bottom,#ffff00,#ffffff)', boxShadow:'0 0 6px #ffff00', animation:'lightningAnim 0.3s ease-out forwards' },
+    tap_smoke:     { borderRadius:'50%', background:'radial-gradient(circle,rgba(180,180,180,0.6),transparent)', animation:'smokeAnim 0.5s ease-out forwards' },
+    tap_confetti:  { borderRadius:'30%', background:'conic-gradient(#ff0000,#ffff00,#00ff00,#0000ff,#ff00ff,#ff0000)', animation:'confettiAnim 0.5s ease-out forwards' },
+    tap_icecrack:  { border:'2px solid #aaddff', background:'rgba(150,200,255,0.3)', animation:'icecrackAnim 0.4s ease-out forwards' },
+    tap_portal:    { borderRadius:'50%', background:'conic-gradient(#8800ff,#0044ff,#8800ff)', animation:'portalAnim 0.5s ease-out forwards' },
+    tap_neonpulse: { borderRadius:'50%', border:'2px solid #00ffff', boxShadow:'0 0 8px #00ffff', animation:'neonpulseAnim 0.4s ease-out forwards' },
+    // Whale exclusive
+    tap_shockwave: { borderRadius:'50%', border:'3px solid #00e5ff', boxShadow:'0 0 12px #00e5ff', animation:'shockwaveAnim 0.5s ease-out forwards' },
+    tap_goldcrack: { borderRadius:'8px', background:'conic-gradient(#ffd700,#ffaa00,#ff8c00,#ffd700)', boxShadow:'0 0 12px rgba(255,215,0,0.8)', animation:'goldcrackAnim 0.45s ease-out forwards' },
+    tap_meteor:    { borderRadius:'30% 70% 70% 30%', border:'2px solid #ff6600', background:'linear-gradient(135deg,#ff2200,#ff8800,#ffcc00)', boxShadow:'0 0 16px rgba(255,100,0,0.8)', animation:'meteorAnim 0.5s ease-out forwards' },
+  };
+  return styles[tapSkinId] || styles.tap_ripple;
+}
+
+
+function startMiniAnimations(tab) {
+  Object.values(miniAnimIntervals).forEach(clearInterval);
+  miniAnimIntervals = {};
+
+  SKINS[tab].forEach(skin => {
+    // Table skins have no tile animation — just static background
+    if (tab === 'table') return;
+
+    let burnIdx = Math.floor(Math.random() * 9);
+    let step = 0;
+
+    const fxSkinId   = tab === 'tileeffect' ? skin.id : (activeSkins.tileeffect || 'fx_fire');
+    const tapSkinId  = tab === 'tapeffect'  ? skin.id : (activeSkins.tapeffect  || 'tap_ripple');
+    const tileSkinId = tab === 'tile'       ? skin.id : (activeSkins.tile       || 'tile_dark');
+
+    const interval = setInterval(() => {
+      // Reset all tiles to idle
+      for (let i = 0; i < 9; i++) {
+        const t = document.getElementById(`minitile-${skin.id}-${i}`);
+        if (!t) { clearInterval(interval); return; }
+        t.className = 'mini-tile';
+        t.innerHTML = '';
+        applyMiniTileSkin(t, tileSkinId);
+      }
+
+      const tile = document.getElementById(`minitile-${skin.id}-${burnIdx}`);
+      if (!tile) return;
+
+      if (step === 0) {
+        // Burning state — apply inline burning styles
+        const bStyle = getBurningStyle(fxSkinId);
+        tile.style.background = bStyle.background;
+        tile.style.borderColor = bStyle.borderColor;
+        tile.style.boxShadow   = bStyle.boxShadow;
+        tile.style.transition  = 'none';
+        tile.innerHTML = `<span style="font-size:10px">${bStyle.icon}</span>`;
+        step = 1;
+      } else {
+        // Tapped state
+        tile.style.background  = '#1a2a1a';
+        tile.style.borderColor = '#00ff88';
+        tile.style.boxShadow   = '0 0 4px rgba(0,255,136,0.5)';
+        tile.innerHTML = '<span style="font-size:9px;color:#00ff88">✓</span>';
+
+        // Tap effect overlay
+        const r = document.createElement('div');
+        const tStyle = getTapStyle(tapSkinId);
+        r.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+        Object.assign(r.style, tStyle);
+        tile.appendChild(r);
+        setTimeout(() => r.remove(), 500);
+
+        step = 0;
+        burnIdx = Math.floor(Math.random() * 9);
+      }
+    }, 900);
+
+    miniAnimIntervals[skin.id] = interval;
+  });
+}
+
+function selectSkin(tab, skin, isOwned) {
+  if (!isOwned) {
+    if (gameState.diamonds < skin.price) {
+      showToast(`Need 💎 ${skin.price} — not enough diamonds!`, 'var(--red)');
+      return;
+    }
+    showBuyDialog(skin, tab);
+    return;
+  }
+  activeSkins[tab] = skin.id;
+  gameState.activeSkins = activeSkins;
+  saveState();
+  renderSkinGrid(tab);
+}
+
+let pendingBuySkin = null;
+let pendingBuyTab = null;
+
+function showBuyDialog(skin, tab) {
+  pendingBuySkin = skin;
+  pendingBuyTab = tab;
+  document.getElementById('buyDialogIcon').textContent = skin.icon;
+  document.getElementById('buyDialogName').textContent = skin.name;
+  document.getElementById('buyDialogPrice').textContent = skin.price.toLocaleString();
+  document.getElementById('buyDialogBalance').textContent = (gameState.diamonds || 0).toLocaleString();
+  document.getElementById('buyDialogOverlay').classList.add('show');
+}
+
+function closeBuyDialog() {
+  document.getElementById('buyDialogOverlay').classList.remove('show');
+  pendingBuySkin = null;
+  pendingBuyTab = null;
+}
+
+function confirmBuy() {
+  // Store generic callback (bundles, items, ad rewards)
+  if (window._storeBuyMode && storePendingCb) {
+    window._storeBuyMode = false;
+    closeBuyDialog();
+    storePendingCb();
+    storePendingCb = null;
+    return;
+  }
+  if (!pendingBuySkin || !pendingBuyTab) return;
+  const skin = pendingBuySkin;
+  const tab = pendingBuyTab;
+  if (gameState.diamonds < skin.price) {
+    showToast(`Need 💎 ${skin.price} — not enough diamonds!`, 'var(--red)');
+    closeBuyDialog();
+    return;
+  }
+  gameState.diamonds -= skin.price;
+  if (!gameState.ownedSkins) gameState.ownedSkins = {};
+  gameState.ownedSkins[skin.id] = true;
+  activeSkins[tab] = skin.id;
+  gameState.activeSkins = activeSkins;
+  saveState();
+  updateMenuStats();
+  closeBuyDialog();
+  showToast(`✅ ${skin.name} unlocked & equipped!`, 'var(--green)');
+  renderSkinGrid(tab);
+  updateProfileUI();
+}
+
+// ===== SKIN APPLICATION =====
+const TABLE_CLASS_MAP = {
+  table_dark:     'table-dark_void',
+  table_lava:     'table-lava_field',
+  table_arctic:   'table-arctic_ice',
+  table_neon:     'table-neon_grid',
+  table_galaxy:   'table-galaxy',
+  table_desert:   'table-desert_sand',
+  table_circuit:  'table-circuit_board',
+  table_marble:   'table-marble',
+  table_ocean:    'table-deep_ocean',
+  table_toxic:    'table-toxic_waste',
+  // Whale exclusive
+  table_obsidian: 'table-obsidian',
+  table_aurora:   'table-aurora',
+  table_inferno:  'table-inferno',
+  table_cosmos:   'table-cosmos',
+  table_candy:    'table-candy',
+  table_cheese:   'table-cheese',
+  table_disco:    'table-disco',
+  table_money:    'table-money',
+};
+const TILE_CLASS_MAP = {
+  tile_dark:    '', tile_gold: 'tskin-gold', tile_chrome: 'tskin-chrome',
+  tile_wood:    'tskin-wood', tile_stone: 'tskin-stone', tile_glass: 'tskin-glass',
+  tile_holo:    'tskin-holo', tile_lava: 'tskin-lava', tile_ice: 'tskin-ice', tile_toxic: 'tskin-toxic',
+  // Whale exclusive
+  tile_diamond:  'tskin-diamond',
+  tile_obsidian: 'tskin-obsidian',
+  tile_phoenix:  'tskin-phoenix',
+  tile_abyss:    'tskin-abyss',
+};
+const FX_CLASS_MAP = {
+  fx_fire: 'tfx-fire', fx_neonblue: 'tfx-neonblue', fx_neonpink: 'tfx-neonpink',
+  fx_electric: 'tfx-electric', fx_plasma: 'tfx-plasma', fx_ice: 'tfx-ice',
+  fx_toxic: 'tfx-toxic', fx_solar: 'tfx-solar', fx_void: 'tfx-void', fx_rainbow: 'tfx-rainbow',
+  // Whale exclusive
+  fx_godray:    'tfx-godray',
+  fx_blackhole: 'tfx-blackhole',
+  fx_supernova: 'tfx-supernova',
+};
+const TAP_CLASS_MAP = {
+  tap_ripple: 'tap-ripple', tap_explosion: 'tap-explosion', tap_starburst: 'tap-starburst',
+  tap_shatter: 'tap-shatter', tap_lightning: 'tap-lightning', tap_smoke: 'tap-smoke',
+  tap_confetti: 'tap-confetti', tap_icecrack: 'tap-icecrack', tap_portal: 'tap-portal',
+  tap_neonpulse: 'tap-neonpulse',
+  // Whale exclusive
+  tap_shockwave: 'tap-shockwave',
+  tap_goldcrack: 'tap-goldcrack',
+  tap_meteor:    'tap-meteor',
+};
+
+function applySkins() {
+  const gs = document.getElementById('gameScreen');
+  const grid = document.getElementById('tileGrid');
+  if (!gs || !grid) return;
+
+  // Remove old skin classes — fully defensive
+  try {
+    gs.className = (typeof gs.className === 'string' ? gs.className : '')
+      .split(' ').filter(c => c && !c.startsWith('table-') && !c.startsWith('tskin-') && !c.startsWith('tfx-')).join(' ');
+    grid.className = (typeof grid.className === 'string' ? grid.className : '')
+      .split(' ').filter(c => c && !c.startsWith('tskin-') && !c.startsWith('tfx-')).join(' ');
+  } catch(e) { /* ignore className errors */ }
+
+  const skins = activeSkins;
+  // Table skin → gameScreen background
+  const tableClass = TABLE_CLASS_MAP[skins.table] || 'table-dark_void';
+  gs.classList.add(tableClass);
+  // Tile skin → tileGrid class
+  const tileClass = TILE_CLASS_MAP[skins.tile] || '';
+  if (tileClass) grid.classList.add(tileClass);
+  // Tile effect → tileGrid class
+  const fxClass = FX_CLASS_MAP[skins.tileeffect] || 'tfx-fire';
+  grid.classList.add(fxClass);
+}
+
+function getTapEffectClass() {
+  return TAP_CLASS_MAP[activeSkins.tapeffect] || 'tap-ripple';
+}
+

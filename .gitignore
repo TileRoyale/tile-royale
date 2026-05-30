@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Android build outputs
+tile-royale-app/tile-royale-app/android/app/build/
+tile-royale-app/tile-royale-app/android/build/
+tile-royale-app/tile-royale-app/android/.gradle/
+tile-royale-app/tile-royale-app/android/local.properties
+
+# Release keystore (keep out of git)
+*.keystore
+*.jks
+
+# Server compiled output
+tile-royale-server/tile-royale-server/build/
+
+# Env files
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db

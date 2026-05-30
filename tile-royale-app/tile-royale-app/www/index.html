@@ -1,0 +1,2136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tile Royale">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='72' x='50' text-anchor='middle' font-size='60'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
+  <!-- PWA manifest injected via JS at app init -->
+<title>TILE ROYALE</title>
+
+  <!-- ===== Stylesheets ===== -->
+  <link rel="stylesheet" href="css/core.css">
+  <link rel="stylesheet" href="css/skins.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/ui.css">
+  <link rel="stylesheet" href="css/gauntlet.css">
+
+  <!-- ===== Colyseus multiplayer client ===== -->
+  <script src="https://cdn.jsdelivr.net/npm/colyseus.js@0.15.0/dist/colyseus.js"></script>
+</head>
+<body>
+<script>window._appLoadStart = Date.now();</script>
+<!-- ===== APP LOADING SCREEN — covers black flash during WebView init ===== -->
+<div id="appLoadScreen" style="position:fixed;inset:0;z-index:99999;background:#000;cursor:pointer;">
+  <img src="img/loading-screen.png"
+       style="width:100%;height:100%;object-fit:contain;object-position:center center;display:block;"
+       draggable="false" alt="">
+  <div id="lsTapHint" style="
+    position:absolute;bottom:18%;left:0;right:0;
+    text-align:center;
+    font-family:'Cinzel Decorative','Bebas Neue',sans-serif;
+    font-size:30px;letter-spacing:6px;
+    color:rgba(255,210,80,0);
+    transition:color 1s ease;
+    text-shadow:0 0 20px rgba(255,150,0,0.85),0 2px 6px rgba(0,0,0,0.95);
+    pointer-events:none;user-select:none;">TAP TO START</div>
+</div>
+
+<div id="versionBadge" style="position:fixed; bottom:8px; right:8px; font-size:10px; letter-spacing:1px; color:rgba(255,255,255,0.25); z-index:9999; pointer-events:none;">v0.5.3</div>
+
+<!-- ===== ONBOARDING SCREEN ===== -->
+<div class="screen active" id="onboardingScreen">
+  <div class="ob-logo">TILE ROYALE</div>
+  <div class="ob-tagline">Last tap standing</div>
+
+  <div class="ob-slides">
+
+    <!-- Slide 1 -->
+    <div class="ob-slide active" id="ob-slide-0">
+      <div class="ob-tile-demo">
+        <div class="ob-demo-grid">
+          <div class="ob-tile"></div>
+          <div class="ob-tile"></div>
+          <div class="ob-tile burning" id="obDemoTile"></div>
+          <div class="ob-tile"></div>
+        </div>
+      </div>
+      <div class="ob-step-icon">🔥</div>
+      <div class="ob-step-title">A tile ignites</div>
+      <div class="ob-step-desc">Each round, one (or more) tiles suddenly catch fire. Everyone sees the same tile.</div>
+    </div>
+
+    <!-- Slide 2 -->
+    <div class="ob-slide" id="ob-slide-1">
+      <div class="ob-tile-demo">
+        <div class="ob-demo-grid">
+          <div class="ob-tile"></div>
+          <div class="ob-tile"></div>
+          <div class="ob-tile tapped" id="obDemoTile2">✓</div>
+          <div class="ob-tile"></div>
+        </div>
+        <div class="ob-tap-indicator">👆 TAP!</div>
+      </div>
+      <div class="ob-step-icon">👆</div>
+      <div class="ob-step-title">Tap it fast</div>
+      <div class="ob-step-desc">All players must tap the burning tile. Be quick — but not TOO quick.</div>
+    </div>
+
+    <!-- Slide 3 -->
+    <div class="ob-slide" id="ob-slide-2">
+      <div class="ob-tile-demo">
+        <div class="ob-elim-demo">
+          <div class="ob-player-row">
+            <span>🦊 FireFox99</span>
+            <span class="ob-badge-safe">✓ Safe</span>
+          </div>
+          <div class="ob-player-row">
+            <span>🎮 YOU</span>
+            <span class="ob-badge-safe">✓ Safe</span>
+          </div>
+          <div class="ob-player-row ob-row-out">
+            <span>🤖 RoboTap</span>
+            <span class="ob-badge-out">💀 Last — OUT</span>
+          </div>
+        </div>
+      </div>
+      <div class="ob-step-icon">⏱️</div>
+      <div class="ob-step-title">Last to tap loses</div>
+      <div class="ob-step-desc">The LAST player to tap each round is eliminated. Survive until you're the only one left!</div>
+    </div>
+
+  </div>
+
+  <!-- Dots -->
+  <div class="ob-dots">
+    <div class="ob-dot active" id="ob-dot-0"></div>
+    <div class="ob-dot" id="ob-dot-1"></div>
+    <div class="ob-dot" id="ob-dot-2"></div>
+  </div>
+
+  <!-- Buttons -->
+  <button class="ob-next-btn" id="obNextBtn" onclick="obNext()">NEXT →</button>
+  <button class="ob-skip-btn" onclick="finishOnboarding()">Skip</button>
+
+</div>
+
+<!-- ===== MENU SCREEN ===== -->
+<div class="screen" id="menuScreen" style="position:relative;">
+  <!-- Secret tile: Ghost Tap area (on logo) -->
+  <!-- Secret tile: Treasure Hunter (bottom left) -->
+  <div class="secret-tile" id="secretTileMenu" style="bottom:80px; left:10px;" onclick="triggerSecretTile('treasure_hunter')"></div>
+
+  <!-- Top nav bar -->
+  <div class="menu-topbar">
+    <div class="menu-topbar-left">
+      <button class="icon-btn" onclick="safeNav(openProfile)" title="Profile">
+        <span class="icon-btn-icon">👤</span>
+      </button>
+      <button class="icon-btn" onclick="safeNav(openSettings)" title="Settings">
+        <span class="icon-btn-icon">⚙️</span>
+      </button>
+      <button class="icon-btn" onclick="showScreen('friendsScreen'); initFriendsScreen()" title="Friends">
+        <span class="icon-btn-icon">👥</span>
+      </button>
+      <button class="icon-btn" onclick="safeNav(openStore)" title="Store">
+        <span class="icon-btn-icon">🛒</span>
+      </button>
+    </div>
+    <div class="menu-topbar-right">
+      <button class="icon-btn missions-top-btn" id="missionsTopBtn"
+              onclick="openMissions()" title="Missions">
+        <span class="icon-btn-icon">🎯</span>
+        <div class="notif-center-badge" id="missionsTopBadge" style="display:none;"></div>
+      </button>
+      <button class="icon-btn" onclick="safeNav(openAchievements)" title="Achievements">
+        <span class="icon-btn-icon">🏆</span>
+      </button>
+      <button class="icon-btn" onclick="safeNav(openLeaderboard)" title="Leaderboard">
+        <span class="icon-btn-icon">📊</span>
+      </button>
+      <button class="icon-btn notification-center-btn" id="notificationCenterBtn"
+              onclick="openNotificationCenter('news')" title="Notifications">
+        <span class="icon-btn-icon">✉️</span>
+        <div class="notif-center-badge" id="notificationCenterBadge" style="display:none;"></div>
+      </button>
+    </div>
+  </div>
+
+  <div class="logo" onclick="handleLogoTap()" style="cursor:pointer;">TILE ROYALE</div>
+  <div class="tagline">Last tap standing</div>
+
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-val" id="statWins">0</div>
+      <div class="stat-lbl">Wins</div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="stat">
+      <div class="stat-val" id="statGames">0</div>
+      <div class="stat-lbl">Games</div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="stat">
+      <div class="stat-val" onclick="handleDiamondTap()" style="cursor:pointer;"><span id="statDiamonds">500</span></div>
+      <div class="stat-lbl" style="cursor:pointer;" onclick="handleDiamondTap()">💎 Diamonds</div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="stat">
+      <div class="stat-val" id="statTickets">10</div>
+      <div class="stat-lbl">Tickets</div>
+    </div>
+    <div class="stat-div"></div>
+    <button id="adTicketMenuBtn" onclick="watchAdForTicketLevel5()" title="+1 Ticket (Ad)"
+            style="background:rgba(255,140,0,0.08);border:1px solid rgba(255,140,0,0.28);border-radius:8px;padding:4px 7px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;flex-shrink:0;">
+      <span style="font-size:14px;line-height:1;">📺</span>
+      <span id="adTicketBtnLabel" style="font-family:'Bebas Neue',sans-serif;font-size:9px;letter-spacing:1px;color:var(--fire2);line-height:1;">+1 AD</span>
+    </button>
+  </div>
+
+  <!-- GAUNTLET WIDGET (replaces daily challenge position) -->
+  <div id="menuGauntletWidget" style="width:100%;margin-bottom:10px;">
+    <!-- Locked state (level < 3) -->
+    <div id="gauntletWidgetLocked" style="display:none;background:var(--panel);border-radius:14px;padding:14px;border:1px solid var(--border);opacity:0.5;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);letter-spacing:2px;">🔒 MYSTIC GAUNTLET — UNLOCKS AT LEVEL 3</div>
+    </div>
+    <!-- Active state -->
+    <div id="gauntletWidgetActive" style="background:var(--panel);border-radius:14px;padding:12px 14px;border:1px solid var(--border);cursor:pointer;" onclick="safeNav(openGauntlet)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div class="gauntlet-title-sm">MYSTIC GAUNTLET</div>
+        <div style="font-size:11px;color:var(--muted);letter-spacing:1px;">tap to open →</div>
+      </div>
+      <!-- 5 finger slots inline -->
+      <div style="display:flex;gap:5px;width:100%;" id="menuFingerSlots"></div>
+      <!-- Combined rarity + % -->
+      <div id="menuGauntletRarity" style="margin-top:8px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;"></div>
+    </div>
+  </div>
+
+  <div class="section-label">Select Mode</div>
+  <div class="mode-grid" style="grid-template-columns: repeat(2,1fr);">
+    <div class="mode-card selected" data-mode="rush" onclick="selectMode('rush', this)">
+      <div class="mode-icon">⚡</div>
+      <div class="mode-name">Rush</div>
+      <div class="mode-time">Last tap standing</div>
+    </div>
+    <div class="mode-card" data-mode="buckshot" onclick="selectMode('buckshot', this)">
+      <div class="mode-icon">💥</div>
+      <div class="mode-name">Buckshot</div>
+      <div class="mode-time">Last tap standing</div>
+    </div>
+    <div class="mode-card" data-mode="wild" onclick="selectMode('wild', this)">
+      <div class="mode-icon">🌀</div>
+      <div class="mode-name">Wild</div>
+      <div class="mode-time">Last tap standing</div>
+    </div>
+    <div class="mode-card koth-card" data-mode="koth" onclick="selectMode('koth', this)">
+      <div class="mode-icon">👑</div>
+      <div class="mode-name">King of the Hill</div>
+      <div class="mode-time" style="color:var(--gold);">💎 50 entry</div>
+    </div>
+    <div class="mode-card practice-card" data-mode="practice" onclick="selectMode('practice', this)" style="grid-column:span 2; border-color:rgba(0,255,136,0.2);">
+      <div class="mode-icon">🎯</div>
+      <div class="mode-name">Practice</div>
+      <div class="mode-time" style="color:var(--green);">Solo · Speed training</div>
+    </div>
+    <div class="mode-card custom-lobby-card" data-mode="custom" onclick="selectMode('custom', this)" id="customLobbyModeCard" style="grid-column:span 2;">
+      <div class="mode-icon" id="customLobbyIcon">🏟️</div>
+      <div class="mode-name">Custom Lobby</div>
+      <div class="mode-time" id="customLobbySubtext" style="color:var(--muted);">🔒 KOTH Top 3 required</div>
+    </div>
+  </div>
+
+  <button class="btn-play" onclick="tryFindMatch()" style="margin-bottom:10px;" id="btnFindMatch">
+    ⚡ FIND MATCH &nbsp;<span class="ticket-counter" id="menuTicketCounter">🎟️ 10</span>
+  </button>
+
+  <!-- No tickets overlay -->
+  <div class="no-tickets-box" id="noTicketsBox" style="display:none;">
+    <div class="no-tickets-title">🎟️ No Tickets Left</div>
+    <div class="no-tickets-sub">Tickets refill 1 per hour automatically</div>
+    <div class="no-tickets-timer" id="noTicketsTimer">Next refill in 60:00</div>
+
+    <!-- 3 ads = 3 tickets (highlighted option) -->
+    <button class="no-tickets-ad-btn" onclick="watchAdsForTickets(3)" style="border-color:var(--gold);color:var(--gold);margin-bottom:6px;">
+      📺📺📺 WATCH 3 ADS — Get 3 Tickets
+    </button>
+    <div style="font-size:10px;color:var(--muted);text-align:center;letter-spacing:1px;margin-bottom:10px;">Best deal · 3 games right away</div>
+
+    <!-- 1 ad = 1 ticket -->
+    <button class="no-tickets-ad-btn" onclick="watchAdsForTickets(1)">
+      📺 WATCH 1 AD — Get 1 Ticket
+    </button>
+
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:1px;">or</div>
+    <button class="btn-secondary" style="width:100%;margin-top:6px;" onclick="openStore(); switchStoreTab('items', document.querySelectorAll('.store-tab')[2])">
+      💎 Buy Tickets in Store
+    </button>
+  </div>
+
+  <!-- Trading button (hidden by default) -->
+  <div style="width:100%;margin-top:8px;">
+    <button class="feature-btn" id="tradingMenuBtn" onclick="openTrading()" style="display:none;width:100%;">
+      <span>🔄</span>
+      <span id="tradingBtnLabel">MARKET & TRADING</span>
+    </button>
+  </div>
+
+  <!-- Daily challenge (moved to bottom) -->
+  <div class="daily-challenge-box" id="menuDailyChallenge" onclick="openDailyChallenge()" style="margin-top:8px;">
+    <button class="dc-swap-btn" id="dcSwapBtn" onclick="event.stopPropagation(); swapDailyChallenge()" title="Watch ad to swap challenge">📺 Swap</button>
+    <div id="dcContent">
+      <div class="dc-header">
+        <div class="dc-icon">🎯</div>
+        <div class="dc-title">DAILY CHALLENGE</div>
+      </div>
+      <div class="dc-desc" id="menuDcDesc">Loading...</div>
+      <div class="dc-progress-row">
+        <div class="dc-bar-wrap"><div class="dc-bar" id="menuDcBar" style="width:0%"></div></div>
+        <div class="dc-progress-text" id="menuDcProg">0/3</div>
+      </div>
+      <div class="dc-bottom-row">
+        <div class="dc-reward" id="menuDcReward">💎 200</div>
+        <div class="dc-timer" id="menuDcTimer">Resets in 23h</div>
+      </div>
+    </div>
+    <div id="dcCompletedOverlay" style="display:none; position:absolute; inset:0; background:rgba(10,10,15,0.7); border-radius:13px; display:none; align-items:center; justify-content:center; flex-direction:column; gap:6px;">
+      <div style="font-size:28px;">✅</div>
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:3px; color:var(--green);">DAILY CHALLENGE</div>
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:3px; color:var(--green);">COMPLETED</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== MISSIONS SCREEN ===== -->
+<div class="screen" id="missionsScreen">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:16px;">
+    <button class="btn-secondary screen-back-btn" onclick="closeMissions()">← BACK</button>
+    <div class="screen-title">MISSIONS</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <div class="ms-tabs" style="width:100%;margin-bottom:6px;">
+    <button class="ms-tab active" id="ms-tab-daily"   onclick="switchMissionsTab('daily')">DAILY</button>
+    <button class="ms-tab"        id="ms-tab-weekly"  onclick="switchMissionsTab('weekly')">WEEKLY</button>
+    <button class="ms-tab"        id="ms-tab-rewards" onclick="switchMissionsTab('rewards')">REWARDS</button>
+  </div>
+  <div class="ms-timer" id="missionsTimer" style="width:100%;text-align:center;margin-bottom:14px;">Resets in —</div>
+
+  <!-- Mission cards (daily / weekly) -->
+  <div class="ms-list" id="missionsList"></div>
+
+  <!-- Daily Login content (rewards tab) -->
+  <div class="ms-rewards-content" id="missionsRewardsContent" style="display:none;width:100%;">
+    <div class="daily-login-header" style="margin-bottom:12px;">
+      <div class="daily-login-title">DAILY REWARDS</div>
+      <div class="daily-login-subtitle">Return every day to earn rewards.</div>
+    </div>
+    <div class="daily-grid" id="dailyGrid"></div>
+  </div>
+
+</div>
+
+<!-- ===== NOTIFICATION CENTER OVERLAY ===== -->
+<!-- ===== NOTIFICATION CENTER SCREEN ===== -->
+<div class="screen" id="notificationCenterOverlay">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:16px;">
+    <button class="btn-secondary screen-back-btn" onclick="closeNotificationCenter()">← BACK</button>
+    <div class="screen-title">NOTIFICATIONS</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <div class="notif-tabs" style="width:100%;margin-bottom:14px;">
+    <button class="notif-tab notif-tab--active" id="notif-tab-news"
+            onclick="switchNotificationTab('news')">📰 NEWS</button>
+    <button class="notif-tab" id="notif-tab-inbox"
+            onclick="switchNotificationTab('inbox')">📬 INBOX</button>
+  </div>
+
+  <div class="notif-tab-content" id="notif-content-news" style="width:100%;">
+    <div class="news-feed" id="newsFeed">
+      <div class="news-loading">⏳ Loading...</div>
+    </div>
+  </div>
+
+  <div class="notif-tab-content" id="notif-content-inbox" style="display:none;width:100%;">
+    <div class="inbox-feed" id="inboxFeed">
+      <div class="inbox-loading">⏳ Loading...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== NOTIFICATION CENTER STARTUP POPUP ===== -->
+<div class="notif-startup-overlay" id="notificationStartupOverlay" style="display:none;">
+  <div class="notif-startup-popup" onclick="event.stopPropagation()">
+    <div class="notif-startup-title">🔔 Notifications</div>
+    <div class="notif-startup-body" id="notifStartupBody"></div>
+    <div class="notif-startup-actions">
+      <button class="news-announce-later" onclick="closeNotificationStartup()">LATER</button>
+      <button class="notif-startup-open" onclick="openNotificationCenterFromStartup()">OPEN →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== AD OVERLAY ===== -->
+<div class="koth-reward-overlay" id="adLoadingOverlay" style="background:rgba(0,0,0,0.95);z-index:9999;">
+  <div style="text-align:center;padding:32px;background:var(--panel);border-radius:20px;border:1px solid var(--border);width:280px;">
+    <div style="font-size:48px;margin-bottom:12px;">📺</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:3px;color:var(--text);margin-bottom:8px;">AD LOADING...</div>
+    <div style="font-size:32px;font-family:'Bebas Neue',sans-serif;color:var(--fire);" id="adCountdown">3</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;letter-spacing:1px;">Please wait</div>
+  </div>
+</div>
+
+<!-- ===== UPDATE REQUIRED OVERLAY ===== -->
+<div id="updateRequiredOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.97);z-index:99999;align-items:center;justify-content:center;">
+  <div style="text-align:center;padding:36px 28px;background:var(--panel);border-radius:20px;border:1px solid var(--border);width:300px;max-width:90vw;">
+    <div style="font-size:52px;margin-bottom:12px;">🔄</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:3px;color:var(--fire);margin-bottom:6px;">UPDATE REQUIRED</div>
+    <div style="font-size:13px;color:var(--muted);letter-spacing:0.5px;margin-bottom:6px;">Your version is out of date.</div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:20px;" id="updateVersionInfo"></div>
+    <button onclick="openLink('https://play.google.com/store/apps/details?id=com.tileroyale')"
+      style="width:100%;padding:16px;background:linear-gradient(135deg,var(--fire),var(--fire2));border:none;border-radius:12px;
+             font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:#fff;cursor:pointer;">
+      UPDATE NOW
+    </button>
+  </div>
+</div>
+
+<!-- ===== GAUNTLET SCREEN ===== -->
+<div class="screen" id="gauntletScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title">MYSTIC GAUNTLET</div>
+    <button onclick="openRingInventory()" style="width:auto;padding:6px;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.25);border-radius:10px;cursor:pointer;position:relative;" title="Ring Inventory">
+      <img src="img/ring-inventory-icon.png" style="width:36px;height:36px;display:block;object-fit:contain;" draggable="false">
+      <span id="ringInvCount" style="position:absolute;top:-4px;right:-4px;background:#ffd700;color:#000;font-family:'Bebas Neue',sans-serif;font-size:10px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;">0</span>
+    </button>
+  </div>
+
+  <!-- Rarity subtitle below title -->
+  <div id="gauntletScreenRarityLine" style="text-align:center;margin-bottom:10px;min-height:18px;"></div>
+
+  <!-- Gauntlet hand display -->
+  <div id="gauntletHandDisplay" style="width:100%;margin-bottom:10px;"></div>
+
+  <!-- Combined rarity (hidden — info moved to subtitle line) -->
+  <div id="gauntletRarityBadge" style="display:none;"></div>
+
+  <!-- Share button — between hand and wheel -->
+  <button class="btn-secondary" onclick="shareGauntlet()" style="width:100%;margin-bottom:12px;font-size:13px;padding:10px;">📤 Share My Gauntlet</button>
+
+
+  <!-- Spin button area -->
+  <div style="width:100%;background:var(--panel);border-radius:14px;padding:14px;margin-bottom:12px;border:1px solid var(--border);">
+    <div style="font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:center;">💎 <span id="spinDiamondBalance">0</span> diamonds · Spins today: <span id="spinsToday">0</span></div>
+    <div id="wheelCanvas" style="display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+      <div class="gv2-wheel-outer">
+        <div class="gv2-wheel-ptr-gem"></div>
+        <img id="wheelImg" class="gv2-wheel-img" src="img/wheel2.png" alt="Spin Wheel" draggable="false">
+      </div>
+    </div>
+    <button class="btn-play" id="spinBtn" onclick="spinWheel()" style="font-size:18px;padding:12px;">
+      <span id="spinBtnText">Spin (FREE)</span>
+    </button>
+    <!-- Ad spin row — shown after free spin used -->
+    <div id="adSpinRow" style="display:none;margin-top:10px;">
+      <div style="text-align:center;font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">
+        GET ANOTHER SPIN:
+      </div>
+      <div style="display:flex;gap:8px;">
+        <!-- Ad option -->
+        <button id="adSpinBtn" onclick="watchAdForSpin()" style="
+          flex:1;padding:10px 6px;border-radius:10px;
+          background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.35);
+          color:var(--gold);font-family:'Bebas Neue',sans-serif;font-size:13px;
+          letter-spacing:1.5px;cursor:pointer;display:flex;flex-direction:column;
+          align-items:center;justify-content:center;gap:3px;">
+          <span id="adSpinBtnText">WATCH AD</span>
+          <span id="adSpinCounter" style="font-size:10px;opacity:0.7;">(0/3 today)</span>
+        </button>
+        <!-- Diamond option — always available -->
+        <button id="adSpinDmdBtn" onclick="spinWheel()" style="
+          flex:1;padding:10px 6px;border-radius:10px;
+          background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.3);
+          color:var(--diamond);font-family:'Bebas Neue',sans-serif;font-size:13px;
+          letter-spacing:1.5px;cursor:pointer;display:flex;flex-direction:column;
+          align-items:center;justify-content:center;gap:3px;">
+          <span id="adSpinDmdLabel">PAY 50 💎</span>
+          <span id="adSpinDmdOwned" style="font-size:10px;opacity:0.7;">(0 owned)</span>
+        </button>
+      </div>
+    </div>
+    <div id="spinResult" style="text-align:center;margin-top:8px;font-size:13px;color:var(--muted);min-height:20px;letter-spacing:1px;"></div>
+  </div>
+
+</div>
+
+<!-- ===== TRADING SCREEN ===== -->
+<div class="screen" id="tradingScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title">MARKET & TRADING</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <!-- Create trade -->
+  <div class="store-section-hdr">📤 Create Trade Code</div>
+  <div style="font-size:12px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">Select a ring from inventory and create a 4-hour trade code</div>
+  <div id="tradeInventorySelect" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;margin-bottom:12px;"></div>
+
+  <!-- Active trade codes -->
+  <div class="store-section-hdr">⏳ Active Codes</div>
+  <div id="activeTradesDisplay" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;"></div>
+
+  <!-- Accept trade -->
+  <div class="store-section-hdr">📥 Enter Trade Code</div>
+  <div class="friend-row" style="margin-bottom:6px;">
+    <input type="text" id="tradeCodeInput" class="profile-input" maxlength="14"
+      placeholder="TR-RING-XXXXXX" style="text-transform:uppercase;letter-spacing:2px;font-family:'Bebas Neue',sans-serif;font-size:16px;"
+      oninput="this.value=this.value.toUpperCase()"/>
+    <button class="redeem-btn" onclick="acceptTrade()">ACCEPT</button>
+  </div>
+  <div id="tradeMsg" class="redeem-msg" style="margin-bottom:12px;"></div>
+</div>
+
+<!-- ===== FIRST WEEK OFFER ===== -->
+<div class="koth-reward-overlay" id="firstWeekOverlay" style="background:rgba(0,0,0,0.92);">
+  <div class="first-week-modal">
+    <div class="first-week-tag">⏰ LIMITED TIME OFFER</div>
+    <div class="first-week-title">WELCOME OFFER</div>
+    <div class="first-week-subtitle">Only available your first 7 days</div>
+
+    <div class="first-week-contents">
+      <div class="first-week-item">💎 3,000 Diamonds</div>
+      <div class="first-week-item">🌋 Lava Field Table Skin</div>
+      <div class="first-week-item">🔮 Crystal Ball ×5</div>
+      <div class="first-week-item">🎟️ 10 Extra Tickets</div>
+    </div>
+
+    <div class="first-week-price-row">
+      <div class="first-week-orig">9.99€</div>
+      <div class="first-week-price">1.99€</div>
+      <div class="first-week-save">80% OFF</div>
+    </div>
+
+    <div class="first-week-timer" id="firstWeekTimer">Offer expires in 6d 23h 59m</div>
+
+    <button class="buy-dialog-confirm" style="width:100%;margin-top:4px;font-size:20px;"
+      onclick="buyFirstWeekOffer()">GET OFFER — 1.99€</button>
+    <button class="btn-secondary" style="width:100%;margin-top:8px;font-size:13px;"
+      onclick="closeFirstWeekOffer()">No thanks</button>
+  </div>
+</div>
+
+<!-- ===== IMMUNITY BADGE ===== -->
+<div class="immunity-badge" id="immunityBadge">🛡️ IMMUNE</div>
+
+<!-- ===== SURPRISE OVERLAY ===== -->
+<div class="surprise-overlay" id="surpriseOverlay">
+  <div class="surprise-burst">
+    <div style="font-size:36px">🎁</div>
+    <div class="surprise-text">SURPRISE!</div>
+    <div class="surprise-sub" id="surpriseSubText">Hidden reward found!</div>
+  </div>
+</div>
+
+<!-- ===== OFFLINE REWARD MODAL ===== -->
+<div class="offline-reward-overlay" id="offlineRewardOverlay">
+  <div class="offline-reward-modal">
+    <div class="offline-reward-icon">💎</div>
+    <div class="offline-reward-title">WELCOME BACK!</div>
+    <div class="offline-reward-sub" id="offlineRewardSub">You earned diamonds while away</div>
+    <div class="offline-reward-amount" id="offlineRewardAmount">+50</div>
+    <button class="buy-dialog-confirm" style="width:100%;margin-top:8px;" onclick="claimOfflineReward()">CLAIM 💎</button>
+  </div>
+</div>
+
+<!-- ===== FRIENDS SCREEN ===== -->
+<div class="screen" id="friendsScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:20px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title">FRIENDS</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <!-- Your player tag -->
+  <div class="friend-code-box">
+    <div style="font-size:11px;color:var(--muted);letter-spacing:3px;margin-bottom:4px;">YOUR PLAYER TAG</div>
+    <div class="friend-code-display" id="myFriendCode" onclick="copyFriendCode()">...</div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;letter-spacing:1px;">Tap to copy · Share with friends</div>
+    <div id="referralProgress"></div>
+  </div>
+
+  <!-- Add friend by tag -->
+  <div class="store-section-hdr">Add Friend by Tag</div>
+  <div class="friend-row">
+    <input type="text" id="friendCodeInput" class="profile-input" maxlength="5"
+      placeholder="#1234" style="letter-spacing:4px;font-family:'Bebas Neue',sans-serif;font-size:18px;"/>
+    <button class="redeem-btn" onclick="submitFriendCode()">ADD</button>
+  </div>
+  <div id="friendCodeMsg" class="redeem-msg" style="margin-top:8px;"></div>
+
+  <!-- Friends list header with requests button -->
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin:16px 0 8px;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:3px;color:var(--muted);">FRIENDS (<span id="friendCount">0</span>)</div>
+    <button onclick="openFriendRequests()" style="position:relative;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;letter-spacing:1px;color:var(--text);cursor:pointer;">
+      📬 Requests
+      <span id="friendRequestsBadge" style="display:none;position:absolute;top:-5px;right:-5px;width:16px;height:16px;background:var(--fire);border-radius:50%;font-size:10px;align-items:center;justify-content:center;color:#fff;">!</span>
+    </button>
+  </div>
+
+  <!-- Incoming requests panel (collapsed by default) -->
+  <div id="friendRequestsPanel" style="display:none;width:100%;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:10px;">
+    <div id="friendRequestsList"></div>
+  </div>
+
+  <div id="friendsList" style="width:100%;"></div>
+</div>
+
+<!-- ===== PRACTICE RESULTS SCREEN ===== -->
+<div class="screen" id="practiceResultScreen">
+  <div style="font-size:11px;letter-spacing:4px;color:var(--muted);margin-bottom:8px;">PRACTICE COMPLETE · 30 SECONDS</div>
+  <div class="practice-grade" id="practiceGrade">S</div>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:var(--text);margin-bottom:4px;" id="practiceGradeLabel">PERFECT</div>
+  <div class="practice-tip" id="practiceTip">Outstanding reaction speed!</div>
+
+  <div style="height:1px;background:var(--border);width:100%;margin:16px 0;"></div>
+
+  <div class="practice-stat-row">
+    <div class="practice-stat">
+      <div class="practice-stat-val" id="prTiles">0</div>
+      <div class="practice-stat-lbl">Tiles / 30s</div>
+    </div>
+    <div class="practice-stat">
+      <div class="practice-stat-val" id="prAccuracy">0%</div>
+      <div class="practice-stat-lbl">Accuracy</div>
+    </div>
+    <div class="practice-stat">
+      <div class="practice-stat-val" id="prAvgSpeed">0ms</div>
+      <div class="practice-stat-lbl">Avg Reaction</div>
+    </div>
+    <div class="practice-stat">
+      <div class="practice-stat-val" id="prDuration">30s</div>
+      <div class="practice-stat-lbl">Duration</div>
+    </div>
+  </div>
+
+  <!-- Personal best -->
+  <div id="prPbRow" style="display:none;width:100%;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:10px;padding:10px 14px;margin-bottom:12px;text-align:center;">
+    <div style="font-size:10px;letter-spacing:3px;color:var(--gold);">🏆 NEW PERSONAL BEST!</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--gold);letter-spacing:1px;" id="prPbVal"></div>
+  </div>
+
+  <!-- Dual Leaderboard -->
+  <div style="display:flex;gap:10px;width:100%;margin-bottom:14px;">
+    <!-- Tap count board -->
+    <div style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:var(--diamond);margin-bottom:8px;text-align:center;">🎯 TILES / 30s</div>
+      <div id="practiceLbTaps" style="font-size:12px;"></div>
+    </div>
+    <!-- Reaction board -->
+    <div style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:var(--green);margin-bottom:8px;text-align:center;">⚡ REACTION</div>
+      <div id="practiceLbReaction" style="font-size:12px;"></div>
+    </div>
+  </div>
+
+  <button class="btn-play" onclick="startPractice()" style="margin-bottom:10px;">🎯 PLAY AGAIN</button>
+  <button class="btn-secondary" onclick="returnToMainMenu()">← MAIN MENU</button>
+</div>
+
+<!-- ===== STORE SCREEN ===== -->
+<div class="screen" id="storeScreen">
+
+  <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:12px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title">STORE</div>
+    <div class="store-balance">💎 <span id="storeBalance">0</span></div>
+  </div>
+
+  <!-- Store tabs -->
+  <div class="store-tabs">
+    <button class="store-tab active" onclick="switchStoreTab('featured', this)">⭐ Featured</button>
+    <button class="store-tab" onclick="switchStoreTab('diamonds', this)">💎 Diamonds</button>
+    <button class="store-tab" onclick="switchStoreTab('items', this)">🎒 Items</button>
+    <button class="store-tab" onclick="switchStoreTab('skins', this)">🎨 Skins</button>
+    <button class="store-tab" onclick="switchStoreTab('bundles', this)">📦 Bundles</button>
+    <button class="store-tab onlywhales-tab" onclick="switchStoreTab('onlywhales', this)">🐋 OnlyWhales</button>
+  </div>
+
+  <div class="store-content" id="storeContent"></div>
+
+</div>
+
+<!-- ===== CUSTOM LOBBY SCREEN ===== -->
+<div class="screen" id="customLobbyScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:16px;">
+    <button class="btn-secondary screen-back-btn" onclick="leaveCustomLobby()">← BACK</button>
+    <div class="screen-title">CUSTOM LOBBY</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <!-- Tabs: Create / Join -->
+  <div class="lb-period-row" style="margin-bottom:16px;">
+    <button class="lb-period-btn active" id="clTabCreate" onclick="switchCustomTab('create', this)">CREATE</button>
+    <button class="lb-period-btn" id="clTabJoin" onclick="switchCustomTab('join', this)">JOIN</button>
+    <button class="lb-period-btn" id="clTabSpectate" onclick="switchCustomTab('spectate', this)">WATCH</button>
+  </div>
+
+  <!-- CREATE PANEL -->
+  <div id="clCreatePanel" style="width:100%;">
+    <div class="store-section-hdr">Game Settings</div>
+
+    <div class="settings-row" style="margin-bottom:8px;">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Mode</div>
+      </div>
+      <div class="settings-select-wrap">
+        <button class="settings-select-btn active" id="clModeRush"     onclick="selectCustomMode('rush',this)">⚡ Rush</button>
+        <button class="settings-select-btn" id="clModeBuckshot" onclick="selectCustomMode('buckshot',this)">💥 Buck</button>
+        <button class="settings-select-btn" id="clModeWild"     onclick="selectCustomMode('wild',this)">🌀 Wild</button>
+      </div>
+    </div>
+
+    <div class="settings-row" style="margin-bottom:8px;">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Max Players</div>
+        <div class="settings-row-desc" id="clPlayersDesc">2–30 players</div>
+      </div>
+      <div class="settings-slider-wrap">
+        <input type="range" class="settings-slider" id="clPlayersSlider"
+          min="2" max="30" value="10" oninput="updateCustomPlayers(this.value)">
+        <div class="settings-slider-val" id="clPlayersVal">10</div>
+      </div>
+    </div>
+
+    <div class="settings-row" style="margin-bottom:8px;">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Sudden Death</div>
+        <div class="settings-row-desc">Wrong tap = instant elimination</div>
+      </div>
+      <div class="toggle" id="clSuddenDeath" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <div class="settings-row" style="margin-bottom:8px;">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Private</div>
+        <div class="settings-row-desc">Only people with code can join</div>
+      </div>
+      <div class="toggle on" id="clPrivateToggle" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <div class="settings-row" style="margin-bottom:16px;">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Bot Speed</div>
+        <div class="settings-row-desc" id="clBotSpeedDesc">Reaction time: 2000ms</div>
+      </div>
+      <div class="settings-slider-wrap">
+        <input type="range" class="settings-slider" id="clBotSpeedSlider"
+          min="0" max="5000" value="2000" step="100" oninput="updateCustomBotSpeed(this.value)">
+        <div class="settings-slider-val" id="clBotSpeedVal">2s</div>
+      </div>
+    </div>
+
+    <!-- Lobby code display (after creating) -->
+    <div id="clCodeBox" style="display:none;" class="friend-code-box">
+      <div style="font-size:11px;color:var(--muted);letter-spacing:3px;margin-bottom:4px;">YOUR LOBBY CODE</div>
+      <div class="friend-code-display" id="clLobbyCode" onclick="copyCustomCode()">------</div>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <button onclick="copyCustomCode()" style="flex:1;padding:8px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;color:var(--diamond);cursor:pointer;">COPY CODE</button>
+        <button onclick="inviteFriendToLobby()" style="flex:1;padding:8px;background:rgba(155,89,182,0.08);border:1px solid rgba(155,89,182,0.3);border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;color:var(--text);cursor:pointer;">👥 INVITE FRIEND</button>
+        <button onclick="shareLobby()" style="flex:1;padding:8px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;color:var(--diamond);cursor:pointer;">SHARE INVITE</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px;letter-spacing:1px;">Tap to copy · Share with friends</div>
+
+      <!-- Players waiting -->
+      <div class="store-section-hdr" style="margin-top:12px;">
+        Players (<span id="clWaitingCount">1</span>/<span id="clMaxCount">10</span>)
+        <span id="clLobbyStatus" style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-left:8px;">PRIVATE</span>
+      </div>
+      <div id="clWaitingList" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;margin-bottom:10px;"></div>
+
+      <!-- Spectator code -->
+      <div style="margin-top:10px;padding:12px 16px;background:rgba(100,100,255,0.06);border:1px solid rgba(100,100,255,0.2);border-radius:10px;width:100%;box-sizing:border-box;">
+        <div style="font-size:10px;color:#8888ff;letter-spacing:2px;margin-bottom:4px;">👁️ SPECTATOR CODE</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:5px;color:#aaaaff;cursor:pointer;word-break:break-all;" id="clSpectatorCode" onclick="copySpectatorCode()">------</div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:4px;">Share with viewers — they watch live</div>
+      </div>
+      <div id="clPhasePrivate">
+        <div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-align:center;margin-bottom:8px;">
+          Waiting for invited players to join with code
+        </div>
+        <button class="btn-secondary" onclick="openLobbyToPublic()"
+          style="width:100%;margin-bottom:8px;border-color:rgba(0,229,255,0.3);color:var(--diamond);">
+          Open to Public
+        </button>
+        <div style="font-size:10px;color:var(--muted);text-align:center;letter-spacing:1px;">
+          Public players from Rush queue will fill remaining slots
+        </div>
+      </div>
+
+      <!-- Phase 2: Public — filling from queue -->
+      <div id="clPhasePublic" style="display:none;">
+        <div style="font-size:12px;color:var(--diamond);letter-spacing:1px;text-align:center;margin-bottom:8px;animation:textFlicker 0.8s infinite alternate;">
+          Open to public — filling from Rush queue...
+        </div>
+        <div class="dc-progress-row" style="margin-bottom:10px;">
+          <div class="dc-bar-wrap"><div class="dc-bar" id="clFillBar" style="width:10%;background:var(--diamond);"></div></div>
+          <div class="dc-progress-text" id="clFillPct">1/<span id="clFillMax">10</span></div>
+        </div>
+      </div>
+
+      <!-- Start button — always visible, works with 2+ players -->
+      <button class="btn-play" id="clStartBtn" onclick="startCustomGame()"
+        style="margin-top:8px;opacity:0.5;" disabled>
+        ▶ START GAME — <span id="clStartCount">1</span> players
+      </button>
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:4px;letter-spacing:1px;" id="clStartHint">
+        Waiting for at least 2 players
+      </div>
+      <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px;letter-spacing:1px;opacity:0.6;">
+        You can start anytime — lobby does not need to be full
+      </div>
+    </div>
+
+    <button class="btn-play" id="clCreateBtn" onclick="createCustomLobby()" style="margin-top:4px;">
+      CREATE LOBBY
+    </button>
+  </div>
+
+  <!-- JOIN PANEL -->
+  <div id="clJoinPanel" style="display:none;width:100%;">
+    <div class="store-section-hdr">Enter Lobby Code</div>
+    <div class="friend-row">
+      <input type="text" id="clJoinInput" class="profile-input"
+        maxlength="6" placeholder="ABC123"
+        style="text-transform:uppercase;letter-spacing:4px;font-family:'Bebas Neue',sans-serif;font-size:18px;"
+        oninput="this.value=this.value.toUpperCase()"/>
+      <button class="redeem-btn" onclick="joinCustomLobby()">JOIN</button>
+    </div>
+    <div id="clJoinMsg" class="redeem-msg" style="margin-top:8px;"></div>
+
+    <!-- Joined lobby view -->
+    <div id="clJoinedBox" style="display:none;" class="friend-code-box">
+      <div style="font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:4px;">JOINED LOBBY</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:var(--text);margin-bottom:8px;" id="clJoinedCode">------</div>
+      <div style="font-size:12px;color:var(--muted);letter-spacing:1px;margin-bottom:12px;" id="clJoinedMode">Rush Mode · Waiting for host...</div>
+      <div class="store-section-hdr">Players in Lobby</div>
+      <div id="clJoinedList" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;"></div>
+      <div style="font-size:12px;color:var(--fire2);letter-spacing:1px;margin-top:12px;text-align:center;">
+        ⏳ Waiting for host to start...
+      </div>
+    </div>
+  </div>
+  <!-- SPECTATOR PANEL -->
+  <div id="clSpectatePanel" style="display:none;width:100%;">
+    <div class="store-section-hdr">Watch a Live Game</div>
+    <div class="friend-row">
+      <input type="text" id="clSpectateInput" class="profile-input"
+        maxlength="6" placeholder="SPEC12"
+        style="text-transform:uppercase;letter-spacing:4px;font-family:'Bebas Neue',sans-serif;font-size:18px;"
+        oninput="this.value=this.value.toUpperCase()"/>
+      <button class="redeem-btn" onclick="joinAsSpectator()">WATCH</button>
+    </div>
+    <div id="clSpectateMsg" class="redeem-msg" style="margin-top:8px;"></div>
+
+    <!-- Live spectator view -->
+    <div id="clSpectatorView" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div class="store-section-hdr" style="color:#8888ff;margin:0;">👁️ LIVE — <span id="specGameMode">Rush</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:8px;" id="specPlayerCount">? players left</span>
+        </div>
+        <button onclick="confirmQuitGame()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 12px;font-size:13px;font-family:'Bebas Neue',sans-serif;letter-spacing:1px;color:var(--muted);cursor:pointer;">✕ LEAVE</button>
+      </div>
+
+      <!-- Mini grid -->
+      <div id="specGrid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:12px;"></div>
+
+      <!-- Live players list -->
+      <div class="store-section-hdr">👥 Players Alive</div>
+      <div id="specPlayerList" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;"></div>
+
+      <!-- Player reaction times -->
+      <div class="store-section-hdr">⏱ Last Reaction</div>
+      <div id="specReactions" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;"></div>
+
+      <!-- Player feed -->
+      <div class="store-section-hdr" style="margin-top:10px;">⚡ Live Feed</div>
+      <div id="specFeed" style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;"></div>
+    </div>
+  </div>
+
+</div>
+<div class="koth-reward-overlay" id="kothDailyRewardOverlay">
+  <div class="koth-daily-reward-modal">
+    <div class="koth-reward-crown" id="kothDailyRewardIcon">🎁</div>
+    <div class="koth-reward-title">DAILY TOP REWARD</div>
+    <div class="koth-reward-place" id="kothDailyRewardTier">TOP 1%</div>
+    <div class="koth-reward-amount" id="kothDailyRewardAmount">💎 1,250</div>
+    <div class="koth-reward-sub" id="kothDailyRewardSub">You were in the top 1% of KOTH players today!</div>
+    <button class="buy-dialog-confirm" style="width:100%; margin-top:8px;" onclick="closeKothDailyReward()">🎉 COLLECT</button>
+  </div>
+</div>
+
+<!-- ===== KOTH WEEKLY REWARD ===== -->
+<div class="koth-reward-overlay" id="kothRewardOverlay">
+  <div class="koth-reward-modal">
+    <div class="koth-reward-crown" id="kothRewardCrown">👑</div>
+    <div class="koth-reward-title" id="kothRewardTitle">WEEKLY WINNER!</div>
+    <div class="koth-reward-place" id="kothRewardPlace">1ST PLACE</div>
+    <div class="koth-reward-amount" id="kothRewardAmount">💎 0</div>
+    <div class="koth-reward-sub">Added to your diamond balance</div>
+    <button class="buy-dialog-confirm" style="width:100%; margin-top:8px;" onclick="closeKothReward()">🎉 CLAIM</button>
+  </div>
+</div>
+
+<!-- ===== AVATAR PICKER ===== -->
+<div class="avatar-picker-overlay" id="avatarPickerOverlay" onclick="closeAvatarPicker()">
+  <div class="avatar-picker" onclick="event.stopPropagation()">
+    <div class="avatar-picker-title">Choose Avatar</div>
+    <div class="avatar-picker-sub">Tap to select · 🔒 = locked</div>
+    <div id="avatarPickerContent"></div>
+    <button class="btn-secondary" style="width:100%; margin-top:12px;" onclick="closeAvatarPicker()">CLOSE</button>
+  </div>
+</div>
+
+<!-- ===== RESET CONFIRM DIALOG ===== -->
+<div class="reset-dialog-overlay" id="resetDialogOverlay" onclick="closeResetDialog()">
+  <div class="reset-dialog" onclick="event.stopPropagation()">
+    <div class="reset-dialog-icon">🗑️</div>
+    <div class="reset-dialog-title">RESET PROGRESS?</div>
+    <div class="reset-dialog-desc">This will delete all your data — diamonds, wins, skins, achievements and settings. This cannot be undone.</div>
+    <div style="display:flex; gap:10px; width:100%;">
+      <button class="buy-dialog-cancel" onclick="closeResetDialog()" style="flex:1;">CANCEL</button>
+      <button class="buy-dialog-confirm" onclick="executeReset()" style="flex:1; background:var(--red);">RESET</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS SCREEN ===== -->
+<div class="screen" id="settingsScreen">
+
+  <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:20px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title">SETTINGS</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <div class="settings-list">
+
+    <!-- SOUND -->
+    <div class="settings-section-label">🔊 Sound</div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Sound Effects</div>
+        <div class="settings-row-desc">Tile ignite, tap, elimination sounds</div>
+      </div>
+      <div class="toggle" id="toggleSfx" onclick="toggleSetting('sfx')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Music</div>
+        <div class="settings-row-desc">Background music during gameplay</div>
+      </div>
+      <div class="toggle" id="toggleMusic" onclick="toggleSetting('music')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <div class="settings-row" id="rowVolume">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Volume</div>
+        <div class="settings-row-desc">Master volume level</div>
+      </div>
+      <div class="settings-slider-wrap">
+        <input type="range" class="settings-slider" id="sliderVolume" min="0" max="100" value="80"
+          oninput="updateSlider('volume', this.value)">
+        <div class="settings-slider-val" id="valVolume">80%</div>
+      </div>
+    </div>
+
+    <!-- VIBRATION -->
+    <div class="settings-section-label">📳 Feedback</div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Vibration</div>
+        <div class="settings-row-desc">Haptic feedback on tap and elimination</div>
+      </div>
+      <div class="toggle" id="toggleVibration" onclick="toggleSetting('vibration')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <!-- GAME -->
+    <div class="settings-section-label">🎮 Gameplay</div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Auto-join Lobby</div>
+        <div class="settings-row-desc">Start game automatically when lobby fills</div>
+      </div>
+      <div class="toggle" id="toggleAutojoin" onclick="toggleSetting('autojoin')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Server Region</div>
+        <div class="settings-row-desc" id="settingsRegionVal">AUTO · measuring...</div>
+      </div>
+      <div class="settings-select-wrap">
+        <button class="settings-select-btn" id="selRegionAuto" onclick="selectRegion('AUTO')">Auto</button>
+        <button class="settings-select-btn" id="selRegionEU"   onclick="selectRegion('EU')">EU</button>
+        <button class="settings-select-btn" id="selRegionNA"   onclick="selectRegion('NA')">NA</button>
+        <button class="settings-select-btn" id="selRegionASIA" onclick="selectRegion('ASIA')">Asia</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Keep Screen On</div>
+        <div class="settings-row-desc">Prevent screen from sleeping during game</div>
+      </div>
+      <div class="toggle" id="toggleWakelock" onclick="toggleSetting('wakelock')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <!-- VISUAL -->
+    <div class="settings-section-label">👁️ Visual</div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Animation Speed</div>
+        <div class="settings-row-desc">Speed of tile and tap animations</div>
+      </div>
+      <div class="settings-select-wrap">
+        <button class="settings-select-btn" id="selAnimNormal" onclick="selectAnimSpeed('normal')">Normal</button>
+        <button class="settings-select-btn" id="selAnimFast"   onclick="selectAnimSpeed('fast')">Fast</button>
+        <button class="settings-select-btn" id="selAnimOff"    onclick="selectAnimSpeed('off')">Off</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Colorblind Mode</div>
+        <div class="settings-row-desc">High-contrast tile shapes for colorblind players</div>
+      </div>
+      <div class="toggle" id="toggleColorblind" onclick="toggleSetting('colorblind')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="settings-section-label">🔔 Notifications</div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Daily Reminder</div>
+        <div class="settings-row-desc">Remind me to collect daily items</div>
+      </div>
+      <div class="toggle" id="toggleDailyReminder" onclick="toggleSetting('dailyReminder')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Ticket Refill Alert</div>
+        <div class="settings-row-desc">Notify when daily tickets are refilled</div>
+      </div>
+      <div class="toggle" id="toggleTicketAlert" onclick="toggleSetting('ticketAlert')"><div class="toggle-knob"></div></div>
+    </div>
+
+    <!-- DATA -->
+    <div class="settings-section-label">📊 Data</div>
+
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Saved Data</div>
+        <div class="settings-row-desc">Progress, skins, achievements, diamonds</div>
+      </div>
+      <div style="font-size:11px; color:var(--green); letter-spacing:1px;">✓ LOCAL</div>
+    </div>
+
+    <div class="settings-row" style="cursor:pointer;" onclick="confirmResetProgress()">
+      <div class="settings-row-info">
+        <div class="settings-row-name" style="color:var(--red);">Reset Progress</div>
+        <div class="settings-row-desc">Delete all data and start fresh</div>
+      </div>
+      <div style="font-size:18px; color:var(--red);">🗑️</div>
+    </div>
+
+    <!-- ABOUT -->
+    <div class="settings-section-label">📖 About</div>
+
+    <div class="settings-row" style="cursor:pointer;" onclick="openAbout()">
+      <div class="settings-row-info">
+        <div class="settings-row-name">About Tile Royale</div>
+        <div class="settings-row-desc">Version, changelog, licenses</div>
+      </div>
+      <div style="font-size:16px; color:var(--muted);">›</div>
+    </div>
+
+    <div class="settings-row" style="cursor:pointer;" onclick="openLegal('privacy')">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Privacy Policy</div>
+        <div class="settings-row-desc">How we handle your data</div>
+      </div>
+      <div style="font-size:16px; color:var(--muted);">›</div>
+    </div>
+
+    <div class="settings-row" style="cursor:pointer;" onclick="openLegal('terms')">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Terms of Service</div>
+        <div class="settings-row-desc">Rules and usage agreement</div>
+      </div>
+      <div style="font-size:16px; color:var(--muted);">›</div>
+    </div>
+
+    <div class="settings-row" style="cursor:pointer;" onclick="openLegal('licenses')">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Open Source Licenses</div>
+        <div class="settings-row-desc">Third-party acknowledgements</div>
+      </div>
+      <div style="font-size:16px; color:var(--muted);">›</div>
+    </div>
+
+    <div class="settings-row" style="cursor:pointer;" onclick="contactSupport()">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Contact Support</div>
+        <div class="settings-row-desc"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6a3e03060f3805130b060f2d0b070f2a0d070b030644090507">[email&#160;protected]</a></div>
+      </div>
+      <div style="font-size:18px;">✉️</div>
+    </div>
+
+    <div class="settings-row" style="cursor:pointer;" onclick="rateApp()">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Rate Tile Royale</div>
+        <div class="settings-row-desc">Enjoying the game? Leave a review!</div>
+      </div>
+      <div style="font-size:18px;">⭐</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== ABOUT SCREEN ===== -->
+<div class="screen" id="aboutScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:20px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('settingsScreen')">← BACK</button>
+    <div class="screen-title">ABOUT</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <!-- App identity -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:24px;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;letter-spacing:4px;background:linear-gradient(135deg,var(--fire),var(--fire2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">TILE ROYALE</div>
+    <div class="about-version-badge">v1.0.0 · Build 42</div>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:2px;">Last tap standing</div>
+  </div>
+
+  <!-- What's new -->
+  <div class="about-section-hdr">🆕 What's New in v1.0.0</div>
+  <div class="about-changelog">
+    <div class="changelog-item">
+      <div class="changelog-dot" style="background:var(--green);"></div>
+      <div class="changelog-text">King of the Hill weekly prize pool mode</div>
+    </div>
+    <div class="changelog-item">
+      <div class="changelog-dot" style="background:var(--diamond);"></div>
+      <div class="changelog-text">Practice mode with speed grading (S–D)</div>
+    </div>
+    <div class="changelog-item">
+      <div class="changelog-dot" style="background:var(--fire);"></div>
+      <div class="changelog-text">Shadow Tile — new Wild mode item</div>
+    </div>
+    <div class="changelog-item">
+      <div class="changelog-dot" style="background:var(--gold);"></div>
+      <div class="changelog-text">Golden tile immunity mechanic</div>
+    </div>
+    <div class="changelog-item">
+      <div class="changelog-dot" style="background:#b464ff;"></div>
+      <div class="changelog-text">34 achievements + 10 secret tiles</div>
+    </div>
+    <div class="changelog-item">
+      <div class="changelog-dot" style="background:var(--muted);"></div>
+      <div class="changelog-text">Daily challenges, offline rewards</div>
+    </div>
+  </div>
+
+  <!-- Version history -->
+  <div class="about-section-hdr">📅 Version History</div>
+  <div class="about-changelog">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:var(--text);margin-bottom:6px;">v1.0.0 — Launch</div>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:1px;line-height:1.6;">Full launch with all 5 game modes, achievement system, whale bundles, leaderboards, and complete skin ecosystem.</div>
+  </div>
+
+  <!-- Credits -->
+  <div class="about-section-hdr">👥 Credits</div>
+  <div class="about-card">
+    <div class="about-credit-row"><span>Game Design</span><span style="color:var(--text);">Tile Royale Team</span></div>
+    <div class="about-credit-row"><span>Development</span><span style="color:var(--text);">Tile Royale Team</span></div>
+    <div class="about-credit-row"><span>Sound Design</span><span style="color:var(--text);">Web Audio API</span></div>
+    <div class="about-credit-row"><span>Engine</span><span style="color:var(--text);">HTML5 / Capacitor</span></div>
+  </div>
+
+  <!-- Social links -->
+  <div class="about-section-hdr">🌐 Follow Us</div>
+  <div style="display:flex;gap:8px;width:100%;margin-bottom:16px;">
+    <button class="about-social-btn" onclick="openLink('https://twitter.com/tileroyale')">𝕏 Twitter</button>
+    <button class="about-social-btn" onclick="openLink('https://instagram.com/tileroyale')">📸 Instagram</button>
+    <button class="about-social-btn" onclick="openLink('https://discord.gg/tileroyale')">💬 Discord</button>
+  </div>
+
+  <div style="font-size:10px;color:var(--muted);text-align:center;letter-spacing:1px;line-height:1.6;margin-bottom:20px;">
+    © 2025 Tile Royale. All rights reserved.<br>
+    Made with ❤️ and Web Audio API.
+  </div>
+</div>
+
+<!-- ===== LEGAL SCREEN ===== -->
+<div class="screen" id="legalScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:20px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('settingsScreen')">← BACK</button>
+    <div class="screen-title" id="legalTitle" style="font-size:22px;">PRIVACY POLICY</div>
+    <div style="width:80px;"></div>
+  </div>
+  <div id="legalContent" style="width:100%;overflow-y:auto;max-height:640px;font-size:13px;color:var(--muted);line-height:1.7;letter-spacing:0.3px;padding-bottom:20px;"></div>
+</div>
+<div class="screen" id="leaderboardScreen">
+
+  <!-- Header -->
+  <div class="lb-header-row">
+    <button class="btn-secondary screen-back-btn lb-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title lb-screen-title">RANKS</div>
+    <div style="width:72px;"></div>
+  </div>
+
+  <!-- Premium player profile card -->
+  <div class="lb-profile-card" id="lbProfileCard">
+    <div class="lb-profile-top">
+      <div class="lb-profile-avatar" id="lbProfileAvatar">🎮</div>
+      <div style="flex:1;min-width:0;">
+        <div class="lb-profile-name" id="lbProfileName">Loading...</div>
+        <div class="lb-profile-tag" id="lbProfileTag"></div>
+        <div class="lb-profile-ranks">
+          <div class="lb-profile-rank-badge">
+            <div class="lb-profile-rank-val" id="lbProfileWeeklyRank">#—</div>
+            <div class="lb-profile-rank-lbl">Weekly</div>
+          </div>
+          <div class="lb-profile-rank-badge">
+            <div class="lb-profile-rank-val" id="lbProfileAlltimeRank">#—</div>
+            <div class="lb-profile-rank-lbl">All-Time</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lb-profile-stats">
+      <div class="lb-profile-stat">
+        <div class="lb-profile-stat-val" id="lbPsGames">—</div>
+        <div class="lb-profile-stat-lbl">Games</div>
+      </div>
+      <div class="lb-profile-stat">
+        <div class="lb-profile-stat-val" id="lbPsWins">—</div>
+        <div class="lb-profile-stat-lbl">Wins</div>
+      </div>
+      <div class="lb-profile-stat">
+        <div class="lb-profile-stat-val" id="lbPsWinRate">—</div>
+        <div class="lb-profile-stat-lbl">Win Rate</div>
+      </div>
+      <div class="lb-profile-stat">
+        <div class="lb-profile-stat-val" id="lbPsReaction">—</div>
+        <div class="lb-profile-stat-lbl">Best Reaction</div>
+      </div>
+      <div class="lb-profile-stat">
+        <div class="lb-profile-stat-val" id="lbPsStreak">—</div>
+        <div class="lb-profile-stat-lbl">Best Streak</div>
+      </div>
+      <div class="lb-profile-stat">
+        <div class="lb-profile-stat-val" id="lbPsTiles">—</div>
+        <div class="lb-profile-stat-lbl">Tiles Tapped</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Period tabs -->
+  <div class="lb-period-row">
+    <button class="lb-period-btn active" id="lbPeriodWeekly" onclick="switchLbPeriod('weekly', this)">🗓️ WEEKLY</button>
+    <button class="lb-period-btn" id="lbPeriodAlltime" onclick="switchLbPeriod('alltime', this)">👑 ALL-TIME</button>
+    <button class="lb-period-btn" id="lbPeriodFriends" onclick="switchLbPeriod('friends', this)">👥 FRIENDS</button>
+  </div>
+
+  <!-- Rankings list -->
+  <div class="lb-list" id="lbList">
+    <div class="lb-loading">⏳ Loading rankings...</div>
+  </div>
+
+  <!-- Player vs Global comparison -->
+  <div class="lb-vs-section" id="lbVsSection" style="display:none;">
+    <div class="lb-vs-title">YOUR STATS VS GLOBAL AVERAGE</div>
+    <div class="lb-vs-grid" id="lbVsGrid"></div>
+  </div>
+
+  <!-- World Records -->
+  <div class="lb-section" id="lbWorldRecords" style="display:none;">
+    <div class="lb-section-title">⚡ WORLD RECORDS</div>
+    <div class="lb-wr-grid" id="lbWrGrid"></div>
+  </div>
+
+  <!-- Your Global Standing (percentiles) -->
+  <div class="lb-section" id="lbStanding" style="display:none;">
+    <div class="lb-section-title">🌍 YOUR GLOBAL STANDING</div>
+    <div class="lb-standing-grid" id="lbStandingGrid"></div>
+  </div>
+
+  <!-- Hall of Fame -->
+  <div class="lb-section" id="lbHallOfFame">
+    <div class="lb-section-title">👑 HALL OF FAME</div>
+    <div class="lb-hof-card">
+      <div class="lb-hof-trophy">🏆</div>
+      <div class="lb-hof-msg">No completed seasons yet.</div>
+      <div class="lb-hof-sub">Season champions will be enshrined here when the first season ends.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== ACHIEVEMENT POPUP ===== -->
+<div class="ach-popup-overlay" id="achPopupOverlay" onclick="closeAchPopup()">
+  <div class="ach-popup" onclick="event.stopPropagation()">
+    <div class="ach-popup-label">ACHIEVEMENT UNLOCKED</div>
+    <div class="ach-popup-icon" id="achPopupIcon">🏆</div>
+    <div class="ach-popup-tier" id="achPopupTier">🥇 Gold</div>
+    <div class="ach-popup-name" id="achPopupName">Centurion</div>
+    <div class="ach-popup-desc" id="achPopupDesc">Win 100 games</div>
+    <div class="ach-popup-rewards" id="achPopupRewards"></div>
+    <button class="buy-dialog-confirm" style="width:100%; margin-top:8px;" onclick="closeAchPopup()">CLAIM REWARDS</button>
+  </div>
+</div>
+
+<!-- ===== ACHIEVEMENTS SCREEN ===== -->
+<div class="screen" id="achievementsScreen">
+  <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:16px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title" id="achScreenTitle">ACHIEVEMENTS</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <!-- Main tab row -->
+  <div class="ach-main-tabs">
+    <button class="ach-main-tab active" id="achTabAch" onclick="switchAchMainTab('ach', this)">🏆 Achievements</button>
+    <button class="ach-main-tab" id="achTabStats" onclick="switchAchMainTab('stats', this)">📊 Statistics</button>
+  </div>
+
+  <!-- ACHIEVEMENTS PANEL -->
+  <div id="achPanel" style="width:100%;">
+
+    <!-- Trophy Road (rendered by JS) -->
+    <div id="trophyRoad"></div>
+
+    <div class="ach-stats-row">
+      <div class="ach-stat-box">
+        <div class="ach-stat-val" id="achUnlocked">0</div>
+        <div class="ach-stat-lbl">Unlocked</div>
+      </div>
+      <div class="ach-stat-box">
+        <div class="ach-stat-val" id="achTotal">34</div>
+        <div class="ach-stat-lbl">Total</div>
+      </div>
+      <div class="ach-stat-box">
+        <div class="ach-stat-val" id="achPct">0%</div>
+        <div class="ach-stat-lbl">Complete</div>
+      </div>
+    </div>
+
+    <div class="ach-filter-row">
+      <div class="ach-filter active" onclick="filterAch('all', this)">All</div>
+      <div class="ach-filter" onclick="filterAch('general', this)">⚔️ General</div>
+      <div class="ach-filter" onclick="filterAch('multiplayer', this)">🎮 Multi</div>
+      <div class="ach-filter" onclick="filterAch('speed', this)">⚡ Speed</div>
+      <div class="ach-filter" onclick="filterAch('collection', this)">💰 Collect</div>
+      <div class="ach-filter" onclick="filterAch('special', this)">🔐 Special</div>
+      <div class="ach-filter" onclick="filterAch('rings', this)">💍 Rings</div>
+      <div class="ach-filter" onclick="filterAch('unlocked', this)">✓ Done</div>
+    </div>
+
+    <div class="ach-list" id="achList"></div>
+  </div>
+
+  <!-- STATISTICS PANEL -->
+  <div id="statsPanel" style="display:none; width:100%; padding-bottom:16px;">
+
+    <div class="stats-section-hdr">🎮 General</div>
+    <div class="stats-grid">
+      <div class="stats-card"><div class="stats-card-val" id="st-games">0</div><div class="stats-card-lbl">Games Played</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-wins">0</div><div class="stats-card-lbl">Total Wins</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-winrate">0%</div><div class="stats-card-lbl">Win Rate</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-streak">0</div><div class="stats-card-lbl">Best Win Streak</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-top3">0</div><div class="stats-card-lbl">Top 3 Finishes</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-top5">0</div><div class="stats-card-lbl">Top 5 Finishes</div></div>
+    </div>
+
+    <div class="stats-section-hdr">🕹️ By Game Mode</div>
+    <div class="stats-mode-list">
+      <div class="stats-mode-row">
+        <div class="stats-mode-icon">⚡</div>
+        <div class="stats-mode-name">Rush</div>
+        <div class="stats-mode-vals">
+          <span id="st-rushGames">0</span> played &nbsp;·&nbsp; <span id="st-rushWins">0</span> wins
+        </div>
+        <div class="stats-mode-wr" id="st-rushWr">0%</div>
+      </div>
+      <div class="stats-mode-row">
+        <div class="stats-mode-icon">💥</div>
+        <div class="stats-mode-name">Buckshot</div>
+        <div class="stats-mode-vals">
+          <span id="st-buckshotGames">0</span> played &nbsp;·&nbsp; <span id="st-buckshotWins">0</span> wins
+        </div>
+        <div class="stats-mode-wr" id="st-buckshotWr">0%</div>
+      </div>
+      <div class="stats-mode-row">
+        <div class="stats-mode-icon">🌀</div>
+        <div class="stats-mode-name">Wild</div>
+        <div class="stats-mode-vals">
+          <span id="st-wildGames">0</span> played &nbsp;·&nbsp; <span id="st-wildWins">0</span> wins
+        </div>
+        <div class="stats-mode-wr" id="st-wildWr">0%</div>
+      </div>
+    </div>
+
+    <div class="stats-section-hdr">👆 Tapping</div>
+    <div class="stats-grid">
+      <div class="stats-card"><div class="stats-card-val" id="st-taps">0</div><div class="stats-card-lbl">Total Taps</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-tapsPerGame">0</div><div class="stats-card-lbl">Avg Taps/Game</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-wrongTaps">0</div><div class="stats-card-lbl">Wrong Taps</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-accuracy">0%</div><div class="stats-card-lbl">Tap Accuracy</div></div>
+    </div>
+
+    <div class="stats-section-hdr">💎 Economy</div>
+    <div class="stats-grid">
+      <div class="stats-card"><div class="stats-card-val" id="st-diamonds">0</div><div class="stats-card-lbl">Current Balance</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-totalDiamonds">0</div><div class="stats-card-lbl">Total Earned</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-skinsBought">0</div><div class="stats-card-lbl">Skins Owned</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-itemsUsed">0</div><div class="stats-card-lbl">Items Used</div></div>
+    </div>
+
+    <div class="stats-section-hdr">⭐ Progression</div>
+    <div class="stats-grid">
+      <div class="stats-card"><div class="stats-card-val" id="st-level">1</div><div class="stats-card-lbl">Level</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-xp">0</div><div class="stats-card-lbl">Total XP</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-achCount">0</div><div class="stats-card-lbl">Achievements</div></div>
+      <div class="stats-card"><div class="stats-card-val" id="st-spectate">0</div><div class="stats-card-lbl">Games Spectated</div></div>
+    </div>
+
+    <div class="stats-section-hdr">🌍 Global Percentile</div>
+    <div style="font-size:11px; color:var(--muted); letter-spacing:1px; margin-bottom:10px;">Live data — compared against all registered players in the database</div>
+    <div class="percentile-card">
+      <div class="percentile-row" id="pctWins"></div>
+      <div class="percentile-row" id="pctWinRate"></div>
+      <div class="percentile-row" id="pctTaps"></div>
+      <div class="percentile-row" id="pctLevel"></div>
+      <div class="percentile-row" id="pctDiamonds"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== PROFILE SCREEN ===== -->
+<div class="screen" id="profileScreen">
+
+  <!-- Header -->
+  <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:20px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title">PROFILE</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <!-- Avatar + Name -->
+  <div class="profile-hero">
+    <div class="avatar-display" id="profileAvatarDisplay" onclick="openAvatarPicker()" style="margin-bottom:10px;">
+      <div id="profileAvatarFrame" class="avatar-frame" style="width:64px;height:64px;border-color:#ff4500;background:#1a0500;font-size:36px;border:3px solid;">🔥</div>
+      <div class="avatar-edit-hint">✏️</div>
+    </div>
+    <div class="profile-name-row">
+      <div class="profile-name" id="profileNameDisplay" onclick="handleProfileNameTap()" style="cursor:pointer;">Player</div>
+      <button class="profile-edit-btn" id="profileEditBtn" onclick="toggleNameEdit()">✏️ Edit</button>
+    </div>
+    <div id="profileWhaleBadge" class="whale-badge" style="display:none;">🐋 WHALE</div>
+    <div id="kothTitleStrip" style="display:none;" class="koth-title-strip">
+      <span id="kothTitleIcon">👑</span>
+      <span class="koth-title-text" id="kothTitleText">KOTH CHAMPION</span>
+      <span class="koth-title-count" id="kothTitleCount">×1</span>
+    </div>
+    <div class="profile-name-edit" id="profileNameEdit" style="display:none;">
+      <input type="text" id="profileNameInput" maxlength="16" placeholder="Enter name..." class="profile-input"/>
+      <button class="profile-save-btn" onclick="savePlayerName()">SAVE</button>
+    </div>
+    <div class="profile-rename-cost" id="profileRenameCost"></div>
+    <div class="profile-stats-mini">
+      <span>Lvl <b id="profileLevel">1</b></span>
+      <span>·</span>
+      <span><b id="profileWins">0</b> Wins</span>
+      <span>·</span>
+      <span><b id="profileGames">0</b> Games</span>
+      <span>·</span>
+      <span>💎 <b id="profileDiamonds">0</b></span>
+      <span>·</span>
+      <span>👥 <b id="profileFriendsCount">0</b></span>
+    </div>
+    <button onclick="shareProfile()" style="margin-top:10px;padding:8px 20px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:20px;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:var(--muted);cursor:pointer;">
+      📤 SHARE PROFILE
+    </button>
+  </div>
+
+  <!-- XP Bar -->
+  <div style="width:100%; margin-bottom:20px;">
+    <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted); letter-spacing:2px; margin-bottom:6px;">
+      <span>XP</span>
+      <span id="profileXPText">0 / 500</span>
+    </div>
+    <div style="width:100%; height:6px; background:var(--border); border-radius:3px; overflow:hidden;">
+      <div id="profileXPBar" style="height:100%; background:linear-gradient(90deg,var(--fire),var(--gold)); width:0%; transition:width 0.5s; border-radius:3px;"></div>
+    </div>
+  </div>
+
+  <!-- Skin tabs -->
+  <div class="skin-tabs" style="flex-wrap:wrap;gap:5px;">
+    <button class="skin-tab active" onclick="switchSkinTab('table', this)" style="flex:1 1 28%;">🎰 Table</button>
+    <button class="skin-tab" onclick="switchSkinTab('tile', this)" style="flex:1 1 28%;">🟥 Tile</button>
+    <button class="skin-tab" onclick="switchSkinTab('tileeffect', this)" style="flex:1 1 28%;">🔥 Effect</button>
+    <button class="skin-tab" onclick="switchSkinTab('tapeffect', this)" style="flex:1 1 28%;">💥 Tap</button>
+    <button class="skin-tab" onclick="switchSkinTab('victory', this)" style="flex:1 1 28%;">🏆 Victory</button>
+    <button class="skin-tab" onclick="switchSkinTab('theme', this)" style="flex:1 1 28%;">🎨 Themes</button>
+  </div>
+
+  <!-- Skin grids -->
+  <div class="skin-grid" id="skinGrid-table"></div>
+  <div class="skin-grid" id="skinGrid-tile" style="display:none;"></div>
+  <div class="skin-grid" id="skinGrid-tileeffect" style="display:none;"></div>
+  <div class="skin-grid" id="skinGrid-tapeffect" style="display:none;"></div>
+  <div class="skin-grid" id="skinGrid-victory" style="display:none;"></div>
+  <div id="skinGrid-theme" style="display:none; flex-direction:column; gap:12px; width:100%;"></div>
+
+  <!-- Redeem code -->
+  <div class="redeem-box">
+    <div class="redeem-title">🎁 Redeem Code</div>
+    <div class="redeem-sub">Enter a promo code to claim diamonds, items or exclusive skins</div>
+    <div class="redeem-row">
+      <input type="text" id="redeemInput" class="profile-input redeem-input"
+        maxlength="20" placeholder="ENTER CODE..." autocomplete="off"
+        oninput="this.value = this.value.toUpperCase()"/>
+      <button class="redeem-btn" onclick="redeemCode()">CLAIM</button>
+    </div>
+    <div id="redeemMsg" class="redeem-msg"></div>
+  </div>
+
+</div>
+
+<!-- ===== KING OF THE HILL SCREEN ===== -->
+<div class="screen" id="kothScreen">
+
+  <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:16px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title">KING OF THE HILL</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <!-- Prize pool box -->
+  <div class="koth-pool-box">
+    <div class="koth-pool-label">🏆 WEEKLY PRIZE POOL</div>
+    <div class="koth-pool-amount" id="kothPoolAmount">💎 0</div>
+    <div class="koth-pool-sub">50% of all entry fees this week</div>
+    <div class="koth-pool-timer" id="kothPoolTimer">Resets in 6d 23h 59m</div>
+  </div>
+
+  <!-- Prize split -->
+  <div class="koth-prizes">
+    <div class="koth-prize-row">
+      <div class="koth-prize-place" style="color:var(--gold);">🥇 1st</div>
+      <div class="koth-prize-pct">60%</div>
+      <div class="koth-prize-val" id="kothPrize1">💎 0</div>
+    </div>
+    <div class="koth-prize-row">
+      <div class="koth-prize-place" style="color:#c0c0c0;">🥈 2nd</div>
+      <div class="koth-prize-pct">25%</div>
+      <div class="koth-prize-val" id="kothPrize2">💎 0</div>
+    </div>
+    <div class="koth-prize-row">
+      <div class="koth-prize-place" style="color:#cd7f32;">🥉 3rd</div>
+      <div class="koth-prize-pct">15%</div>
+      <div class="koth-prize-val" id="kothPrize3">💎 0</div>
+    </div>
+  </div>
+
+  <!-- Weekly leaderboard -->
+  <div class="store-section-hdr">📊 This Week's Standings</div>
+  <div class="lb-list" id="kothWeeklyLb" style="max-height:200px;"></div>
+
+  <!-- Daily top reward -->
+  <div class="store-section-hdr">🎁 Daily Top Reward</div>
+  <div class="koth-daily-reward-box" id="kothDailyRewardBox">
+    <div class="koth-daily-row">
+      <div class="koth-daily-tier" style="color:var(--gold);">🥇 Top 1%</div>
+      <div class="koth-daily-desc">Most wins today</div>
+      <div class="koth-daily-val">💎 125</div>
+    </div>
+    <div class="koth-daily-row">
+      <div class="koth-daily-tier" style="color:#c0c0c0;">🥈 Top 2–3%</div>
+      <div class="koth-daily-desc">Strong daily performance</div>
+      <div class="koth-daily-val">💎 75</div>
+    </div>
+    <div class="koth-daily-row">
+      <div class="koth-daily-tier" style="color:#cd7f32;">🥉 Top 4–5%</div>
+      <div class="koth-daily-desc">Active daily player</div>
+      <div class="koth-daily-val">💎 25</div>
+    </div>
+    <div class="koth-daily-timer-row">
+      <span style="color:var(--muted); font-size:11px; letter-spacing:1px;">⏱ Resets in </span>
+      <span style="color:var(--fire2); font-size:11px; letter-spacing:1px;" id="kothDailyTimer">23h 59m</span>
+      <span style="color:var(--muted); font-size:11px; letter-spacing:1px;"> · Your rank today: </span>
+      <span style="color:var(--diamond); font-size:11px; letter-spacing:1px;" id="kothDailyRank">—</span>
+    </div>
+  </div>
+
+  <!-- Claim daily reward button (shown if eligible) -->
+  <div id="kothDailyClaimWrap" style="display:none; width:100%; margin-bottom:8px;">
+    <button class="btn-play" onclick="claimKothDailyReward()" style="background:linear-gradient(135deg,var(--gold),var(--fire2));">
+      🎁 CLAIM DAILY REWARD
+    </button>
+  </div>
+
+  <!-- Your stats -->
+  <div class="koth-your-stats">
+    <div class="koth-stat">
+      <div class="koth-stat-val" id="kothYourWins">0</div>
+      <div class="koth-stat-lbl">Your Wins</div>
+    </div>
+    <div class="koth-stat">
+      <div class="koth-stat-val" id="kothYourRank">#—</div>
+      <div class="koth-stat-lbl">Your Rank</div>
+    </div>
+    <div class="koth-stat">
+      <div class="koth-stat-val" id="kothYourPool">💎 0</div>
+      <div class="koth-stat-lbl">Contributed</div>
+    </div>
+  </div>
+
+  <!-- Entry info -->
+  <div class="koth-entry-info">
+    <div style="font-size:13px; color:var(--muted); margin-bottom:12px; text-align:center; letter-spacing:1px; line-height:1.6;">
+      Entry fee: <b style="color:var(--diamond);">💎 50</b> per game<br>
+      50% goes to prize pool · 50% to the house<br>
+      Most wins this week wins the pool
+    </div>
+    <div class="koth-balance">Your balance: 💎 <span id="kothBalance">0</span></div>
+  </div>
+
+  <button class="btn-play" id="kothPlayBtn" onclick="startKoth()" style="margin-bottom:10px;">👑 ENTER — 💎 50</button>
+  <div id="kothInsufficientMsg" style="display:none; color:var(--red); font-size:12px; letter-spacing:2px; text-align:center;">Not enough diamonds! Need 💎 50</div>
+
+</div>
+
+<!-- ===== WILD ITEMS SCREEN ===== -->
+<div class="screen" id="wildScreen">
+  <div style="position:relative; display:inline-block;">
+    <div class="logo" style="font-size:42px; margin-bottom:4px;">WILD</div>
+    <div class="secret-tile" style="bottom:-10px; left:50%; transform:translateX(-50%);" onclick="triggerSecretTile('phantom')"></div>
+  </div>
+  <div class="tagline" style="margin-bottom:24px;">Choose your items before the battle</div>
+
+  <div class="section-label">SELECT UP TO 2 ITEMS</div>
+  <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:32px;" id="wildItemList">
+
+    <!-- Crystal Ball — unlocked from start -->
+    <div class="item-card" id="item-crystal" onclick="toggleItem('crystal', this)">
+      <div class="item-icon">🔮</div>
+      <div class="item-info">
+        <div class="item-name">Crystal Ball</div>
+        <div class="item-desc">Every round shows 3 glowing tiles — one of them will ignite. Helps you prepare. Lasts the whole game.</div>
+      </div>
+      <div class="item-badge">Every round</div>
+    </div>
+
+    <!-- Caltrops — unlocked at level 3 -->
+    <div class="item-card wild-locked" id="item-caltrops" data-unlock-level="3" onclick="wildItemClick('caltrops', this)">
+      <div class="item-icon">⚙️</div>
+      <div class="item-info">
+        <div class="item-name">Caltrops <span class="item-lock-badge" id="lock-caltrops">🔒 Level 3</span></div>
+        <div class="item-desc">Locks half the remaining players for 1 second. 6 or more players must remain.</div>
+      </div>
+      <div class="item-badge">1× · 6+ players</div>
+      <div class="item-mode-row" id="mode-caltrops" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">WHEN:</span>
+        <button class="mode-btn" data-mode="START" onclick="setLoadoutMode('caltrops','START',event)">▶ START</button>
+        <button class="mode-btn" data-mode="ELIM" onclick="setLoadoutMode('caltrops','ELIM',event)">💀 ELIM</button>
+        <button class="mode-btn" data-mode="RANDOM" onclick="setLoadoutMode('caltrops','RANDOM',event)">🎲 RANDOM</button>
+      </div>
+      <div class="item-qty-row" id="qty-row-caltrops" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">USE:</span>
+        <button class="qty-btn" onclick="changeItemQty('caltrops',-1,event)">−</button>
+        <span id="qty-val-caltrops" style="font-family:'Bebas Neue';font-size:22px;min-width:32px;text-align:center;color:var(--gold);">1</span>
+        <button class="qty-btn" onclick="changeItemQty('caltrops',1,event)">+</button>
+        <span id="qty-info-caltrops" style="font-size:11px;color:var(--muted);"></span>
+      </div>
+    </div>
+
+    <!-- Shadow Tile — unlocked at level 5 -->
+    <div class="item-card wild-locked" id="item-shadow_tile" data-unlock-level="5" onclick="wildItemClick('shadow_tile', this)">
+      <div class="item-icon">🌑</div>
+      <div class="item-info">
+        <div class="item-name">Shadow Tile <span class="item-lock-badge" id="lock-shadow_tile">🔒 Level 5</span></div>
+        <div class="item-desc">Next round all others see 2 tiles — one real, one trap that locks 1s. You see only the real tile. 6 or more players must remain.</div>
+      </div>
+      <div class="item-badge">1× · 6+ players</div>
+      <div class="item-mode-row" id="mode-shadow_tile" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">WHEN:</span>
+        <button class="mode-btn" data-mode="START" onclick="setLoadoutMode('shadow_tile','START',event)">▶ START</button>
+        <button class="mode-btn" data-mode="ELIM" onclick="setLoadoutMode('shadow_tile','ELIM',event)">💀 ELIM</button>
+        <button class="mode-btn" data-mode="RANDOM" onclick="setLoadoutMode('shadow_tile','RANDOM',event)">🎲 RANDOM</button>
+      </div>
+      <div class="item-qty-row" id="qty-row-shadow_tile" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">USE:</span>
+        <button class="qty-btn" onclick="changeItemQty('shadow_tile',-1,event)">−</button>
+        <span id="qty-val-shadow_tile" style="font-family:'Bebas Neue';font-size:22px;min-width:32px;text-align:center;color:var(--gold);">1</span>
+        <button class="qty-btn" onclick="changeItemQty('shadow_tile',1,event)">+</button>
+        <span id="qty-info-shadow_tile" style="font-size:11px;color:var(--muted);"></span>
+      </div>
+    </div>
+
+    <!-- Pepper Spray — unlocked at level 8 -->
+    <div class="item-card wild-locked" id="item-pepper_spray" data-unlock-level="8" onclick="wildItemClick('pepper_spray', this)">
+      <div class="item-icon">🌶️</div>
+      <div class="item-info">
+        <div class="item-name">Pepper Spray <span class="item-lock-badge" id="lock-pepper_spray">🔒 Level 8</span></div>
+        <div class="item-desc">4 tiles flash bright red for 2 seconds — fake burning tiles that confuse everyone. 6 or more players must remain.</div>
+      </div>
+      <div class="item-badge">1× · 6+ players</div>
+      <div class="item-mode-row" id="mode-pepper_spray" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">WHEN:</span>
+        <button class="mode-btn" data-mode="START" onclick="setLoadoutMode('pepper_spray','START',event)">▶ START</button>
+        <button class="mode-btn" data-mode="ELIM" onclick="setLoadoutMode('pepper_spray','ELIM',event)">💀 ELIM</button>
+        <button class="mode-btn" data-mode="RANDOM" onclick="setLoadoutMode('pepper_spray','RANDOM',event)">🎲 RANDOM</button>
+      </div>
+      <div class="item-qty-row" id="qty-row-pepper_spray" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">USE:</span>
+        <button class="qty-btn" onclick="changeItemQty('pepper_spray',-1,event)">−</button>
+        <span id="qty-val-pepper_spray" style="font-family:'Bebas Neue';font-size:22px;min-width:32px;text-align:center;color:var(--gold);">1</span>
+        <button class="qty-btn" onclick="changeItemQty('pepper_spray',1,event)">+</button>
+        <span id="qty-info-pepper_spray" style="font-size:11px;color:var(--muted);"></span>
+      </div>
+    </div>
+
+    <!-- Muscle Relaxant — unlocked at level 12 -->
+    <div class="item-card wild-locked" id="item-muscle_relaxant" data-unlock-level="12" onclick="wildItemClick('muscle_relaxant', this)">
+      <div class="item-icon">💊</div>
+      <div class="item-info">
+        <div class="item-name">Muscle Relaxant <span class="item-lock-badge" id="lock-muscle_relaxant">🔒 Level 12</span></div>
+        <div class="item-desc">Half the players must double-tap the burning tile. First tap just dims the tile — second tap counts. 6 or more players must remain.</div>
+      </div>
+      <div class="item-badge">1× · 6+ players</div>
+      <div class="item-mode-row" id="mode-muscle_relaxant" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">WHEN:</span>
+        <button class="mode-btn" data-mode="START" onclick="setLoadoutMode('muscle_relaxant','START',event)">▶ START</button>
+        <button class="mode-btn" data-mode="ELIM" onclick="setLoadoutMode('muscle_relaxant','ELIM',event)">💀 ELIM</button>
+        <button class="mode-btn" data-mode="RANDOM" onclick="setLoadoutMode('muscle_relaxant','RANDOM',event)">🎲 RANDOM</button>
+      </div>
+      <div class="item-qty-row" id="qty-row-muscle_relaxant" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;">USE:</span>
+        <button class="qty-btn" onclick="changeItemQty('muscle_relaxant',-1,event)">−</button>
+        <span id="qty-val-muscle_relaxant" style="font-family:'Bebas Neue';font-size:22px;min-width:32px;text-align:center;color:var(--gold);">1</span>
+        <button class="qty-btn" onclick="changeItemQty('muscle_relaxant',1,event)">+</button>
+        <span id="qty-info-muscle_relaxant" style="font-size:11px;color:var(--muted);"></span>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="width:100%; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:24px; font-size:13px; color:var(--muted); line-height:1.5;">
+    <b style="color:var(--text);">▶ START</b> — fires 2s after the game begins &nbsp;·&nbsp; <b style="color:var(--text);">💀 ELIM</b> — fires after each elimination &nbsp;·&nbsp; <b style="color:var(--text);">🎲 RANDOM</b> — fires at a random moment. Crystal Ball is always active every round. Items activate automatically — no tapping required!
+    <div style="margin-top:8px;color:var(--fire2);font-size:12px;letter-spacing:1px;">🔒 Items unlock as you level up — earn XP by playing!</div>
+  </div>
+
+  <button class="btn-play" onclick="confirmWildItems()" style="margin-bottom:10px;">⚡ FIND MATCH</button>
+  <button class="btn-secondary" onclick="showScreen('menuScreen')">← BACK</button>
+</div>
+
+<!-- ===== LOBBY SCREEN ===== -->
+<div class="screen" id="lobbyScreen">
+  <div class="lobby-title" id="lobbyModeTitle">RUSH MODE</div>
+  <div id="lobbyPingBadge" style="display:none; font-size:11px; letter-spacing:2px; color:var(--green); background:rgba(0,255,136,0.1); border:1px solid rgba(0,255,136,0.2); border-radius:20px; padding:3px 10px; margin-bottom:4px;"></div>
+  <div class="lobby-sub" id="lobbyGridSub">5×5 Grid · 1 Min</div>
+
+  <div class="players-grid" id="playersGrid"></div>
+
+  <div id="lobbyStatusWrap" style="width:100%; margin-bottom:16px;">
+    <div id="lobbyStatusText" style="font-size:12px; letter-spacing:3px; color:var(--muted); text-align:center; text-transform:uppercase; margin-bottom:8px;">🔍 Searching for players...</div>
+    <div style="width:100%; height:3px; background:var(--border); border-radius:2px; overflow:hidden;">
+      <div id="lobbySearchBar" style="height:100%; background:var(--fire); width:0%; transition:width 1s linear; border-radius:2px;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:6px;">
+      <span style="font-size:11px; color:var(--muted);">0s</span>
+      <span style="font-size:11px; color:var(--muted);">15s</span>
+    </div>
+  </div>
+
+  <div id="lobbyCountdownWrap" style="display:none; text-align:center;">
+    <div class="lobby-timer-label">STARTING IN</div>
+    <div class="lobby-timer" id="lobbyTimer">5</div>
+  </div>
+
+  <div style="margin-top:24px; width:100%;">
+    <button class="btn-secondary" onclick="cancelLobby()">← BACK</button>
+  </div>
+</div>
+<div class="screen" id="gameScreen">
+  <div class="game-header">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button onclick="confirmQuitGame()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 10px;font-size:16px;color:var(--muted);cursor:pointer;line-height:1;">✕</button>
+      <div class="game-mode-badge" id="gameModeBadge">⚡ RUSH</div>
+    </div>
+    <div class="game-timer" id="gameTimer">1:00</div>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+      <div class="players-left">👥 <span id="playersLeftCount">10</span></div>
+      <div id="pendingWrap" style="display:none; font-size:11px; letter-spacing:1px; color:var(--fire);">
+        ⏳ <span id="pendingCount">0</span> not tapped
+      </div>
+    </div>
+  </div>
+
+  <!-- Quit confirm dialog -->
+  <div class="buy-dialog-overlay" id="quitDialogOverlay">
+    <div class="buy-dialog">
+      <div class="buy-dialog-title">QUIT GAME?</div>
+      <div class="buy-dialog-sub" style="text-align:center;color:var(--muted);font-size:13px;letter-spacing:1px;margin-bottom:8px;">
+        You'll be counted as eliminated.<br>Progress this round will be lost.
+      </div>
+      <div style="display:flex;gap:8px;width:100%;margin-top:8px;">
+        <button class="buy-dialog-cancel" style="flex:1;" onclick="closeQuitDialog()">CONTINUE</button>
+        <button class="buy-dialog-confirm" style="flex:1;background:var(--red);" onclick="quitToMenu()">QUIT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Danger banner (final 3) -->
+  <div class="danger-banner" id="dangerBanner">
+    <div class="danger-banner-text">⚠️ FINAL 5 — SUDDEN DEATH</div>
+    <div class="danger-players" id="dangerPlayersLeft"></div>
+  </div>
+
+  <!-- KOTH in-game banner -->
+  <div class="koth-game-banner" id="kothGameBanner" style="display:none;">
+    <div class="koth-game-pool">👑 Pool: <span id="kothGamePool">💎 0</span></div>
+    <div class="koth-game-wins">Your wins this week: <span id="kothGameWins">0</span></div>
+  </div>
+
+  <div id="tileGrid"></div>
+  <!-- Wild match loadout HUD — shows equipped items + remaining match uses -->
+  <div id="wildMatchHud" style="display:none;"></div>
+
+  <!-- Wild mode item HUD -->
+  <div class="item-hud" id="itemHud" style="display:none;">
+    <div class="item-hud-btn" id="hudCrystal">
+      <div class="item-hud-icon">🔮</div>
+      <div class="item-hud-label">CRYSTAL</div>
+      <div id="hudCrystalCount" style="font-family:'Bebas Neue',sans-serif; font-size:14px; color:var(--gold);">x0</div>
+    </div>
+    <div class="item-hud-btn" id="hudCaltrops" onclick="toggleCaltropsPrimed()" style="cursor:pointer;">
+      <div class="item-hud-icon">⚙️</div>
+      <div class="item-hud-label" id="hudCaltropsLabel">CALTROPS</div>
+      <div id="hudCaltropsCount" style="font-family:'Bebas Neue',sans-serif; font-size:14px; color:var(--gold);">x0</div>
+    </div>
+    <div class="item-hud-btn" id="hudShadowTile" onclick="toggleShadowTilePrimed()" style="cursor:pointer;">
+      <div class="item-hud-icon">🌑</div>
+      <div class="item-hud-label" id="hudShadowTileLabel">SHADOW</div>
+      <div id="hudShadowTileCount" style="font-family:'Bebas Neue',sans-serif; font-size:14px; color:var(--gold);">x0</div>
+    </div>
+    <div class="item-hud-btn" id="hudPepperSpray" onclick="togglePepperSprayPrimed()" style="cursor:pointer;">
+      <div class="item-hud-icon">🌶️</div>
+      <div class="item-hud-label" id="hudPepperSprayLabel">PEPPER</div>
+      <div id="hudPepperSprayCount" style="font-family:'Bebas Neue',sans-serif; font-size:14px; color:var(--gold);">x0</div>
+    </div>
+    <div class="item-hud-btn" id="hudMuscleRelaxant" onclick="toggleMuscleRelaxantPrimed()" style="cursor:pointer;">
+      <div class="item-hud-icon">💊</div>
+      <div class="item-hud-label" id="hudMuscleRelaxantLabel">MUSCLE</div>
+      <div id="hudMuscleRelaxantCount" style="font-family:'Bebas Neue',sans-serif; font-size:14px; color:var(--gold);">x0</div>
+    </div>
+  </div>
+
+  <!-- Inactivity warning bar — disabled, handled by round deadline -->
+  <div id="inactivityBar" style="display:none; width:100%; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+      <span style="font-size:11px; letter-spacing:3px; color:var(--red); text-transform:uppercase;">⚠ TAP OR BE ELIMINATED</span>
+      <span id="inactivityCount" style="font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--red); letter-spacing:2px;">5</span>
+    </div>
+    <div style="width:100%; height:4px; background:var(--border); border-radius:2px; overflow:hidden;">
+      <div id="inactivityFill" style="height:100%; background:var(--red); width:100%; transition:width 1s linear; border-radius:2px;"></div>
+    </div>
+  </div>
+
+  <div class="bot-feed" id="botFeed">
+    <div class="feed-dot"></div>
+    <span id="feedText">Waiting for action...</span>
+  </div>
+</div>
+
+<!-- ===== RESULT SCREEN ===== -->
+<div class="screen" id="resultScreen">
+  <div class="result-crown" id="resultCrown" onclick="handleLogoTap('midas')" style="cursor:pointer; position:relative;">🏆
+    <div class="secret-tile" style="top:0;right:-20px;width:30px;height:30px;" onclick="event.stopPropagation(); triggerSecretTile('midas_touch')"></div>
+  </div>
+
+  <!-- Winner display -->
+  <div class="winner-display" id="winnerDisplay" style="display:none;">
+    <div class="winner-avatar-frame" id="winnerAvatarFrame">🔥</div>
+    <div class="winner-name" id="winnerName">Player</div>
+  </div>
+
+  <div class="result-title" id="resultTitle">VICTORY!</div>
+  <div class="result-place" id="resultPlace">1ST PLACE</div>
+
+  <!-- Post-game highlight -->
+  <div class="highlight-row" id="gameHighlight" style="display:none;">
+    <div class="highlight-icon" id="highlightIcon">⚡</div>
+    <div class="highlight-body">
+      <div class="highlight-label">YOUR HIGHLIGHT</div>
+      <div class="highlight-val" id="highlightVal">—</div>
+    </div>
+  </div>
+
+  <div class="rewards-box">
+    <div class="rewards-title">Round Rewards</div>
+    <div class="reward-row">
+      <div class="reward-lbl">💎 Diamonds</div>
+      <div class="reward-val diamond" id="rewardDiamonds">+80</div>
+    </div>
+    <div class="reward-row" id="rewardCapRow" style="display:none;">
+      <div class="reward-lbl" style="color:var(--muted);">Daily cap</div>
+      <div class="reward-val" id="rewardCapVal" style="color:var(--muted); font-size:14px;">300/300</div>
+    </div>
+    <div class="reward-row">
+      <div class="reward-lbl">⭐ XP</div>
+      <div class="reward-val xp" id="rewardXP">+200</div>
+    </div>
+    <div class="reward-row">
+      <div class="reward-lbl">🏅 Placement</div>
+      <div class="reward-val" id="rewardPlace" style="color:var(--gold)">1st</div>
+    </div>
+    <div class="reward-row" id="rewardItemRow" style="display:none;">
+      <div class="reward-lbl" id="rewardItemLabel">🎁 Item Bonus</div>
+      <div class="reward-val" id="rewardItemVal" style="color:var(--fire2)">+1 Crystal Ball</div>
+    </div>
+    <div class="reward-row" id="rewardLevelRow" style="display:none;">
+      <div class="reward-lbl">🎉 Level Up!</div>
+      <div class="reward-val" id="rewardLevelVal" style="color:var(--green)">→ Lvl 2</div>
+    </div>
+  </div>
+
+  <div class="leaderboard" id="leaderboard"></div>
+
+  <div class="game-summary" id="gameSummary" style="display:none;">
+    <div class="summary-title">GAME SUMMARY</div>
+    <div class="summary-table" id="summaryTable"></div>
+  </div>
+
+  <button class="btn-play" onclick="playAgain()" style="margin-bottom:10px;">⚡ PLAY AGAIN</button>
+  <button class="btn-share" onclick="shareResult()">📤 SHARE RESULT</button>
+  <button class="btn-secondary" onclick="showScreen('menuScreen')">← MAIN MENU</button>
+</div>
+
+<!-- ===== ELIMINATED OVERLAY ===== -->
+<div class="elim-overlay" id="elimOverlay">
+  <div class="elim-emoji">💀</div>
+  <div class="elim-text">ELIMINATED!</div>
+  <div class="elim-sub">You tapped too late</div>
+  <div class="elim-place" id="elimPlace">12TH PLACE</div>
+</div>
+
+<!-- ===== WATCHING BAR ===== -->
+<div class="watch-bar" id="watchBar">
+  <div class="watch-info">
+    <div class="watch-label">SPECTATING · YOU WERE ELIMINATED</div>
+    <div class="watch-place" id="watchPlace">12TH PLACE · WATCHING FINAL 3</div>
+  </div>
+  <div style="display:flex; gap:8px; flex-shrink:0;">
+    <button class="watch-leave" onclick="leaveSpectate()" style="background:linear-gradient(135deg,var(--fire),var(--fire2));">⚡ NEW GAME</button>
+    <button class="watch-leave" onclick="leaveToMenu()" style="background:var(--panel); border:1px solid var(--border); color:var(--muted);">☰ MENU</button>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div class="toast" id="toast"></div>
+
+<!-- ===== FIRST GAME HINT ===== -->
+<div class="first-hint-overlay" id="firstHintOverlay" style="display:none;">
+  <div class="first-hint-arrow" id="firstHintArrow">⬇️</div>
+  <div class="first-hint-box">
+    <div class="first-hint-text">🔥 TAP THE BURNING TILE!</div>
+    <div class="first-hint-sub">Last to tap is eliminated</div>
+  </div>
+</div>
+
+<!-- ===== COUNTDOWN OVERLAY ===== -->
+<div class="countdown-overlay" id="countdownOverlay" style="display:none;">
+  <div class="countdown-num" id="countdownNum">3</div>
+  <div class="countdown-label">GET READY</div>
+</div>
+
+<!-- ===== SKIN PREVIEW MODAL ===== -->
+<div class="skin-preview-overlay" id="skinPreviewOverlay" onclick="closeSkinPreview()">
+  <div class="skin-preview-modal" onclick="event.stopPropagation()">
+    <div class="skin-preview-header">
+      <div class="skin-preview-title" id="previewTitle">Fire</div>
+      <div class="skin-preview-sub" id="previewSub">Tile Effect</div>
+    </div>
+    <!-- Mini game grid -->
+    <div class="skin-preview-arena" id="previewArena">
+      <div id="previewGrid" class="preview-grid"></div>
+    </div>
+    <div class="skin-preview-label" id="previewLabel">Watch the preview...</div>
+    <button class="buy-dialog-cancel" style="width:100%; margin-top:8px;" onclick="closeSkinPreview()">CLOSE</button>
+  </div>
+</div>
+
+<!-- ===== BUY DIALOG ===== -->
+<div class="buy-dialog-overlay" id="buyDialogOverlay" onclick="closeBuyDialog()">
+  <div class="buy-dialog" onclick="event.stopPropagation()">
+    <div class="buy-dialog-icon" id="buyDialogIcon">💥</div>
+    <div class="buy-dialog-name" id="buyDialogName">Explosion</div>
+    <div class="buy-dialog-price">💎 <span id="buyDialogPrice">500</span></div>
+    <div class="buy-dialog-balance">Your balance: 💎 <span id="buyDialogBalance">0</span></div>
+    <div style="display:flex; gap:10px; width:100%; margin-top:4px;">
+      <button class="buy-dialog-cancel" onclick="closeBuyDialog()">CANCEL</button>
+      <button class="buy-dialog-confirm" onclick="confirmBuy()">BUY</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOCK OVERLAY ===== -->
+<div class="lock-overlay" id="lockOverlay">
+  <div class="lock-icon">🔒</div>
+  <div class="lock-count">1.0</div>
+  <div class="lock-label">WRONG TILE!</div>
+</div>
+
+
+<!-- ===== RING WON POPUP ===== -->
+<div id="ringWonOverlay" onclick="closeRingWonPopup()" style="display:none;position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,0.82);display:none;align-items:center;justify-content:center;backdrop-filter:blur(6px);">
+  <div class="ring-won-popup" onclick="event.stopPropagation()">
+    <div class="ring-won-eyebrow">YOU GOT</div>
+    <div class="ring-won-img-wrap" id="ringWonImg"></div>
+    <div class="ring-won-name" id="ringWonName"></div>
+    <div class="ring-won-rarity" id="ringWonRarity"></div>
+    <div class="ring-won-desc" id="ringWonDesc"></div>
+    <button class="ring-won-btn" id="ringWonBtn" onclick="closeRingWonPopup()">NICE!</button>
+  </div>
+</div>
+
+<!-- Ring Inventory Overlay (bottom-sheet) -->
+<div id="ringInventoryOverlay" onclick="closeRingInventory()" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,0.72);">
+  <div onclick="event.stopPropagation()" style="position:absolute;bottom:0;left:0;right:0;background:var(--bg);border-radius:20px 20px 0 0;padding:16px 16px 32px;max-height:78vh;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;font-family:'Cinzel Decorative','Cinzel',serif;font-size:14px;letter-spacing:2px;color:#ffd700;text-shadow:0 0 8px rgba(255,180,0,0.45);">
+        <img src="img/ring-inventory-icon.png" style="width:24px;height:24px;object-fit:contain;" draggable="false">
+        RING INVENTORY
+      </div>
+      <button onclick="closeRingInventory()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;">✕</button>
+    </div>
+    <div id="ringInventoryList" style="display:flex;flex-direction:column;gap:6px;overflow-y:scroll;overflow-x:hidden;flex:1;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;"></div>
+  </div>
+</div>
+
+<!-- Gauntlet Mode Teaser Popup -->
+<div id="gauntletModePopup" onclick="hideGauntletModeTeaser()" style="
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,0.85);align-items:center;justify-content:center;
+  padding:20px;box-sizing:border-box;">
+  <div onclick="event.stopPropagation()" style="
+    position:relative;max-width:500px;width:100%;
+    border-radius:18px;overflow:hidden;
+    border:2px solid rgba(180,100,255,0.6);
+    box-shadow:0 0 60px rgba(140,0,255,0.5);">
+    <img src="img/gauntlet-mode-teaser.png" alt="Gauntlet Mode" style="width:100%;display:block;">
+    <button onclick="hideGauntletModeTeaser()" style="
+      position:absolute;top:10px;right:10px;
+      background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.3);
+      color:#fff;font-size:20px;width:36px;height:36px;
+      border-radius:50%;cursor:pointer;line-height:1;">✕</button>
+  </div>
+</div>
+
+
+<!-- ===== PUBLIC PLAYER PROFILE OVERLAY ===== -->
+<div id="playerProfileOverlay" style="display:none;"
+  onclick="_ppBackdropClick(event)"
+  class="pp-overlay">
+  <div class="pp-card">
+    <button class="pp-close-btn" onclick="closePublicProfile()">✕</button>
+    <div id="ppBody" class="pp-body"></div>
+  </div>
+</div>
+
+  <!-- ===== JavaScript — load order matters (global scope, no bundler) ===== -->
+
+  <!-- Foundation: state, save/load, avatars, XP, gameState -->
+  <script src="js/app.js"></script>
+
+  <!-- Skin data (SKINS object, applySkins, whale tap) -->
+  <script src="js/skins/tileSkins.js"></script>
+  <script src="js/skins/tapEffects.js"></script>
+  <script src="js/skins/tableSkins.js"></script>
+  <script src="js/skins/tileEffects.js"></script>
+
+  <!-- UI utilities (showToast, showScreen) -->
+  <script src="js/ui/popups.js"></script>
+  <script src="js/ui/menus.js"></script>
+
+  <!-- Game constants: bot data, ring data, gauntlet core -->
+  <script src="js/game/bots.js"></script>
+  <script src="js/modes/gauntlet.js"></script>
+
+  <!-- Systems -->
+  <script src="js/systems/settings.js"></script>
+  <script src="js/systems/audio.js"></script>
+  <script src="js/systems/xp.js"></script>
+  <script src="js/systems/rewards.js"></script>
+  <script src="js/systems/tickets.js"></script>
+  <script src="js/systems/missions.js"></script>
+  <script src="js/systems/dailyLogin.js"></script>
+  <script src="js/systems/ads.js"></script>
+  <script src="js/systems/version.js"></script>
+  <script src="js/systems/levels.js"></script>
+
+  <!-- UI screens -->
+  <script src="js/ui/shop.js"></script>
+  <script src="js/ui/inventory.js"></script>
+  <script src="js/ui/profile.js"></script>
+  <script src="js/ui/friends.js"></script>
+  <script src="js/ui/publicProfile.js"></script>
+  <script src="js/ui/victoryScreen.js"></script>
+  <script src="js/ui/gauntletUI.js"></script>
+  <script src="js/ui/news.js"></script>
+  <script src="js/ui/inbox.js"></script>
+  <script src="js/ui/notificationCenter.js"></script>
+
+  <!-- Game modes -->
+  <script src="js/modes/wild.js"></script>
+  <script src="js/modes/rush.js"></script>
+  <script src="js/modes/buckshot.js"></script>
+
+  <!-- Game engine -->
+  <script src="js/game/tileSystem.js"></script>
+  <script src="js/game/effects.js"></script>
+  <script src="js/game/rooms.js"></script>
+  <script src="js/game/matchmaking.js"></script>
+  <script src="js/game/gameLoop.js"></script>
+
+  <!-- Multiplayer -->
+  <script src="js/multiplayer/colyseus.js"></script>
+  <script src="js/multiplayer/roomHandlers.js"></script>
+  <script src="js/multiplayer/networkEvents.js"></script>
+
+</body>
+</html>
