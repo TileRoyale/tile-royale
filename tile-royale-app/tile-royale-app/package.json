@@ -21,6 +21,7 @@
     "@capacitor/status-bar": "^5.0.7"
   },
   "devDependencies": {
+    "sharp": "^0.34.5",
     "typescript": "^6.0.3"
   }
 }
