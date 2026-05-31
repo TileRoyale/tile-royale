@@ -176,9 +176,6 @@ function setupRoomListeners(room) {
     if (shadowTileActive && gameState.mode === 'wild') {
       applyShadowTileToRound(tileIdx);
     }
-    // Reset muscle relaxant — effect lasts only until next tile ignites
-    muscleRelaxantActive = false;
-    muscleRelaxantFirstTapped.clear();
   });
 
   room.state.listen("burningTile", (tileIdx) => {
@@ -269,6 +266,9 @@ function setupRoomListeners(room) {
   });
 
   room.onMessage("player_eliminated", (data) => {
+    // Round ended — clear muscle relaxant so it doesn't carry into next round
+    muscleRelaxantActive = false;
+    muscleRelaxantFirstTapped.clear();
     if (data.sessionId === room.sessionId) {
       // WE were eliminated
       playerEliminated = true;
@@ -583,6 +583,7 @@ function endGameFromServer(data) {
     let diamonds = 0, xp = 0;
     if (data.won) {
       gameState.wins = (gameState.wins || 0) + 1;
+      if (typeof recordModeWin === 'function') recordModeWin(gameState.mode);
       diamonds = Math.min(6, dailyLeft);
       xp = 120; // 1st place
     } else if (place === 2) {
@@ -701,6 +702,11 @@ function tapTile(idx) {
     // Muscle relaxant: first tap dims tile, second tap counts
     if (muscleRelaxantActive && handleMuscleRelaxantFirstTap(idx)) return;
     currentRoom.send('tap', { tileIndex: idx });
+    // Record KOTH reaction time for fastest clicker reward
+    if (gameState.mode === 'koth' && practiceTileIgniteTime) {
+      const reactionMs = Date.now() - practiceTileIgniteTime;
+      if (typeof recordKothReactionTime === 'function') recordKothReactionTime(reactionMs);
+    }
     // Optimistic UI
     if (tileStates[idx] === 'burning' || currentRoom?.state?.burningTile === idx) {
       tileStates[idx] = 'tapped';

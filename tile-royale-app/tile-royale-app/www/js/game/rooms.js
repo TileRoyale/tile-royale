@@ -38,9 +38,9 @@ function getKothSimulatedPool() {
 
 // ===== KOTH DAILY TOP REWARD =====
 const KOTH_DAILY_REWARDS = [
-  { tier: 'TOP 1%',   maxPct: 1,  diamonds: 125, icon: '🥇', color: 'var(--gold)' },
-  { tier: 'TOP 2–3%', maxPct: 3,  diamonds: 75,  icon: '🥈', color: '#c0c0c0' },
-  { tier: 'TOP 4–5%', maxPct: 5,  diamonds: 25,  icon: '🥉', color: '#cd7f32' },
+  { tier: 'TOP 1%', maxPct: 1,  diamonds: 125, icon: '🥇', color: 'var(--gold)' },
+  { tier: 'TOP 3%', maxPct: 3,  diamonds: 75,  icon: '🥈', color: '#c0c0c0' },
+  { tier: 'TOP 5%', maxPct: 5,  diamonds: 25,  icon: '🥉', color: '#cd7f32' },
 ];
 
 function getKothDailyKey() {
@@ -158,6 +158,60 @@ function checkKothDailyRewardOnOpen() {
   }
 }
 
+// ===== KOTH FASTEST CLICKER =====
+
+function recordKothReactionTime(ms) {
+  if (!ms || ms <= 0 || ms > 5000) return;
+  const daily = getKothDailyData();
+  if (!daily.bestReactionMs || ms < daily.bestReactionMs) daily.bestReactionMs = ms;
+  const week = getKothWeekData();
+  if (!week.bestReactionMs || ms < week.bestReactionMs) week.bestReactionMs = ms;
+  saveState();
+}
+
+function renderKothFastestSection() {
+  const daily = getKothDailyData();
+  const week  = getKothWeekData();
+  const pool  = getKothSimulatedPool();
+  const weeklyPrize = Math.floor(pool * 0.10);
+
+  const bestEl = document.getElementById('kothFastestBest');
+  if (bestEl) bestEl.textContent = daily.bestReactionMs ? `Your best today: ${daily.bestReactionMs}ms` : 'Play KOTH to track your speed!';
+
+  const weeklyPrizeEl = document.getElementById('kothFastestWeeklyPrize');
+  if (weeklyPrizeEl) weeklyPrizeEl.textContent = `💎 ${weeklyPrize.toLocaleString()}`;
+
+  const weeklyAmtEl = document.getElementById('kothFastestWeeklyClaimAmt');
+  if (weeklyAmtEl) weeklyAmtEl.textContent = weeklyPrize.toLocaleString();
+
+  const dailyWrap = document.getElementById('kothFastestDailyClaimWrap');
+  if (dailyWrap) dailyWrap.style.display = (daily.bestReactionMs && !daily.fastestClaimed) ? 'block' : 'none';
+
+  const weeklyWrap = document.getElementById('kothFastestWeeklyClaimWrap');
+  if (weeklyWrap) weeklyWrap.style.display = (week.bestReactionMs && !week.fastestClaimed && weeklyPrize > 0) ? 'block' : 'none';
+}
+
+function claimKothFastestDaily() {
+  const daily = getKothDailyData();
+  if (daily.fastestClaimed || !daily.bestReactionMs) { showToast('No fastest clicker reward to claim!', 'var(--muted)'); return; }
+  daily.fastestClaimed = true;
+  gameState.diamonds = (gameState.diamonds || 0) + 50;
+  saveState(); updateMenuStats(); renderKothFastestSection();
+  showToast(`⚡ Fastest Clicker! +💎 50 (${daily.bestReactionMs}ms)`, '#00e5ff');
+  playSound('achieve'); vibrate([50, 50, 200]);
+}
+
+function claimKothFastestWeekly() {
+  const week  = getKothWeekData();
+  const prize = Math.floor(getKothSimulatedPool() * 0.10);
+  if (week.fastestClaimed || !week.bestReactionMs || prize <= 0) { showToast('No weekly fastest reward!', 'var(--muted)'); return; }
+  week.fastestClaimed = true;
+  gameState.diamonds = (gameState.diamonds || 0) + prize;
+  saveState(); updateMenuStats(); renderKothFastestSection();
+  showToast(`⚡ Weekly Fastest! +💎 ${prize} (${week.bestReactionMs}ms best)`, 'var(--gold)');
+  playSound('achieve'); vibrate([50, 50, 200]);
+}
+
 function openKothScreen() {
   const pool = getKothSimulatedPool();
   const weekData = getKothWeekData();
@@ -167,6 +221,7 @@ function openKothScreen() {
   document.getElementById('kothPrize1').textContent = `💎 ${Math.floor(pool * 0.60).toLocaleString()}`;
   document.getElementById('kothPrize2').textContent = `💎 ${Math.floor(pool * 0.25).toLocaleString()}`;
   document.getElementById('kothPrize3').textContent = `💎 ${Math.floor(pool * 0.15).toLocaleString()}`;
+  document.getElementById('kothPrizeFastest').textContent = `💎 ${Math.floor(pool * 0.10).toLocaleString()}`;
 
   // Your stats
   document.getElementById('kothYourWins').textContent = weekData.wins || 0;
@@ -181,6 +236,9 @@ function openKothScreen() {
   // Daily reward section
   renderKothDailySection();
   checkKothDailyRewardOnOpen();
+
+  // Fastest clicker section
+  renderKothFastestSection();
 
   // Entry button
   const canPlay = (gameState.diamonds || 0) >= KOTH_ENTRY_FEE;

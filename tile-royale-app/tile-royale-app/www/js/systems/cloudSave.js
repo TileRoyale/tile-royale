@@ -46,7 +46,15 @@ async function saveToCloud() {
       signal:  AbortSignal.timeout(10000),
     });
     _csSetStatus(r.ok ? 'synced' : 'offline');
-    if (!r.ok) console.warn('[CloudSave] server rejected save:', r.status);
+    if (!r.ok) { console.warn('[CloudSave] server rejected save:', r.status); return; }
+    // If server capped diamonds (tamper detected), apply the corrected value
+    const resp = await r.json().catch(() => null);
+    if (resp?.adjustedDiamonds !== undefined) {
+      console.warn('[CloudSave] economy adjusted by server:', resp.adjustedDiamonds);
+      gameState.diamonds = resp.adjustedDiamonds;
+      try { saveState(); }      catch(e) {}
+      try { updateMenuStats(); } catch(e) {}
+    }
   } catch(e) {
     _csSetStatus('offline');
     console.warn('[CloudSave] save failed:', e?.message || e);
@@ -90,6 +98,10 @@ async function loadFromCloud() {
       // Cloud is newer — restore it
       console.log(`[CloudSave] Restoring cloud save (cloud +${cloudTs - localTs}ms newer)`);
       Object.assign(gameState, data.saveData);
+      // Server-trusted diamond value overrides whatever is in the save blob
+      if (data.trustedDiamonds !== undefined && data.trustedDiamonds !== null) {
+        gameState.diamonds = data.trustedDiamonds;
+      }
       try { saveState(); } catch(e) {}
       try { updateMenuStats(); } catch(e) {}
       try { updateInventoryUI(); } catch(e) {}
@@ -98,8 +110,14 @@ async function loadFromCloud() {
       _csSetStatus('synced');
       return true;
     } else {
-      // Local is current — push to cloud
+      // Local is current — push to cloud (server validates economy on receipt)
       console.log('[CloudSave] Local save is current — uploading');
+      // Apply trusted ceiling from server before uploading so local matches
+      if (data.trustedDiamonds !== undefined && data.trustedDiamonds !== null
+          && data.trustedDiamonds < (gameState.diamonds || 0)) {
+        gameState.diamonds = data.trustedDiamonds;
+        try { saveState(); } catch(e) {}
+      }
       await saveToCloud();
       return false;
     }

@@ -26,9 +26,7 @@ function copyFriendCode() {
 
 async function initFriendsScreen() {
   const tagEl = document.getElementById('myFriendCode');
-  const refEl = document.getElementById('referralProgress');
   if (tagEl) tagEl.textContent = '...';
-  if (refEl) refEl.textContent = '';
 
   if (!PLAYER_ID) { _frRenderList([]); return; }
 

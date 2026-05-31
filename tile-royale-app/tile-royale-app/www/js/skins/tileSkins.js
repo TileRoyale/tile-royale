@@ -134,12 +134,6 @@ function updateProfileUI() {
   document.getElementById('profileXPText').textContent = `${xpInLevel} / ${xpNeeded} XP`;
   document.getElementById('profileXPBar').style.width = (progress * 100).toFixed(1) + '%';
   document.getElementById('profileDiamonds').textContent = (gameState.diamonds || 0).toLocaleString();
-  const refProg = document.getElementById('referralProgress');
-  if (refProg) {
-    const referred = gameState.friendsReferred || 0;
-    refProg.textContent = `Friends referred: ${referred} / 100 · Earned: 💎 ${(referred * 100).toLocaleString()}`;
-    refProg.style.color = referred >= 100 ? 'var(--muted)' : 'var(--gold)';
-  }
   // Whale badge
   const whaleBadgeEl = document.getElementById('profileWhaleBadge');
   if (whaleBadgeEl) whaleBadgeEl.style.display = gameState.whaleBadge ? 'inline-flex' : 'none';

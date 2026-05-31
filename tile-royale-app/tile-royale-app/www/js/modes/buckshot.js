@@ -57,7 +57,7 @@ function startBuckshotWave(n) {
 
   scheduleBuckshotBots(allIndices, activeBots);
 
-  const _deadlineSpeed = activeCustomBotSpeedMs !== null ? activeCustomBotSpeedMs : BOT_CLICK_SPEED_MS.max;
+  const _deadlineSpeed = activeCustomBotSpeedMs !== null ? activeCustomBotSpeedMs : 1000;
   const maxWaitMs = n * _deadlineSpeed + 1000;
   burnTimeout = setTimeout(() => {
     if (!roundActive) return;
@@ -80,7 +80,7 @@ function scheduleBuckshotBots(tileIndices, activeBots) {
 
     const _bsSpeed = activeCustomBotSpeedMs !== null
       ? { min: activeCustomBotSpeedMs, max: activeCustomBotSpeedMs }
-      : BOT_CLICK_SPEED_MS;
+      : { min: 800, max: 1000 };
     let cumulativeDelay = 0;
     tileIndices.forEach((_, tapI) => {
       const tapDelay = _bsSpeed.min + Math.random() * (_bsSpeed.max - _bsSpeed.min);

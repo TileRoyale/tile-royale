@@ -482,7 +482,7 @@ function activateBotWildItem(bot, itemId) {
       shadowTileActive = true;
     }
   } else if (itemId === 'pepper_spray') {
-    applyPepperSprayEffect();
+    pepperSprayActive = true; // applied in startRound() so fake tiles ignite together with the real tile
   } else if (itemId === 'muscle_relaxant') {
     if (!muscleRelaxantActive) {
       muscleRelaxantActive = true;
@@ -688,11 +688,12 @@ function triggerMuscleRelaxant() {
 function handleMuscleRelaxantFirstTap(idx) {
   if (!muscleRelaxantActive) return false;
   if (muscleRelaxantFirstTapped.has(idx)) {
-    // Second tap — counts as real
+    // Second tap — effect consumed, proceed normally
     muscleRelaxantFirstTapped.delete(idx);
-    return false; // proceed normally
+    muscleRelaxantActive = false;
+    return false;
   }
-  // First tap — just dim the tile
+  // First tap — dim the tile and wait for second tap
   muscleRelaxantFirstTapped.add(idx);
   const el = document.getElementById('tile-' + idx);
   if (el) {

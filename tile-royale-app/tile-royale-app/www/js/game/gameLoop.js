@@ -562,6 +562,7 @@ function endGame(playerWon = false) {
     crown = '🏆'; titleClass = 'win'; titleText = 'VICTORY!';
     if (!isCustomLobbyGame) {
       gameState.wins++;
+      if (typeof recordModeWin === 'function') recordModeWin(gameState.mode);
       diamonds = Math.min(6, dailyLeft); xp = 120;
       bonusItem = Object.keys(ITEM_TYPES)[Math.floor(Math.random() * Object.keys(ITEM_TYPES).length)];
       if (gameState.mode === 'koth') handleKothWin();
