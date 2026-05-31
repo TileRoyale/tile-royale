@@ -539,7 +539,32 @@ function applySkins() {
   } catch(e) { /* ignore className errors */ }
 
   const skins = activeSkins;
-  // Table skin → gameScreen background
+
+  // Mythic skins: apply background-image inline (CSS class approach is unreliable
+  // across WebView versions; inline styles match how thumbnails work and always win)
+  const MYTHIC_IMAGES = {
+    table_myth_neon:    'assets/victory/victory-neon.webp',
+    table_myth_ice:     'assets/victory/victory-ice.webp',
+    table_myth_galaxy:  'assets/victory/victory-galaxy.webp',
+    table_myth_rainbow: 'assets/victory/victory-rainbow.webp',
+    table_myth_inferno: 'assets/victory/victory-inferno.webp',
+    table_myth_royal:   'assets/victory/victory-royal.webp',
+    table_myth_classic: 'assets/victory/victory-default.webp',
+  };
+  const mythImg = MYTHIC_IMAGES[skins.table];
+  if (mythImg) {
+    gs.style.backgroundImage    = `url('${mythImg}')`;
+    gs.style.backgroundSize     = 'cover';
+    gs.style.backgroundPosition = 'center';
+    gs.style.backgroundRepeat   = 'no-repeat';
+  } else {
+    gs.style.backgroundImage    = '';
+    gs.style.backgroundSize     = '';
+    gs.style.backgroundPosition = '';
+    gs.style.backgroundRepeat   = '';
+  }
+
+  // Table skin → gameScreen CSS class (gradient/texture skins)
   const tableClass = TABLE_CLASS_MAP[skins.table] || 'table-dark_void';
   gs.classList.add(tableClass);
   // Tile skin → tileGrid class
