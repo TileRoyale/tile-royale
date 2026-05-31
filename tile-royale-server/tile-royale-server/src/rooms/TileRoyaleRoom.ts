@@ -384,7 +384,7 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
       if (!(p as any).isBot) return;
       let delay = 0;
       allTiles.forEach((tileIdx) => {
-        delay += 900 + Math.random() * 400;
+        delay += 700 + Math.random() * 200;
         const d = delay;
         this.clock.setTimeout(() => {
           if (this.state.phase !== "playing" || p.eliminated) return;
@@ -400,7 +400,7 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
       });
     });
 
-    const maxWait = n * 1500 + 3000;
+    const maxWait = n * 1000 + 3000;
     this.roundTimeout = this.clock.setTimeout(() => this.finalizeBuckshotWave(), maxWait);
   }
 

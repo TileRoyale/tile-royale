@@ -190,6 +190,7 @@ function loadState() {
 }
 
 function saveState() {
+  gameState._localSavedAt = Date.now(); // timestamp used by cloud save to determine newest
   try {
     const raw = JSON.stringify(gameState);
     const key = 'TileRoyale2025';
@@ -204,6 +205,8 @@ function saveState() {
     // Fallback: plain save
     try { localStorage.setItem('tileRoyaleState', JSON.stringify(gameState)); } catch(e2) {}
   }
+  // Debounced cloud upload — covers all triggers (match end, achievement, purchase, etc.)
+  if (typeof scheduleSaveToCloud === 'function') scheduleSaveToCloud();
 }
 
 function claimDailyItems() {

@@ -80,9 +80,8 @@ window.addEventListener('load', async () => {
 
       PushNotifications.addListener('registration', (token) => {
         console.log('[Push] Token:', token.value);
-        // In production: send token to your server
-        // fetch('https://tile-royale-eu.railway.app/register-push', { ... })
         window.pushToken = token.value;
+        if (typeof window._onPushToken === 'function') window._onPushToken(token.value);
       });
 
       PushNotifications.addListener('pushNotificationReceived', (notification) => {

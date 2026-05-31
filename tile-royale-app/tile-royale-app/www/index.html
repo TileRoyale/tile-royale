@@ -215,16 +215,19 @@
   <div class="section-label">Select Mode</div>
   <div class="mode-grid" style="grid-template-columns: repeat(2,1fr);">
     <div class="mode-card selected" data-mode="rush" onclick="selectMode('rush', this)">
+      <button class="mode-reward-btn" onclick="event.stopPropagation(); openModeRewardPopup('rush')" title="Rewards">🏆</button>
       <div class="mode-icon">⚡</div>
       <div class="mode-name">Rush</div>
       <div class="mode-time">Last tap standing</div>
     </div>
     <div class="mode-card" data-mode="buckshot" onclick="selectMode('buckshot', this)">
+      <button class="mode-reward-btn" onclick="event.stopPropagation(); openModeRewardPopup('buckshot')" title="Rewards">🏆</button>
       <div class="mode-icon">💥</div>
       <div class="mode-name">Buckshot</div>
       <div class="mode-time">Last tap standing</div>
     </div>
     <div class="mode-card" data-mode="wild" onclick="selectMode('wild', this)">
+      <button class="mode-reward-btn" onclick="event.stopPropagation(); openModeRewardPopup('wild')" title="Rewards">🏆</button>
       <div class="mode-icon">🌀</div>
       <div class="mode-name">Wild</div>
       <div class="mode-time">Last tap standing</div>
@@ -568,7 +571,6 @@
     <div style="font-size:11px;color:var(--muted);letter-spacing:3px;margin-bottom:4px;">YOUR PLAYER TAG</div>
     <div class="friend-code-display" id="myFriendCode" onclick="copyFriendCode()">...</div>
     <div style="font-size:11px;color:var(--muted);text-align:center;letter-spacing:1px;">Tap to copy · Share with friends</div>
-    <div id="referralProgress"></div>
   </div>
 
   <!-- Add friend by tag -->
@@ -1483,6 +1485,9 @@
     <button onclick="shareProfile()" style="margin-top:10px;padding:8px 20px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:20px;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:var(--muted);cursor:pointer;">
       📤 SHARE PROFILE
     </button>
+    <div style="margin-top:8px;font-size:10px;letter-spacing:1px;color:var(--muted);opacity:0.7;">
+      Push Notifications: <span id="pushRegStatus">🔴 Not Registered</span>
+    </div>
   </div>
 
   <!-- XP Bar -->
@@ -1494,6 +1499,12 @@
     <div style="width:100%; height:6px; background:var(--border); border-radius:3px; overflow:hidden;">
       <div id="profileXPBar" style="height:100%; background:linear-gradient(90deg,var(--fire),var(--gold)); width:0%; transition:width 0.5s; border-radius:3px;"></div>
     </div>
+  </div>
+
+  <!-- Cloud Save status -->
+  <div id="cloudSaveStatus" style="display:flex;align-items:center;gap:6px;justify-content:flex-end;width:100%;margin-bottom:12px;padding-right:4px;flex-direction:column;align-items:flex-end;">
+    <span style="font-size:9px;letter-spacing:2px;color:var(--muted);">CLOUD SAVE</span>
+    <span style="font-size:11px;color:var(--muted);">🟡 Pending…</span>
   </div>
 
   <!-- Skin tabs -->
@@ -1563,6 +1574,11 @@
       <div class="koth-prize-pct">15%</div>
       <div class="koth-prize-val" id="kothPrize3">💎 0</div>
     </div>
+    <div class="koth-prize-row">
+      <div class="koth-prize-place" style="color:#00e5ff;">⚡ Fastest</div>
+      <div class="koth-prize-pct">10%</div>
+      <div class="koth-prize-val" id="kothPrizeFastest">💎 0</div>
+    </div>
   </div>
 
   <!-- Weekly leaderboard -->
@@ -1574,17 +1590,14 @@
   <div class="koth-daily-reward-box" id="kothDailyRewardBox">
     <div class="koth-daily-row">
       <div class="koth-daily-tier" style="color:var(--gold);">🥇 Top 1%</div>
-      <div class="koth-daily-desc">Most wins today</div>
       <div class="koth-daily-val">💎 125</div>
     </div>
     <div class="koth-daily-row">
-      <div class="koth-daily-tier" style="color:#c0c0c0;">🥈 Top 2–3%</div>
-      <div class="koth-daily-desc">Strong daily performance</div>
+      <div class="koth-daily-tier" style="color:#c0c0c0;">🥈 Top 3%</div>
       <div class="koth-daily-val">💎 75</div>
     </div>
     <div class="koth-daily-row">
-      <div class="koth-daily-tier" style="color:#cd7f32;">🥉 Top 4–5%</div>
-      <div class="koth-daily-desc">Active daily player</div>
+      <div class="koth-daily-tier" style="color:#cd7f32;">🥉 Top 5%</div>
       <div class="koth-daily-val">💎 25</div>
     </div>
     <div class="koth-daily-timer-row">
@@ -1593,6 +1606,36 @@
       <span style="color:var(--muted); font-size:11px; letter-spacing:1px;"> · Your rank today: </span>
       <span style="color:var(--diamond); font-size:11px; letter-spacing:1px;" id="kothDailyRank">—</span>
     </div>
+  </div>
+
+  <!-- Fastest Clicker reward -->
+  <div class="store-section-hdr">⚡ Fastest Clicker</div>
+  <div class="koth-daily-reward-box">
+    <div class="koth-daily-row">
+      <div class="koth-daily-tier" style="color:#00e5ff;">⚡ Daily Best</div>
+      <div class="koth-daily-val">💎 50</div>
+    </div>
+    <div class="koth-daily-row">
+      <div class="koth-daily-tier" style="color:var(--gold);">🏆 Weekly Best</div>
+      <div class="koth-daily-val" id="kothFastestWeeklyPrize">💎 0</div>
+    </div>
+    <div class="koth-daily-timer-row">
+      <span id="kothFastestBest" style="color:var(--diamond); font-size:11px; letter-spacing:1px;">Play KOTH to track your speed!</span>
+    </div>
+  </div>
+
+  <!-- Claim fastest daily -->
+  <div id="kothFastestDailyClaimWrap" style="display:none; width:100%; margin-bottom:4px;">
+    <button class="btn-play" onclick="claimKothFastestDaily()" style="background:linear-gradient(135deg,#00ccff,#0066ff);">
+      ⚡ CLAIM DAILY FASTEST — 💎 50
+    </button>
+  </div>
+
+  <!-- Claim fastest weekly -->
+  <div id="kothFastestWeeklyClaimWrap" style="display:none; width:100%; margin-bottom:8px;">
+    <button class="btn-play" onclick="claimKothFastestWeekly()" style="background:linear-gradient(135deg,var(--gold),var(--fire2));">
+      🏆 CLAIM WEEKLY FASTEST — 💎 <span id="kothFastestWeeklyClaimAmt">0</span>
+    </button>
   </div>
 
   <!-- Claim daily reward button (shown if eligible) -->
@@ -2140,6 +2183,48 @@
   <script src="js/multiplayer/colyseus.js"></script>
   <script src="js/multiplayer/roomHandlers.js"></script>
   <script src="js/multiplayer/networkEvents.js"></script>
+
+  <!-- Cloud Save (loaded last — needs getActiveServer from colyseus.js) -->
+  <script src="js/systems/cloudSave.js"></script>
+
+  <!-- Push token registration (loaded after cloudSave — needs getActiveServer) -->
+  <script src="js/systems/push.js"></script>
+
+<!-- ===== MODE REWARD POPUP ===== -->
+<div id="modeRewardPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9100;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeModeRewardPopup()">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:340px;max-height:80vh;overflow-y:auto;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div id="modeRewardPopupTitle" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:var(--gold);">⚡ Rush Rewards</div>
+      <button onclick="closeModeRewardPopup()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:0;line-height:1;">✕</button>
+    </div>
+
+    <div style="font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">DAILY</div>
+    <div class="koth-daily-reward-box" style="margin-bottom:12px;">
+      <div class="koth-daily-row"><div class="koth-daily-tier" style="color:var(--gold);">🥇 Top 1%</div><div class="koth-daily-val">🎟️ 10</div></div>
+      <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#c0c0c0;">🥈 Top 3%</div><div class="koth-daily-val">🎟️ 5</div></div>
+      <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#cd7f32;">🥉 Top 5%</div><div class="koth-daily-val">🎟️ 3</div></div>
+    </div>
+
+    <div style="font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">WEEKLY</div>
+    <div class="koth-daily-reward-box" style="margin-bottom:12px;">
+      <div class="koth-daily-row"><div class="koth-daily-tier" style="color:var(--gold);">🥇 Top 1%</div><div class="koth-daily-val">🎟️ 30</div></div>
+      <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#c0c0c0;">🥈 Top 3%</div><div class="koth-daily-val">🎟️ 20</div></div>
+      <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#cd7f32;">🥉 Top 5%</div><div class="koth-daily-val">🎟️ 10</div></div>
+    </div>
+
+    <div id="modeRewardPopupRank" style="text-align:center;color:var(--diamond);font-size:11px;letter-spacing:1px;margin-bottom:12px;">Win matches to earn rewards!</div>
+
+    <div id="modeDailyClaimWrap" style="display:none;margin-bottom:6px;">
+      <button class="btn-play" id="modeDailyClaimBtn" onclick="claimModeDailyReward()" style="background:linear-gradient(135deg,#00aaff,#0044cc);">🎟️ CLAIM DAILY REWARD</button>
+    </div>
+    <div id="modeWeeklyClaimWrap" style="display:none;margin-bottom:6px;">
+      <button class="btn-play" id="modeWeeklyClaimBtn" onclick="claimModeWeeklyReward()" style="background:linear-gradient(135deg,var(--gold),var(--fire2));">🎟️ CLAIM WEEKLY REWARD</button>
+    </div>
+
+    <button class="btn-secondary" style="width:100%;margin-top:4px;" onclick="closeModeRewardPopup()">CLOSE</button>
+  </div>
+</div>
 
 </body>
 </html>

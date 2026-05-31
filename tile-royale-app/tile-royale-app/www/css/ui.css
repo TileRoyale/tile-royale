@@ -520,12 +520,11 @@
   .koth-daily-row:last-of-type { border-bottom:none; }
   .koth-daily-tier {
     font-family:'Bebas Neue',sans-serif; font-size:15px;
-    letter-spacing:1px; width:90px; flex-shrink:0;
+    letter-spacing:1px; flex:1;
   }
-  .koth-daily-desc { flex:1; font-size:11px; color:var(--muted); letter-spacing:0.5px; }
   .koth-daily-val {
     font-family:'Bebas Neue',sans-serif; font-size:16px;
-    color:var(--diamond); letter-spacing:1px;
+    color:var(--diamond); letter-spacing:1px; flex-shrink:0;
   }
   .koth-daily-timer-row {
     padding:10px 16px; border-top:1px solid var(--border);
@@ -1751,6 +1750,7 @@
   .screen-title {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 28px; letter-spacing: 4px;
+    text-align: center;
     background: linear-gradient(135deg, var(--fire) 0%, var(--fire2) 50%, var(--gold) 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     filter: drop-shadow(0 0 10px rgba(255,140,0,0.3));

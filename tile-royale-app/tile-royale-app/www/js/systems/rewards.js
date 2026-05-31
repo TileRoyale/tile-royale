@@ -152,6 +152,7 @@ function checkOfflineReward() {
   const periods = Math.floor(elapsed / OFFLINE_RATE_MS);
   if (periods >= 1) {
     pendingOfflineDiamonds = Math.min(periods, 3) * OFFLINE_DIAMONDS; // max 3 periods = 9💎
+    gameState._pendingOffline = pendingOfflineDiamonds; // mirror into gameState so claim always reads what was displayed
     const hours = Math.floor(elapsed / 3600000);
     document.getElementById('offlineRewardSub').textContent =
       `Away for ${hours}h — earned while offline`;
@@ -164,8 +165,11 @@ function checkOfflineReward() {
 }
 
 function claimOfflineReward() {
-  const earned = pendingOfflineDiamonds;
+  // Read from gameState mirror so the claimed amount always matches what the overlay displayed
+  const earned = gameState._pendingOffline || pendingOfflineDiamonds;
+  if (!earned) { document.getElementById('offlineRewardOverlay').classList.remove('show'); return; }
   gameState.diamonds = (gameState.diamonds || 0) + earned;
+  gameState._pendingOffline = 0;
   pendingOfflineDiamonds = 0;
   saveState();
   updateMenuStats();
@@ -199,113 +203,95 @@ function maybeTriggerSurprise() {
 }
 
 // ===== PROMO CODE SYSTEM =====
-// Codes: { reward: {diamonds, items, skins, avatars}, expires, maxUses, desc }
-const PROMO_CODES = {
-  'WELCOME2025':  { diamonds:500,  items:{crystal:2, caltrops:2}, desc:'Welcome gift!',              maxUses:999999 },
-  'TILEROYALE':   { diamonds:1000, items:{crystal:3},             desc:'Official launch bonus!',     maxUses:999999 },
-  'SUMMER2025':   { diamonds:750,  items:{caltrops:3},            desc:'Summer campaign reward',      maxUses:999999, expires:'2025-09-01' },
-  'WILDMODE':     { diamonds:300,  items:{shadow_tile:3},         desc:'Wild mode launch reward',     maxUses:999999 },
-  'KOTHWEEK1':    { diamonds:500,  items:{crystal:1,caltrops:1},  desc:'King of the Hill launch!',   maxUses:999999 },
-  'WHALE4EVER':   { diamonds:2000, items:{shadow_tile:5},         desc:'Whale appreciation gift 🐋', maxUses:999999 },
-  'BUGFIX':       { diamonds:200,                                  desc:'Thanks for your patience!',  maxUses:999999 },
-  // ── Special codes ──
-  'RAZ4WIN':      { _devAction:'koth_top3', desc:'KOTH Top 3 status + Custom Lobby unlock', maxUses:999999 },
-  // ── Dev / test codes ──
-  'DEV-GEMS':     { _devAction:'gems',    desc:'Dev: +10 000 diamonds', maxUses:999999 },
-  'DEV-GAUNTLET': { _devAction:'gauntlet',desc:'Dev: Open Gauntlet',    maxUses:999999 },
-  'DEV-LEVEL10':  { _devAction:'level10', desc:'Dev: Set Level 10',     maxUses:999999 },
+// Validation and redemption tracking are server-side (POST /promo/redeem).
+// The client applies the reward payload returned by the server.
+
+const _PROMO_ERROR_MSGS = {
+  invalid_code:     '❌ Invalid code',
+  expired:          '⏱ This code has expired',
+  already_redeemed: '✓ Already redeemed',
+  db_unavailable:   '❌ Server unavailable — try again later',
+  missing_player:   '❌ Account error — restart the app',
+  invalid_player:   '❌ Account error — restart the app',
+  server_error:     '❌ Server error — try again later',
 };
 
-function redeemCode() {
+async function redeemCode() {
   const input = document.getElementById('redeemInput');
-  const msg   = document.getElementById('redeemMsg');
   const code  = (input.value || '').trim().toUpperCase();
 
-  if (!code) {
-    showRedeemMsg('Enter a code first', 'error'); return;
+  if (!code) { showRedeemMsg('Enter a code first', 'error'); return; }
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) {
+    showRedeemMsg('❌ Account required — restart the app', 'error'); return;
   }
 
-  const promo = PROMO_CODES[code];
-  if (!promo) {
-    showRedeemMsg('❌ Invalid code', 'error');
-    input.value = '';
+  showRedeemMsg('⏳ Verifying...', 'info');
+
+  let data;
+  try {
+    const r = await fetch(`${getActiveServer().http}/promo/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, code }),
+      signal: AbortSignal.timeout(8000),
+    });
+    data = r.ok ? await r.json() : null;
+  } catch(e) { data = null; }
+
+  input.value = '';
+
+  if (!data) { showRedeemMsg('❌ Server unavailable — try again later', 'error'); return; }
+
+  if (!data.ok) {
+    const msg = _PROMO_ERROR_MSGS[data.error] || '❌ Could not redeem — try again';
+    showRedeemMsg(msg, data.error === 'already_redeemed' ? 'info' : 'error');
     return;
   }
 
-  // Check expiry
-  if (promo.expires && new Date() > new Date(promo.expires)) {
-    showRedeemMsg('⏱ This code has expired', 'error'); return;
-  }
+  // Apply reward returned by server
+  const reward = data.reward || {};
+  const parts  = [];
 
-  // Check already redeemed
-  if (!gameState.redeemedCodes) gameState.redeemedCodes = [];
-  if (gameState.redeemedCodes.includes(code)) {
-    showRedeemMsg('✓ Already redeemed', 'info'); return;
+  if (reward.diamonds) {
+    gameState.diamonds = (gameState.diamonds || 0) + reward.diamonds;
+    parts.push(`💎 ${reward.diamonds.toLocaleString()}`);
   }
-
-  // Apply rewards
-  gameState.redeemedCodes.push(code);
-  let rewardParts = [];
-
-  // Dev actions — can be re-used (don't mark as redeemed permanently)
-  if (promo._devAction) {
-    gameState.redeemedCodes.pop(); // don't permanently mark dev codes
-    if (promo._devAction === 'gems') {
-      gameState.diamonds = (gameState.diamonds || 0) + 10000;
-      saveState(); updateMenuStats();
-      input.value = '';
-      showRedeemMsg('💎 +10 000 diamonds added!', 'success');
-      playSound('achieve');
-    } else if (promo._devAction === 'gauntlet') {
-      input.value = '';
-      showRedeemMsg('🧤 Opening Gauntlet...', 'success');
-      setTimeout(() => openGauntlet(), 400);
-    } else if (promo._devAction === 'koth_top3') {
-      if (!gameState.level || gameState.level < 1) gameState.level = 1;
-      gameState.kothCustomUnlocked = true;
-      assignKothTitle(1);
-      saveState(); updateFeatureLocks(); updateMenuStats();
-      input.value = '';
-      showRedeemMsg('👑 KOTH Top 3 unlocked! Custom Lobby + KOTH King avatar!', 'success');
-      playSound('achieve');
-      showToast('👑 Raz4Win! KOTH Top 3 + Custom Lobby unlocked!', 'var(--gold)');
-      return;
-    } else if (promo._devAction === 'level10') {
-      gameState.level = 10;
-      gameState.xp = getXPForLevel(10); // 9*9*120 = 9720
-      saveState(); updateFeatureLocks(); updateMenuStats();
-      input.value = '';
-      showRedeemMsg('⬆️ Level set to 10!', 'success');
-      playSound('achieve');
-    }
-    return;
-  }
-
-  if (promo.diamonds) {
-    gameState.diamonds = (gameState.diamonds || 0) + promo.diamonds;
-    rewardParts.push(`💎 ${promo.diamonds.toLocaleString()}`);
-  }
-  if (promo.items) {
-    Object.entries(promo.items).forEach(([id, qty]) => {
-      addItemToInventory(id, qty);
-      rewardParts.push(`${ITEM_TYPES[id]?.icon || '🎁'} ${ITEM_TYPES[id]?.name || id} ×${qty}`);
+  if (reward.items) {
+    Object.entries(reward.items).forEach(([id, qty]) => {
+      addItemToInventory(id, Number(qty));
+      parts.push(`${ITEM_TYPES[id]?.icon || '🎁'} ${ITEM_TYPES[id]?.name || id} ×${qty}`);
     });
   }
-  if (promo.skins) {
+  if (reward.skins) {
     if (!gameState.ownedSkins) gameState.ownedSkins = {};
-    (promo.skins||[]).forEach(id => {
+    reward.skins.forEach(id => {
       gameState.ownedSkins[id] = true;
-      const skin = ALL_AVATARS.find(a => a.id === id);
-      rewardParts.push(`🎨 ${skin?.name || id}`);
+      const skin = (typeof ALL_AVATARS !== 'undefined' ? ALL_AVATARS : []).find(a => a.id === id);
+      parts.push(`🎨 ${skin?.name || id}`);
     });
+  }
+  if (reward.action === 'koth_top3') {
+    if (!gameState.level || gameState.level < 1) gameState.level = 1;
+    gameState.kothCustomUnlocked = true;
+    assignKothTitle(1);
+    updateFeatureLocks();
+    parts.push('👑 KOTH Top 3 unlocked!');
+    showToast('👑 Raz4Win! KOTH Top 3 + Custom Lobby unlocked!', 'var(--gold)');
+  } else if (reward.action === 'gauntlet') {
+    setTimeout(() => openGauntlet(), 400);
+  } else if (reward.action === 'level10') {
+    gameState.level = 10;
+    gameState.xp = getXPForLevel(10);
+    updateFeatureLocks();
+    parts.push('⬆️ Level 10');
   }
 
   saveState();
   updateMenuStats();
   updateInventoryUI();
 
-  input.value = '';
-  showRedeemMsg(`✅ ${promo.desc} — Claimed: ${rewardParts.join(' · ')}`, 'success');
+  const claimedStr = parts.length ? ` — Claimed: ${parts.join(' · ')}` : '';
+  showRedeemMsg(`✅ ${data.desc}${claimedStr}`, 'success');
   playSound('achieve');
   vibrate(100);
 }
@@ -317,6 +303,111 @@ function showRedeemMsg(text, type) {
   if (type === 'success') {
     setTimeout(() => { el.textContent = ''; el.className = 'redeem-msg'; }, 6000);
   }
+}
+
+// ===== MODE REWARDS (Rush / Buckshot / Wild) =====
+
+const MODE_DAILY_TIERS = [
+  { tier: 'TOP 1%', minWins: 5,  tickets: 10, icon: '🥇', color: 'var(--gold)' },
+  { tier: 'TOP 3%', minWins: 2,  tickets: 5,  icon: '🥈', color: '#c0c0c0'     },
+  { tier: 'TOP 5%', minWins: 1,  tickets: 3,  icon: '🥉', color: '#cd7f32'     },
+];
+const MODE_WEEKLY_TIERS = [
+  { tier: 'TOP 1%', minWins: 20, tickets: 30, icon: '🥇', color: 'var(--gold)' },
+  { tier: 'TOP 3%', minWins: 10, tickets: 20, icon: '🥈', color: '#c0c0c0'     },
+  { tier: 'TOP 5%', minWins: 3,  tickets: 10, icon: '🥉', color: '#cd7f32'     },
+];
+
+function _modeWeekKey() {
+  const n = new Date();
+  const w = Math.ceil(((n - new Date(n.getFullYear(), 0, 1)) / 86400000 + new Date(n.getFullYear(), 0, 1).getDay() + 1) / 7);
+  return `${n.getFullYear()}_w${w}`;
+}
+
+function _getModeRewardsData(mode) {
+  if (!gameState.modeRewards) gameState.modeRewards = {};
+  if (!gameState.modeRewards[mode]) gameState.modeRewards[mode] = {};
+  const m = gameState.modeRewards[mode];
+  const today = new Date().toDateString();
+  const week  = _modeWeekKey();
+  if (!m.daily  || m.daily.date   !== today) m.daily  = { date: today, wins: 0, claimed: false };
+  if (!m.weekly || m.weekly.week  !== week)  m.weekly = { week,         wins: 0, claimed: false };
+  return m;
+}
+
+let _modePopupMode = 'rush';
+
+function recordModeWin(mode) {
+  if (!['rush', 'buckshot', 'wild'].includes(mode)) return;
+  const m = _getModeRewardsData(mode);
+  m.daily.wins  = (m.daily.wins  || 0) + 1;
+  m.weekly.wins = (m.weekly.wins || 0) + 1;
+  saveState();
+}
+
+function openModeRewardPopup(mode) {
+  _modePopupMode = mode;
+  const popup = document.getElementById('modeRewardPopup');
+  if (!popup) return;
+
+  const labels = { rush: '⚡ Rush', buckshot: '💥 Buckshot', wild: '🌀 Wild' };
+  const titleEl = document.getElementById('modeRewardPopupTitle');
+  if (titleEl) titleEl.textContent = `${labels[mode] || mode} Rewards 🎟️`;
+
+  const data       = _getModeRewardsData(mode);
+  const dailyTier  = MODE_DAILY_TIERS.find(t  => data.daily.wins  >= t.minWins) || null;
+  const weeklyTier = MODE_WEEKLY_TIERS.find(t => data.weekly.wins >= t.minWins) || null;
+
+  const rankEl = document.getElementById('modeRewardPopupRank');
+  if (rankEl) {
+    const dw = data.daily.wins, ww = data.weekly.wins;
+    rankEl.textContent = dw > 0
+      ? `Today: ${dw} win${dw !== 1 ? 's' : ''} · Week: ${ww} win${ww !== 1 ? 's' : ''}`
+      : 'Win matches to earn rewards!';
+  }
+
+  const dailyWrap = document.getElementById('modeDailyClaimWrap');
+  const dailyBtn  = document.getElementById('modeDailyClaimBtn');
+  if (dailyWrap) dailyWrap.style.display = (dailyTier && !data.daily.claimed) ? 'block' : 'none';
+  if (dailyBtn && dailyTier) dailyBtn.textContent = `🎟️ CLAIM DAILY ${dailyTier.tier} — +${dailyTier.tickets} Tickets`;
+
+  const weeklyWrap = document.getElementById('modeWeeklyClaimWrap');
+  const weeklyBtn  = document.getElementById('modeWeeklyClaimBtn');
+  if (weeklyWrap) weeklyWrap.style.display = (weeklyTier && !data.weekly.claimed) ? 'block' : 'none';
+  if (weeklyBtn && weeklyTier) weeklyBtn.textContent = `🎟️ CLAIM WEEKLY ${weeklyTier.tier} — +${weeklyTier.tickets} Tickets`;
+
+  popup.style.display = 'flex';
+}
+
+function closeModeRewardPopup() {
+  const popup = document.getElementById('modeRewardPopup');
+  if (popup) popup.style.display = 'none';
+}
+
+function claimModeDailyReward() {
+  const mode = _modePopupMode;
+  const data = _getModeRewardsData(mode);
+  const tier = MODE_DAILY_TIERS.find(t => data.daily.wins >= t.minWins);
+  if (!tier || data.daily.claimed) { showToast('No daily reward to claim!', 'var(--muted)'); return; }
+  data.daily.claimed = true;
+  gameState.tickets = Math.min((gameState.tickets || 0) + tier.tickets, 99);
+  saveState(); updateMenuStats(); updateTicketUI();
+  openModeRewardPopup(mode); // refresh popup
+  showToast(`🎟️ ${tier.tier} Daily! +${tier.tickets} Tickets`, tier.color);
+  playSound('achieve'); vibrate([50, 50, 200]);
+}
+
+function claimModeWeeklyReward() {
+  const mode = _modePopupMode;
+  const data = _getModeRewardsData(mode);
+  const tier = MODE_WEEKLY_TIERS.find(t => data.weekly.wins >= t.minWins);
+  if (!tier || data.weekly.claimed) { showToast('No weekly reward to claim!', 'var(--muted)'); return; }
+  data.weekly.claimed = true;
+  gameState.tickets = Math.min((gameState.tickets || 0) + tier.tickets, 99);
+  saveState(); updateMenuStats(); updateTicketUI();
+  openModeRewardPopup(mode); // refresh popup
+  showToast(`🎟️ ${tier.tier} Weekly! +${tier.tickets} Tickets`, tier.color);
+  playSound('achieve'); vibrate([50, 50, 200]);
 }
 
 function toggleCaltropsPrimed() {

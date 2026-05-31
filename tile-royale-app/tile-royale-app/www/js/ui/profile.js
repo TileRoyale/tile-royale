@@ -91,65 +91,6 @@ function getAvatarForPlayer(name) {
   return { icon: botAvatars[idx], border: '#333350', bg: '#0a0a15', whaleBorder: false };
 }
 
-// ===== FRIENDS SYSTEM =====
-function generateFriendCode() {
-  if (gameState.friendCode) return gameState.friendCode;
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
-  gameState.friendCode = code;
-  saveState();
-  return code;
-}
-
-function initFriendsScreen() {
-  const code = generateFriendCode();
-  document.getElementById('myFriendCode').textContent = code;
-  const friends = gameState.friends || [];
-  document.getElementById('friendCount').textContent = friends.length;
-  const list = document.getElementById('friendsList');
-  list.innerHTML = '';
-  if (friends.length === 0) {
-    list.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;letter-spacing:1px;padding:20px;">No friends yet — share your code!</div>';
-  } else {
-    (friends||[]).forEach(f => {
-      list.innerHTML += `<div class="lb-entry"><div class="lb-entry-avatar">${f.avatar||'🎮'}</div><div class="lb-entry-name">${f.name}</div><div class="lb-entry-val">💎 ${(f.diamonds||0).toLocaleString()}</div></div>`;
-    });
-  }
-}
-
-function copyFriendCode() {
-  const code = generateFriendCode();
-  const text = `Join me in Tile Royale! Use my code: ${code} and we both get 💎 500!`;
-  copyToClipboard(text);
-}
-
-function submitFriendCode() {
-  const input = document.getElementById('friendCodeInput');
-  const code = (input.value || '').trim().toUpperCase();
-  const msg = document.getElementById('friendCodeMsg');
-  if (!code || code.length < 6) { msg.textContent = 'Enter a 6-character code'; msg.className='redeem-msg error'; return; }
-  if (code === generateFriendCode()) { msg.textContent = "That's your own code!"; msg.className='redeem-msg error'; return; }
-  if (!gameState.usedFriendCodes) gameState.usedFriendCodes = [];
-  if (gameState.usedFriendCodes.includes(code)) { msg.textContent = 'Already redeemed!'; msg.className='redeem-msg info'; return; }
-  gameState.usedFriendCodes.push(code);
-  gameState.friendsReferred = (gameState.friendsReferred || 0) + 1;
-  if (gameState.friendsReferred <= 100) {
-    gameState.diamonds = (gameState.diamonds || 0) + 100;
-    showToast('💎 +100 diamonds! Friend referred (' + gameState.friendsReferred + '/100)', 'var(--gold)');
-  } else {
-    showToast('Referral limit reached (100/100)', 'var(--muted)');
-  }
-  if (!gameState.friends) gameState.friends = [];
-  const botNames = ['TapKing','BlazeMaster','GridRipper','SwiftTile'];
-  gameState.friends.push({ name: botNames[Math.floor(Math.random()*botNames.length)], avatar:'🎮', diamonds: Math.floor(Math.random()*5000) });
-  saveState(); updateMenuStats();
-  input.value = '';
-  msg.textContent = '✅ Friend added! You both got 💎 500!';
-  msg.className = 'redeem-msg success';
-  initFriendsScreen();
-  playSound('achieve');
-}
 
 // ===== SHARE PROFILE =====
 function shareProfile() {
