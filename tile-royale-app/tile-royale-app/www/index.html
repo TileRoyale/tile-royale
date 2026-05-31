@@ -1496,6 +1496,12 @@
     </div>
   </div>
 
+  <!-- Cloud Save status -->
+  <div id="cloudSaveStatus" style="display:flex;align-items:center;gap:6px;justify-content:flex-end;width:100%;margin-bottom:12px;padding-right:4px;flex-direction:column;align-items:flex-end;">
+    <span style="font-size:9px;letter-spacing:2px;color:var(--muted);">CLOUD SAVE</span>
+    <span style="font-size:11px;color:var(--muted);">🟡 Pending…</span>
+  </div>
+
   <!-- Skin tabs -->
   <div class="skin-tabs" style="flex-wrap:wrap;gap:5px;">
     <button class="skin-tab active" onclick="switchSkinTab('table', this)" style="flex:1 1 28%;">🎰 Table</button>
@@ -2140,6 +2146,9 @@
   <script src="js/multiplayer/colyseus.js"></script>
   <script src="js/multiplayer/roomHandlers.js"></script>
   <script src="js/multiplayer/networkEvents.js"></script>
+
+  <!-- Cloud Save (loaded last — needs getActiveServer from colyseus.js) -->
+  <script src="js/systems/cloudSave.js"></script>
 
 </body>
 </html>

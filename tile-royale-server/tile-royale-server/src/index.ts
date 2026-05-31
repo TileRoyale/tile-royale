@@ -5,7 +5,7 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData } from "./db";
 
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
@@ -419,6 +419,46 @@ app.get("/validate", async (_req, res) => {
   results.READY_FOR_PHASE_2 = allOk ? "YES" : "NO — see checks";
 
   res.json(results);
+});
+
+// ─── Cloud Save ────────────────────────────────────────────────────────────────
+
+// POST /save — upsert full game state for a player
+app.post("/save", async (req, res) => {
+  const { playerId, saveData } = req.body;
+  if (!playerId || typeof playerId !== 'string' || !saveData) {
+    res.status(400).json({ ok: false, error: 'Missing playerId or saveData' }); return;
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId)) {
+    res.status(400).json({ ok: false, error: 'Invalid playerId' }); return;
+  }
+  let saveJson: string;
+  try {
+    saveJson = JSON.stringify(saveData);
+  } catch {
+    res.status(400).json({ ok: false, error: 'Invalid saveData' }); return;
+  }
+  if (saveJson.length > 1_000_000) {
+    res.status(400).json({ ok: false, error: 'Save data too large (max 1 MB)' }); return;
+  }
+  const ok = await savePlayerData(playerId, saveJson);
+  res.json({ ok: ok ?? false });
+});
+
+// GET /save/:playerId — load cloud save
+app.get("/save/:playerId", async (req, res) => {
+  const { playerId } = req.params;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId)) {
+    res.json({ found: false }); return;
+  }
+  const result = await loadPlayerData(playerId);
+  if (!result) { res.json({ found: false }); return; }
+  try {
+    const saveData = JSON.parse(result.saveJson);
+    res.json({ found: true, saveData, updatedAt: result.updatedAt });
+  } catch {
+    res.json({ found: false });
+  }
 });
 
 app.use("/colyseus", monitor());

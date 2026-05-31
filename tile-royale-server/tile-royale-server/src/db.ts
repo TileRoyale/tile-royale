@@ -153,6 +153,13 @@ async function createTables(): Promise<void> {
       claimed_at    TIMESTAMPTZ,
       created_at    TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Cloud Save: one row per player, UPSERT on every save
+    CREATE TABLE IF NOT EXISTS player_save_data (
+      player_id   UUID         PRIMARY KEY,
+      save_json   TEXT         NOT NULL,
+      updated_at  TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -161,6 +168,7 @@ async function createTables(): Promise<void> {
     CREATE        INDEX IF NOT EXISTS idx_friends_requester  ON friends(requester_player_id);
     CREATE        INDEX IF NOT EXISTS idx_friends_target     ON friends(target_player_id);
     CREATE        INDEX IF NOT EXISTS idx_player_notifs      ON player_notifications(player_id, created_at DESC);
+    CREATE        INDEX IF NOT EXISTS idx_player_save_data   ON player_save_data(player_id);
   `);
   console.log("[DB] Tables ready");
 }
@@ -819,4 +827,28 @@ export async function createPlayerNotification(
     RETURNING *
   `, [playerId, title, body, safeType, rewardType ?? null, rewardAmount ?? null]);
   return rows && rows.length > 0 ? rows[0] : null;
+}
+
+// ─── Cloud Save ────────────────────────────────────────────────────────────────
+
+export async function savePlayerData(playerId: string, saveJson: string): Promise<boolean> {
+  const rows = await query(
+    `INSERT INTO player_save_data (player_id, save_json, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (player_id) DO UPDATE
+       SET save_json  = EXCLUDED.save_json,
+           updated_at = now()
+     RETURNING player_id`,
+    [playerId, saveJson]
+  );
+  return (rows?.length ?? 0) > 0;
+}
+
+export async function loadPlayerData(playerId: string): Promise<{ saveJson: string; updatedAt: string } | null> {
+  const rows = await query(
+    `SELECT save_json, updated_at FROM player_save_data WHERE player_id = $1`,
+    [playerId]
+  );
+  if (!rows?.length) return null;
+  return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
 }
