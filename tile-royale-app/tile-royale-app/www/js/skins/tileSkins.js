@@ -62,6 +62,7 @@ const SKINS = {
     { id:'vic_void',      name:'Void King',     icon:'🌑', price:800,  owned:false, tier:'legendary', preview:'void' },
     { id:'vic_rainbow',   name:'Rainbow Slam',  icon:'🌈', price:800,  owned:false, tier:'legendary', preview:'rainbow' },
     { id:'vic_inferno',   name:'Inferno Crown',     icon:'👑', price:1500, owned:false, tier:'prestige', prestige:true, preview:'inferno' },
+    { id:'vic_royal',     name:'Royal Victory',     icon:'👸', price:1500, owned:false, tier:'prestige', prestige:true, preview:'royal' },
     { id:'vic_bacon',     name:'All The Bacon',     icon:'🥓', price:80,   owned:false, tier:'common',   preview:'bacon' },
     { id:'vic_pizza',     name:'Pizza Champion',    icon:'🍕', price:80,   owned:false, tier:'common',   preview:'pizza' },
     { id:'vic_grandma',   name:'Grandma Approved',  icon:'👵', price:200,  owned:false, tier:'rare',     preview:'grandma' },
