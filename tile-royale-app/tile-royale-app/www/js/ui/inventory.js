@@ -185,11 +185,34 @@ function applyTableBgToEl(el, skinId) {
     // Prestige
     table_inferno: 'radial-gradient(ellipse at bottom, #5a0a00 0%, #3a0500 30%, #1a0200 60%, #0a0a0f 100%)',
     table_cosmos:  'radial-gradient(ellipse at center, #0a0030 0%, #05001a 40%, #020010 70%, #000008 100%)',
+    // Mythic — artwork backgrounds (handled separately below)
+    table_myth_neon:    '__myth__assets/victory/victory-neon.webp',
+    table_myth_ice:     '__myth__assets/victory/victory-ice.webp',
+    table_myth_galaxy:  '__myth__assets/victory/victory-galaxy.webp',
+    table_myth_rainbow: '__myth__assets/victory/victory-rainbow.webp',
+    table_myth_inferno: '__myth__assets/victory/victory-inferno.webp',
+    table_myth_royal:   '__myth__assets/victory/victory-royal.webp',
+    table_myth_classic: '__myth__assets/victory/victory-default.webp',
     // Whale
     table_obsidian:'linear-gradient(180deg, #050005 0%, #0a0008 50%, #050003 100%)',
     table_aurora:  'linear-gradient(180deg, #001a12 0%, #002218 40%, #001a0d 70%, #000d08 100%)',
   };
-  el.style.background = bgMap[skinId] || 'var(--bg)';
+  const bgVal = bgMap[skinId] || 'var(--bg)';
+  if (bgVal.startsWith('__myth__')) {
+    const imgUrl = bgVal.slice(8); // strip '__myth__'
+    el.style.background    = 'none';
+    el.style.backgroundColor   = '#0a0a0f';
+    el.style.backgroundImage   = `url('${imgUrl}')`;
+    el.style.backgroundSize    = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.style.backgroundRepeat  = 'no-repeat';
+  } else {
+    el.style.background = bgVal;
+    el.style.backgroundImage   = '';
+    el.style.backgroundSize    = '';
+    el.style.backgroundPosition = '';
+    el.style.backgroundRepeat  = '';
+  }
   // Apply texture overlay class
   el.className = el.className.replace(/tex-\S+/g, '').trim();
   if (skinId === 'table_circuit') el.classList.add('tex-circuit');

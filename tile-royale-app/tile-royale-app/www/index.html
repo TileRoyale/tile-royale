@@ -1878,6 +1878,11 @@
 
 <!-- ===== RESULT SCREEN ===== -->
 <div class="screen" id="resultScreen">
+  <!-- Victory artwork card — shown when winner's skin has artwork -->
+  <div id="victoryArtwork" style="display:none;">
+    <img id="victoryArtworkImg" src="" alt="" draggable="false" />
+  </div>
+
   <div class="result-crown" id="resultCrown" onclick="handleLogoTap('midas')" style="cursor:pointer; position:relative;">🏆
     <div class="secret-tile" style="top:0;right:-20px;width:30px;height:30px;" onclick="event.stopPropagation(); triggerSecretTile('midas_touch')"></div>
   </div>
@@ -1890,6 +1895,7 @@
 
   <div class="result-title" id="resultTitle">VICTORY!</div>
   <div class="result-place" id="resultPlace">1ST PLACE</div>
+  <div class="victory-tagline" id="victoryTagline" style="display:none;"></div>
 
   <!-- Post-game highlight -->
   <div class="highlight-row" id="gameHighlight" style="display:none;">

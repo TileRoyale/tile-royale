@@ -273,6 +273,32 @@
     background: linear-gradient(135deg, rgba(255,215,0,0.03), var(--panel));
   }
 
+  /* ===== MYTHIC TABLE SKINS — artwork arena backgrounds ===== */
+  #gameScreen.table-myth-neon,
+  #gameScreen.table-myth-ice,
+  #gameScreen.table-myth-galaxy,
+  #gameScreen.table-myth-rainbow,
+  #gameScreen.table-myth-inferno,
+  #gameScreen.table-myth-royal,
+  #gameScreen.table-myth-classic {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  #gameScreen.table-myth-neon    { background-color: #000510; background-image: url('../assets/victory/victory-neon.webp'); }
+  #gameScreen.table-myth-ice     { background-color: #000d1a; background-image: url('../assets/victory/victory-ice.webp'); }
+  #gameScreen.table-myth-galaxy  { background-color: #0a0020; background-image: url('../assets/victory/victory-galaxy.webp'); }
+  #gameScreen.table-myth-rainbow { background-color: #050010; background-image: url('../assets/victory/victory-rainbow.webp'); }
+  #gameScreen.table-myth-inferno { background-color: #1a0500; background-image: url('../assets/victory/victory-inferno.webp'); }
+  #gameScreen.table-myth-royal   { background-color: #1a1000; background-image: url('../assets/victory/victory-royal.webp'); }
+  #gameScreen.table-myth-classic { background-color: #0a0a0f; background-image: url('../assets/victory/victory-default.webp'); }
+
+  /* Mythic card style in shop */
+  .skin-card.mythic {
+    border-color: rgba(0,200,255,0.3);
+    background: linear-gradient(135deg, rgba(0,200,255,0.04), var(--panel));
+  }
+
   /* Prestige table skins */
   #gameScreen.table-inferno {
     background: radial-gradient(ellipse at bottom, #2a0500 0%, #0a0a0f 60%),
@@ -325,6 +351,12 @@
   .tier-rare      { background: rgba(0,120,255,0.15);   color: #4488ff; }
   .tier-epic      { background: rgba(150,0,255,0.15);   color: #bb44ff; }
   .tier-legendary { background: rgba(255,140,0,0.15);   color: #ffaa00; }
+  .tier-mythic    {
+    background: linear-gradient(135deg,rgba(0,200,255,0.15),rgba(180,0,255,0.15));
+    color: #00e5ff; border: 1px solid rgba(0,200,255,0.3);
+    animation: mythicBadgePulse 3s ease-in-out infinite;
+  }
+  @keyframes mythicBadgePulse { 0%,100%{opacity:0.85;} 50%{opacity:1;} }
   .tier-prestige  {
     background: linear-gradient(135deg,rgba(255,215,0,0.2),rgba(255,100,0,0.2));
     color: var(--gold); border: 1px solid rgba(255,215,0,0.3);

@@ -17,6 +17,15 @@ const SKINS = {
     { id: 'table_cheese',     name: 'Cheese Floor',    icon: '🧀', price: 200,  owned: false, tier:'rare' },
     { id: 'table_disco',      name: 'Disco Night',     icon: '🪩', price: 800,  owned: false, tier:'legendary' },
     { id: 'table_money',      name: 'Money Moves',     icon: '💵', price: 800,  owned: false, tier:'legendary' },
+    // Mythic — artwork arena backgrounds
+    { id: 'table_myth_neon',    name: 'Neon',    icon: '⚡', price: 2000, owned: false, tier:'mythic', mythic:true },
+    { id: 'table_myth_ice',     name: 'Ice',     icon: '❄️', price: 2000, owned: false, tier:'mythic', mythic:true },
+    { id: 'table_myth_galaxy',  name: 'Galaxy',  icon: '🌌', price: 2000, owned: false, tier:'mythic', mythic:true },
+    { id: 'table_myth_rainbow', name: 'Rainbow', icon: '🌈', price: 2000, owned: false, tier:'mythic', mythic:true },
+    { id: 'table_myth_inferno', name: 'Inferno', icon: '🔥', price: 2000, owned: false, tier:'mythic', mythic:true },
+    { id: 'table_myth_royal',   name: 'Royal',   icon: '👑', price: 2000, owned: false, tier:'mythic', mythic:true },
+    { id: 'table_myth_classic', name: 'Classic', icon: '🏛️', price: 2000, owned: false, tier:'mythic', mythic:true },
+    // Whale exclusive
     { id: 'table_obsidian',   name: 'Obsidian',        icon: '⬛', price: 0,    owned: false, whale: true },
     { id: 'table_aurora',     name: 'Aurora',          icon: '🌠', price: 0,    owned: false, whale: true },
   ],
@@ -52,26 +61,26 @@ const SKINS = {
     { id: 'fx_blackhole',  name: 'Black Hole',    icon: '🌀', price: 0,    owned: false, whale: true },
   ],
   victory: [
-    { id:'vic_classic',   name:'Classic',       icon:'🏆', price:0,    owned:true,  tier:'default', preview:'gold' },
-    { id:'vic_neon',      name:'Neon Blaze',    icon:'⚡', price:80,   owned:false, tier:'common',  preview:'neon' },
-    { id:'vic_confetti',  name:'Confetti Pop',  icon:'🎊', price:80,   owned:false, tier:'common',  preview:'confetti' },
-    { id:'vic_fire',      name:'Fire Storm',    icon:'🔥', price:200,  owned:false, tier:'rare',    preview:'fire' },
-    { id:'vic_ice',       name:'Ice Crown',     icon:'❄️', price:200,  owned:false, tier:'rare',    preview:'ice' },
-    { id:'vic_galaxy',    name:'Galaxy Burst',  icon:'🌌', price:400,  owned:false, tier:'epic',    preview:'galaxy' },
-    { id:'vic_lightning', name:'Lightning God', icon:'🌩️', price:400,  owned:false, tier:'epic',    preview:'lightning' },
-    { id:'vic_void',      name:'Void King',     icon:'🌑', price:800,  owned:false, tier:'legendary', preview:'void' },
-    { id:'vic_rainbow',   name:'Rainbow Slam',  icon:'🌈', price:800,  owned:false, tier:'legendary', preview:'rainbow' },
-    { id:'vic_inferno',   name:'Inferno Crown',     icon:'👑', price:1500, owned:false, tier:'prestige', prestige:true, preview:'inferno' },
-    { id:'vic_royal',     name:'Royal Victory',     icon:'👸', price:1500, owned:false, tier:'prestige', prestige:true, preview:'royal' },
-    { id:'vic_bacon',     name:'All The Bacon',     icon:'🥓', price:80,   owned:false, tier:'common',   preview:'bacon' },
-    { id:'vic_pizza',     name:'Pizza Champion',    icon:'🍕', price:80,   owned:false, tier:'common',   preview:'pizza' },
-    { id:'vic_grandma',   name:'Grandma Approved',  icon:'👵', price:200,  owned:false, tier:'rare',     preview:'grandma' },
-    { id:'vic_disco',     name:'Disco Survivor',    icon:'🕺', price:200,  owned:false, tier:'rare',     preview:'disco' },
-    { id:'vic_goat',      name:'Greatest Of All Taps',icon:'🐐',price:400, owned:false, tier:'epic',     preview:'goat' },
-    { id:'vic_cheese',    name:'Big Cheese Energy', icon:'🧀', price:400,  owned:false, tier:'epic',     preview:'cheese' },
-    { id:'vic_404',       name:'404: Skill Found',  icon:'💻', price:800,  owned:false, tier:'legendary',preview:'404' },
-    { id:'vic_humble',    name:'Humble Brag',       icon:'🙄', price:800,  owned:false, tier:'legendary',preview:'humble' },
-    { id:'vic_mobydick',  name:'Moby Dick',         icon:'🐋', price:0,    owned:false, tier:'default',  whale:true, preview:'mobydick' },
+    { id:'vic_classic',   name:'Classic',             icon:'🏆', price:0,    owned:true,  tier:'default',   preview:'gold',      art:'assets/victory-art/vic-classic.webp',   tagline:'Victory never goes out of style.' },
+    { id:'vic_neon',      name:'Neon Blaze',          icon:'⚡', price:80,   owned:false, tier:'common',    preview:'neon',      art:'assets/victory-art/vic-neon.webp',      tagline:'Leave nothing but afterimages.' },
+    { id:'vic_confetti',  name:'Confetti Pop',        icon:'🎊', price:80,   owned:false, tier:'common',    preview:'confetti',  art:'assets/victory-art/vic-confetti.webp',  tagline:'Celebrate first. Ask questions later.' },
+    { id:'vic_fire',      name:'Fire Storm',          icon:'🔥', price:200,  owned:false, tier:'rare',      preview:'fire',      art:'assets/victory-art/vic-fire.webp',      tagline:'Burn brighter than the rest.' },
+    { id:'vic_ice',       name:'Ice Crown',           icon:'❄️', price:200,  owned:false, tier:'rare',      preview:'ice',       art:'assets/victory-art/vic-ice.webp',       tagline:'Stay cool. Win everything.' },
+    { id:'vic_galaxy',    name:'Galaxy Burst',        icon:'🌌', price:400,  owned:false, tier:'epic',      preview:'galaxy',    art:'assets/victory-art/vic-galaxy.webp',    tagline:'Beyond the stars lies victory.' },
+    { id:'vic_lightning', name:'Lightning God',       icon:'🌩️', price:400,  owned:false, tier:'epic',      preview:'lightning', art:'assets/victory-art/vic-lightning.webp', tagline:'Too fast. Too powerful.' },
+    { id:'vic_void',      name:'Void King',           icon:'🌑', price:800,  owned:false, tier:'legendary', preview:'void',      art:'assets/victory-art/vic-void.webp',      tagline:'Darkness bows to no one.' },
+    { id:'vic_rainbow',   name:'Rainbow Slam',        icon:'🌈', price:800,  owned:false, tier:'legendary', preview:'rainbow',   art:'assets/victory-art/vic-rainbow.webp',   tagline:'Win in every color.' },
+    { id:'vic_inferno',   name:'Inferno Crown',       icon:'👑', price:1500, owned:false, tier:'prestige',  preview:'inferno',   art:'assets/victory-art/vic-inferno.webp',   tagline:'Rule through fire.',            prestige:true },
+    { id:'vic_royal',     name:'Royal Victory',       icon:'👸', price:1500, owned:false, tier:'prestige',  preview:'royal',     art:'assets/victory-art/vic-royal.webp',     tagline:'Victory fit for royalty.',      prestige:true },
+    { id:'vic_bacon',     name:'All The Bacon',       icon:'🥓', price:80,   owned:false, tier:'common',    preview:'bacon',     art:'assets/victory-art/vic-bacon.webp',     tagline:'Bringing home all the bacon.' },
+    { id:'vic_pizza',     name:'Pizza Champion',      icon:'🍕', price:80,   owned:false, tier:'common',    preview:'pizza',     art:'assets/victory-art/vic-pizza.webp',     tagline:'Extra cheese. Extra wins.' },
+    { id:'vic_grandma',   name:'Grandma Approved',    icon:'👵', price:200,  owned:false, tier:'rare',      preview:'grandma',   art:'assets/victory-art/vic-grandma.webp',   tagline:'Even grandma is impressed.' },
+    { id:'vic_disco',     name:'Disco Survivor',      icon:'🕺', price:200,  owned:false, tier:'rare',      preview:'disco',     art:'assets/victory-art/vic-disco.webp',     tagline:'Still standing. Still dancing.' },
+    { id:'vic_goat',      name:'Greatest Of All Taps',icon:'🐐', price:400,  owned:false, tier:'epic',      preview:'goat',      art:'assets/victory-art/vic-goat.webp',      tagline:'The GOAT has arrived.' },
+    { id:'vic_cheese',    name:'Big Cheese Energy',   icon:'🧀', price:400,  owned:false, tier:'epic',      preview:'cheese',    art:'assets/victory-art/vic-cheese.webp',    tagline:'Respect the cheese.' },
+    { id:'vic_404',       name:'404: Skill Found',    icon:'💻', price:800,  owned:false, tier:'legendary', preview:'404',                                                    tagline:'Error: Defeat not found.' },
+    { id:'vic_humble',    name:'Humble Brag',         icon:'🙄', price:800,  owned:false, tier:'legendary', preview:'humble',                                                 tagline:'Just lucky. Again.' },
+    { id:'vic_mobydick',  name:'Moby Dick',           icon:'🐋', price:0,    owned:false, tier:'default',   preview:'mobydick',  whale:true,                                  tagline:'The ocean answers to you.' },
   ],
   tapeffect: [
     { id: 'tap_ripple',    name: 'Ripple',        icon: '💧', price: 0,    owned: true,  tier:'default' },
@@ -225,11 +234,12 @@ function renderSkinGrid(tab) {
     card.className = 'skin-card'
       + (isActive ? ' active' : '')
       + (isOwned ? '' : ' locked')
-      + (isPrestige ? ' prestige' : '');
+      + (isPrestige ? ' prestige' : '')
+      + (skin.mythic ? ' mythic' : '');
     card.onclick = () => selectSkin(tab, skin, isOwned);
 
-    const tierLabels = { common:'Common', rare:'Rare', epic:'Epic', legendary:'Legendary', prestige:'Prestige', default:'' };
-    const tierColors  = { common:'tier-common', rare:'tier-rare', epic:'tier-epic', legendary:'tier-legendary', prestige:'tier-prestige' };
+    const tierLabels = { common:'Common', rare:'Rare', epic:'Epic', legendary:'Legendary', prestige:'Prestige', mythic:'Mythic', default:'' };
+    const tierColors  = { common:'tier-common', rare:'tier-rare', epic:'tier-epic', legendary:'tier-legendary', prestige:'tier-prestige', mythic:'tier-mythic' };
     const tierBadge = skin.tier && skin.tier !== 'default'
       ? `<span class="skin-tier-badge ${tierColors[skin.tier]||''}">${tierLabels[skin.tier]||''}</span>`
       : '';
@@ -467,6 +477,14 @@ const TABLE_CLASS_MAP = {
   table_marble:   'table-marble',
   table_ocean:    'table-deep_ocean',
   table_toxic:    'table-toxic_waste',
+  // Mythic
+  table_myth_neon:    'table-myth-neon',
+  table_myth_ice:     'table-myth-ice',
+  table_myth_galaxy:  'table-myth-galaxy',
+  table_myth_rainbow: 'table-myth-rainbow',
+  table_myth_inferno: 'table-myth-inferno',
+  table_myth_royal:   'table-myth-royal',
+  table_myth_classic: 'table-myth-classic',
   // Whale exclusive
   table_obsidian: 'table-obsidian',
   table_aurora:   'table-aurora',

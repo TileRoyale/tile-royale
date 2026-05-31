@@ -36,8 +36,12 @@ function renderVictorySkins(grid) {
       : isOwned ? (isActive ? '✓ Active' : 'Owned')
       : `💎 ${skin.price}`;
 
+    const artStyle = skin.art
+      ? `background-image:url('${skin.art}');`
+      : '';
+    const artClass = skin.art ? ' has-art' : '';
     card.innerHTML = `
-      <div class="vic-preview vic-${skin.preview}">${skin.icon}</div>
+      <div class="vic-preview vic-${skin.preview}${artClass}" style="${artStyle}">${skin.art ? '' : skin.icon}</div>
       <div class="skin-card-info" style="flex:1;min-width:0;">
         <div class="skin-name">${skin.name}</div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
@@ -88,6 +92,30 @@ const VICTORY_MESSAGES = {
   vic_humble:   { title:'NO BIG DEAL',    sub:"It's not like you practiced or anything. 🙄" },
 };
 
+function _showVictoryArtwork(skin) {
+  const wrap    = document.getElementById('victoryArtwork');
+  const img     = document.getElementById('victoryArtworkImg');
+  const tagline = document.getElementById('victoryTagline');
+  if (wrap && img) {
+    if (skin && skin.art) {
+      img.src = skin.art;
+      wrap.style.display = 'flex';
+    } else {
+      wrap.style.display = 'none';
+      img.src = '';
+    }
+  }
+  if (tagline) {
+    if (skin && skin.tagline) {
+      tagline.textContent = skin.tagline;
+      tagline.style.display = 'block';
+    } else {
+      tagline.style.display = 'none';
+      tagline.textContent = '';
+    }
+  }
+}
+
 function applyVictoryScreenSkinById(skinId) {
   const screen = document.getElementById('resultScreen');
   if (!screen) return;
@@ -96,7 +124,8 @@ function applyVictoryScreenSkinById(skinId) {
   if (skin && skinId !== 'vic_classic') {
     screen.classList.add(`result-vic-${skin.preview}`);
   }
-  // Show winner skin toast
+  _showVictoryArtwork(skin || null);
+  // Show winner skin toast for non-classic skins shown to losers
   if (skin && skinId !== 'vic_classic') {
     setTimeout(() => showToast(`👑 Winner's screen: ${skin.icon} ${skin.name}`, 'var(--gold)'), 800);
   }
@@ -107,10 +136,11 @@ function applyVictoryScreenSkin() {
   const screen = document.getElementById('resultScreen');
   if (!screen) return;
   screen.className = (screen.className || '').replace(/result-vic-\S+/g, '').trim();
-  if (vic !== 'vic_classic') {
-    const preview = (SKINS.victory || []).find(s => s.id === vic)?.preview || '';
-    if (preview) screen.classList.add(`result-vic-${preview}`);
+  const skin = (SKINS.victory || []).find(s => s.id === vic);
+  if (vic !== 'vic_classic' && skin) {
+    if (skin.preview) screen.classList.add(`result-vic-${skin.preview}`);
   }
+  _showVictoryArtwork(skin || null);
   // Apply custom message
   const msg = VICTORY_MESSAGES[vic];
   if (msg && (!playerEliminated || playerWon)) {
