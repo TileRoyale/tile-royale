@@ -32,11 +32,8 @@ function getKothWeekTimer() {
 }
 
 function getKothSimulatedPool() {
-  // Simulate a realistic pool based on week progress and some bot activity
-  const weekData = getKothWeekData();
-  const dayOfWeek = new Date().getDay();
-  const botContributions = (dayOfWeek * 47 + 13) * KOTH_ENTRY_FEE * KOTH_POOL_PCT;
-  return weekData.pool + botContributions;
+  // Only real player contributions — no simulated bot additions
+  return getKothWeekData().pool || 0;
 }
 
 // ===== KOTH DAILY TOP REWARD =====
@@ -69,21 +66,9 @@ function getKothDailyTimer() {
   return `${h}h ${m}m`;
 }
 
-// Simulate total daily KOTH players and get player percentile
+// Returns null — real percentile requires server-side KOTH player data
 function getKothDailyPercentile(wins) {
-  // Simulated player distribution — more players have fewer wins
-  // With 0 wins, you're in bottom 70%
-  // Each win roughly moves you up
-  if (wins === 0) return 100;
-  if (wins >= 20) return 1;
-  if (wins >= 15) return 2;
-  if (wins >= 12) return 3;
-  if (wins >= 9)  return 4;
-  if (wins >= 7)  return 5;
-  if (wins >= 5)  return 8;
-  if (wins >= 3)  return 15;
-  if (wins >= 1)  return 40;
-  return 100;
+  return null;
 }
 
 function getEligibleDailyReward(wins) {
@@ -108,8 +93,8 @@ function renderKothDailySection() {
       rankEl.textContent = 'Play to rank!';
       rankEl.style.color = 'var(--muted)';
     } else {
-      rankEl.textContent = `Top ${pct}% (${wins} wins)`;
-      rankEl.style.color = pct <= 5 ? 'var(--gold)' : 'var(--diamond)';
+      rankEl.textContent = `${wins} win${wins !== 1 ? 's' : ''} today`;
+      rankEl.style.color = 'var(--diamond)';
     }
   }
 
@@ -188,10 +173,7 @@ function openKothScreen() {
   document.getElementById('kothYourPool').textContent = `💎 ${(weekData.contributed || 0).toLocaleString()}`;
   document.getElementById('kothBalance').textContent = (gameState.diamonds || 0).toLocaleString();
 
-  // Your rank (simulated)
-  const yourWins = weekData.wins || 0;
-  const rank = yourWins === 0 ? '—' : yourWins >= 20 ? '#1' : yourWins >= 10 ? '#2' : yourWins >= 5 ? '#3' : `#${Math.floor(30 - yourWins/2) + 3}`;
-  document.getElementById('kothYourRank').textContent = rank;
+  document.getElementById('kothYourRank').textContent = '—';
 
   // Weekly leaderboard
   renderKothLeaderboard(weekData.wins || 0);
@@ -225,34 +207,29 @@ function openKothScreen() {
 function renderKothLeaderboard(playerWins) {
   const lb = document.getElementById('kothWeeklyLb');
   lb.innerHTML = '';
-  const day = new Date().getDay();
-  // Simulated leaderboard
-  const bots = [
-    { name:'TapKing',    avatar:'🦁', wins: 28 + day },
-    { name:'BlazeMaster',avatar:'🔥', wins: 22 + day },
-    { name:'GridRipper', avatar:'🐉', wins: 18 + Math.floor(day*0.8) },
-    { name:'SwiftTile',  avatar:'⚡', wins: 15 + Math.floor(day*0.6) },
-    { name:'NightTapper',avatar:'👻', wins: 11 + Math.floor(day*0.5) },
-  ];
 
-  // Insert player
-  const allEntries = [...bots, {
-    name: gameState.playerName || 'YOU', avatar:'🎮', wins: playerWins, isYou: true
-  }].sort((a,b) => b.wins - a.wins);
+  const av = typeof getActiveAvatar === 'function' ? getActiveAvatar() : null;
+  const playerAvatar = av ? av.icon : '🎮';
+  const playerName   = gameState.playerName || 'YOU';
 
-  const rankIcons = {1:'🥇', 2:'🥈', 3:'🥉'};
-  allEntries.slice(0, 7).forEach((e, i) => {
-    const rank = i + 1;
+  // Show only the real player entry — server-side KOTH leaderboard coming soon
+  if (playerWins > 0) {
     const row = document.createElement('div');
-    row.className = 'lb-entry' + (rank===1?' top1':rank===2?' top2':rank===3?' top3':'') + (e.isYou?' is-you':'');
-    row.innerHTML = `
-      <div class="lb-entry-rank">${rankIcons[rank] || rank}</div>
-      <div class="lb-entry-avatar">${e.avatar}</div>
-      <div class="lb-entry-name">${e.name}${e.isYou?' <span style="font-size:10px;color:var(--fire)">(YOU)</span>':''}</div>
-      <div class="lb-entry-val">${e.wins} wins</div>
-    `;
+    row.className = 'lb-entry is-you';
+    row.innerHTML =
+      `<div class="lb-entry-rank">🏆</div>` +
+      `<div class="lb-entry-avatar">${playerAvatar}</div>` +
+      `<div class="lb-entry-name">${playerName} <span style="font-size:10px;color:var(--fire)">(YOU)</span></div>` +
+      `<div class="lb-entry-val">${playerWins} wins</div>`;
     lb.appendChild(row);
-  });
+  }
+
+  const note = document.createElement('div');
+  note.style.cssText = 'text-align:center;color:var(--muted);font-size:11px;letter-spacing:1px;padding:16px 8px;line-height:1.6;';
+  note.textContent = playerWins > 0
+    ? 'Global leaderboard coming soon — play more KOTH to build your score!'
+    : 'Play KOTH matches to appear on the leaderboard!';
+  lb.appendChild(note);
 }
 
 function startKoth() {
@@ -325,12 +302,10 @@ function distributeKothPrizes(weekKey) {
   const pool = weekData.pool || 0;
   if (pool <= 0) return;
 
-  // Simulate player's rank based on wins vs bots
+  // Prize distribution requires real server-side leaderboard — skip for now
   const wins = weekData.wins || 0;
-  let place = 4; // outside top 3 by default
-  if (wins >= 25) place = 1;
-  else if (wins >= 18) place = 2;
-  else if (wins >= 12) place = 3;
+  let place = 4;
+  // Will be replaced with real server rank once KOTH backend is implemented
 
   if (place <= 3) {
     const prize = Math.floor(pool * KOTH_PRIZES[place-1]);
