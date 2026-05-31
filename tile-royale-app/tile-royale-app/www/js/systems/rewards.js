@@ -151,7 +151,7 @@ function checkOfflineReward() {
   const elapsed = now - last;
   const periods = Math.floor(elapsed / OFFLINE_RATE_MS);
   if (periods >= 1) {
-    pendingOfflineDiamonds = Math.min(periods, 3) * OFFLINE_DIAMONDS; // max 3 periods = 150💎
+    pendingOfflineDiamonds = Math.min(periods, 3) * OFFLINE_DIAMONDS; // max 3 periods = 9💎
     const hours = Math.floor(elapsed / 3600000);
     document.getElementById('offlineRewardSub').textContent =
       `Away for ${hours}h — earned while offline`;
@@ -164,12 +164,13 @@ function checkOfflineReward() {
 }
 
 function claimOfflineReward() {
-  gameState.diamonds = (gameState.diamonds || 0) + pendingOfflineDiamonds;
+  const earned = pendingOfflineDiamonds;
+  gameState.diamonds = (gameState.diamonds || 0) + earned;
   pendingOfflineDiamonds = 0;
   saveState();
   updateMenuStats();
   document.getElementById('offlineRewardOverlay').classList.remove('show');
-  showToast(`💎 +${pendingOfflineDiamonds || OFFLINE_DIAMONDS} offline diamonds claimed!`, 'var(--diamond)');
+  showToast(`💎 +${earned} offline diamonds claimed!`, 'var(--diamond)');
 }
 
 // ===== 6. SURPRISE REWARD =====
