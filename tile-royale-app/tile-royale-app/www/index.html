@@ -42,7 +42,7 @@
     pointer-events:none;user-select:none;">TAP TO START</div>
 </div>
 
-<div id="versionBadge" style="position:fixed; bottom:8px; right:8px; font-size:10px; letter-spacing:1px; color:rgba(255,255,255,0.25); z-index:9999; pointer-events:none;">v0.5.5</div>
+<div id="versionBadge" style="position:fixed; bottom:8px; right:8px; font-size:10px; letter-spacing:1px; color:rgba(255,255,255,0.25); z-index:9999; pointer-events:none;">v0.5.6</div>
 
 <!-- ===== ONBOARDING SCREEN ===== -->
 <div class="screen active" id="onboardingScreen">
@@ -1884,6 +1884,7 @@
   <!-- Victory artwork card — shown when winner's skin has artwork -->
   <div id="victoryArtwork" style="display:none;">
     <img id="victoryArtworkImg" src="" alt="" draggable="false" />
+    <div class="victory-tagline" id="victoryTagline" style="display:none;"></div>
   </div>
 
   <div class="result-crown" id="resultCrown" onclick="handleLogoTap('midas')" style="cursor:pointer; position:relative;">🏆
@@ -1898,7 +1899,6 @@
 
   <div class="result-title" id="resultTitle">VICTORY!</div>
   <div class="result-place" id="resultPlace">1ST PLACE</div>
-  <div class="victory-tagline" id="victoryTagline" style="display:none;"></div>
 
   <!-- Post-game highlight -->
   <div class="highlight-row" id="gameHighlight" style="display:none;">
