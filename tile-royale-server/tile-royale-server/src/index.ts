@@ -561,8 +561,32 @@ app.post("/save", async (req, res) => {
     const trusted  = await getTrustedDiamonds(playerId);
 
     if (trusted === null) {
-      // First save through this system — bootstrap the ceiling from the client value
-      await setTrustedDiamonds(playerId, incoming);
+      // First save: estimate the maximum legitimate diamonds from server-side game history
+      // so a fresh-install exploit (edit localStorage → save) cannot anchor an inflated ceiling.
+      //
+      //   BASE_PURCHASE  = covers the largest possible in-app purchase stack
+      //                    (Deep Ocean Bundle: 30k + all diamond packages: ~30k ≈ 60k total)
+      //   PER_GAME       = generous daily-cap approximation per game result on record
+      //
+      // NOTE: once billing is server-validated, purchased amounts will be added via
+      // addTrustedDiamonds() before this save arrives, making BASE_PURCHASE irrelevant
+      // for that path. Until then, this cap must stay above the max single-session purchase.
+      const BASE_PURCHASE = 100_000;   // covers all realistic IAP stacks; still stops 999k+ exploits
+      const PER_GAME_BOOTSTRAP = 80;
+      const gameCountRows = await query(
+        `SELECT COUNT(*)::INT AS cnt FROM game_results WHERE player_id = $1`,
+        [playerId]
+      );
+      const gamesOnRecord = gameCountRows?.[0]?.cnt ?? 0;
+      const allowedMax = BASE_PURCHASE + gamesOnRecord * PER_GAME_BOOTSTRAP;
+
+      const cappedIncoming = Math.min(incoming, allowedMax);
+      if (incoming > allowedMax) {
+        adjustedDiamonds = cappedIncoming;
+        finalData = { ...saveData, diamonds: cappedIncoming };
+        console.warn(`[Economy] first-save cap ${playerId}: ${incoming} → ${cappedIncoming} (games on record: ${gamesOnRecord})`);
+      }
+      await setTrustedDiamonds(playerId, cappedIncoming);
     } else if (incoming > trusted + MAX_CLIENT_EARN) {
       // Suspicious jump — cap to trusted ceiling, log for monitoring
       adjustedDiamonds = trusted;
