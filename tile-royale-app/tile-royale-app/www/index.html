@@ -1786,6 +1786,9 @@
   </div>
 </div>
 <div class="screen" id="gameScreen">
+  <!-- Mythic theme background: fixed, z:-1, renders above body::before but below tiles -->
+  <div id="mythicGameBg" style="position:fixed;inset:0;z-index:-1;pointer-events:none;background-size:cover;background-position:center;background-repeat:no-repeat;display:none;"></div>
+
   <div class="game-header">
     <div style="display:flex;align-items:center;gap:8px;">
       <button onclick="confirmQuitGame()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 10px;font-size:16px;color:var(--muted);cursor:pointer;line-height:1;">✕</button>

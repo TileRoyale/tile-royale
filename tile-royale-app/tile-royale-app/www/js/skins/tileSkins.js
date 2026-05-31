@@ -540,8 +540,8 @@ function applySkins() {
 
   const skins = activeSkins;
 
-  // Mythic skins: apply background-image inline (CSS class approach is unreliable
-  // across WebView versions; inline styles match how thumbnails work and always win)
+  // Mythic skins: render via #mythicGameBg (position:fixed; z-index:-1 inside #gameScreen).
+  // This paints above body::before but below in-flow tiles, bypassing all stacking issues.
   const MYTHIC_IMAGES = {
     table_myth_neon:    'assets/victory/victory-neon.webp',
     table_myth_ice:     'assets/victory/victory-ice.webp',
@@ -552,16 +552,14 @@ function applySkins() {
     table_myth_classic: 'assets/victory/victory-default.webp',
   };
   const mythImg = MYTHIC_IMAGES[skins.table];
-  if (mythImg) {
-    gs.style.backgroundImage    = `url('${mythImg}')`;
-    gs.style.backgroundSize     = 'cover';
-    gs.style.backgroundPosition = 'center';
-    gs.style.backgroundRepeat   = 'no-repeat';
+  const mythicBgEl = document.getElementById('mythicGameBg');
+  if (mythImg && mythicBgEl) {
+    mythicBgEl.style.backgroundImage = `url('${mythImg}')`;
+    mythicBgEl.style.display = 'block';
+    gs.style.background = 'transparent'; // clear CSS class background so z:-1 child shows
   } else {
-    gs.style.backgroundImage    = '';
-    gs.style.backgroundSize     = '';
-    gs.style.backgroundPosition = '';
-    gs.style.backgroundRepeat   = '';
+    if (mythicBgEl) { mythicBgEl.style.display = 'none'; mythicBgEl.style.backgroundImage = ''; }
+    gs.style.background = ''; // restore — let CSS class apply its gradient/color
   }
 
   // Table skin → gameScreen CSS class (gradient/texture skins)
