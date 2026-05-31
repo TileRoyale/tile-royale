@@ -182,6 +182,26 @@ async function createTables(): Promise<void> {
     -- Economy integrity: server-side diamond ceiling per player
     -- NULL = not yet bootstrapped (first save through validation system sets it)
     ALTER TABLE players ADD COLUMN IF NOT EXISTS trusted_diamonds INTEGER;
+
+    -- KOTH daily reward claims: one per player per UTC day (server-side anti-replay)
+    CREATE TABLE IF NOT EXISTS koth_daily_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      claim_date  DATE         NOT NULL,
+      tier        TEXT         NOT NULL,
+      diamonds    INTEGER      NOT NULL,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- KOTH weekly prize claims: one per player per week start date (server-side anti-replay)
+    CREATE TABLE IF NOT EXISTS koth_prize_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      week_start  DATE         NOT NULL,
+      rank        INTEGER      NOT NULL,
+      prize       INTEGER      NOT NULL DEFAULT 0,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -195,6 +215,8 @@ async function createTables(): Promise<void> {
     CREATE        INDEX IF NOT EXISTS idx_push_tokens_player      ON push_tokens(player_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_promo_redemptions_pair  ON promo_redemptions(code, player_id);
     CREATE        INDEX IF NOT EXISTS idx_promo_redemptions_code  ON promo_redemptions(code);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_daily_claims       ON koth_daily_claims(player_id, claim_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_prize_claims       ON koth_prize_claims(player_id, week_start);
   `);
   console.log("[DB] Tables ready");
 }
@@ -956,4 +978,270 @@ export async function addTrustedDiamonds(playerId: string, amount: number): Prom
     `UPDATE players SET trusted_diamonds = COALESCE(trusted_diamonds, 0) + $1 WHERE player_id = $2`,
     [amount, playerId]
   );
+}
+
+// ─── KOTH Leaderboards ────────────────────────────────────────────────────────
+
+// Weekly KOTH leaderboard — top 20 players by 1st-place finishes in KOTH mode.
+// period 'current' = this calendar week (Mon 00:00 UTC onward)
+// period 'prev'    = the week that just ended (useful for prize distribution)
+export async function getKothWeeklyLeaderboard(
+  playerId: string,
+  period: 'current' | 'prev' = 'current'
+): Promise<{ weekly: any[]; playerRank: number | null; playerWins: number } | null> {
+  const timeFilter = period === 'prev'
+    ? `AND gr.played_at >= date_trunc('week', now() - interval '7 days')
+       AND gr.played_at <  date_trunc('week', now())`
+    : `AND gr.played_at >= date_trunc('week', now())`;
+
+  const rows = await query(`
+    WITH wins_cte AS (
+      SELECT
+        p.player_id,
+        p.player_name,
+        p.avatar,
+        COUNT(*)::INT AS wins
+      FROM game_results gr
+      JOIN players p ON p.player_id = gr.player_id
+      WHERE gr.mode = 'koth'
+        AND gr.placement = 1
+        ${timeFilter}
+      GROUP BY p.player_id, p.player_name, p.avatar
+    ),
+    ranked AS (
+      SELECT *, RANK() OVER (ORDER BY wins DESC)::INT AS rank
+      FROM wins_cte
+    )
+    SELECT * FROM ranked ORDER BY rank ASC LIMIT 20
+  `);
+
+  if (!rows) return null;
+
+  const playerRow = rows.find((r: any) => r.player_id === playerId);
+  let playerRank: number | null = playerRow ? playerRow.rank : null;
+  let playerWins: number        = playerRow ? playerRow.wins : 0;
+
+  // Player is outside top 20 — do a targeted rank lookup
+  if (!playerRow) {
+    const fallbackRows = await query(`
+      WITH wins_cte AS (
+        SELECT player_id, COUNT(*)::INT AS wins
+        FROM game_results
+        WHERE mode = 'koth' AND placement = 1
+          ${timeFilter}
+        GROUP BY player_id
+      )
+      SELECT wins, RANK() OVER (ORDER BY wins DESC)::INT AS rank
+      FROM wins_cte
+      WHERE player_id = $1
+    `, [playerId]);
+    if (fallbackRows?.length) {
+      playerRank = fallbackRows[0].rank;
+      playerWins = fallbackRows[0].wins;
+    }
+  }
+
+  return {
+    weekly: rows.map((r: any) => ({
+      rank:        r.rank,
+      player_id:   r.player_id,
+      player_name: r.player_name,
+      avatar:      r.avatar,
+      wins:        r.wins,
+    })),
+    playerRank,
+    playerWins,
+  };
+}
+
+// Daily KOTH stats — player's percentile among all KOTH players today.
+// Percentile is rank/totalPlayers * 100 (lower = better: rank 1 of 100 = 1%).
+export async function getKothDailyStats(
+  playerId: string
+): Promise<{
+  leaderboard:      any[];
+  playerRank:       number | null;
+  playerPercentile: number | null;
+  playerWins:       number;
+  totalPlayers:     number;
+} | null> {
+  // Total distinct players who entered a KOTH game today (denominator for percentile)
+  const countRows = await query(`
+    SELECT COUNT(DISTINCT player_id)::INT AS total
+    FROM game_results
+    WHERE mode = 'koth'
+      AND played_at >= date_trunc('day', now())
+  `);
+  if (!countRows) return null;
+  const totalPlayers: number = countRows[0]?.total ?? 0;
+
+  // Top 50 KOTH winners today ranked by win count
+  const rows = await query(`
+    WITH wins_cte AS (
+      SELECT
+        p.player_id,
+        p.player_name,
+        p.avatar,
+        COUNT(*)::INT AS wins
+      FROM game_results gr
+      JOIN players p ON p.player_id = gr.player_id
+      WHERE gr.mode = 'koth'
+        AND gr.placement = 1
+        AND gr.played_at >= date_trunc('day', now())
+      GROUP BY p.player_id, p.player_name, p.avatar
+    ),
+    ranked AS (
+      SELECT *, RANK() OVER (ORDER BY wins DESC)::INT AS rank
+      FROM wins_cte
+    )
+    SELECT * FROM ranked ORDER BY rank ASC LIMIT 50
+  `);
+  if (!rows) return null;
+
+  const playerRow = rows.find((r: any) => r.player_id === playerId);
+  let playerRank:       number | null = null;
+  let playerPercentile: number | null = null;
+  let playerWins = 0;
+
+  if (playerRow && totalPlayers > 0) {
+    playerRank       = playerRow.rank;
+    playerWins       = playerRow.wins;
+    playerPercentile = Math.ceil((playerRank / totalPlayers) * 100);
+  }
+
+  return {
+    leaderboard: rows.slice(0, 20).map((r: any) => ({
+      rank:        r.rank,
+      player_id:   r.player_id,
+      player_name: r.player_name,
+      avatar:      r.avatar,
+      wins:        r.wins,
+    })),
+    playerRank,
+    playerPercentile,
+    playerWins,
+    totalPlayers,
+  };
+}
+
+// ─── KOTH Claim Functions ─────────────────────────────────────────────────────
+
+// Server-side KOTH daily reward claim. Uses server's current UTC date.
+// Returns null on DB error, otherwise an ok/reason object.
+export async function claimKothDailyReward(
+  playerId: string
+): Promise<{ ok: boolean; reason?: string; tier?: string; diamonds?: number } | null> {
+  if (!pool || !dbAvailable) return null;
+
+  const dailyStats = await getKothDailyStats(playerId);
+  if (!dailyStats) return null;
+
+  const { playerPercentile } = dailyStats;
+  if (playerPercentile === null) return { ok: false, reason: 'not_ranked' };
+
+  const TIERS = [
+    { tier: 'TOP 1%', maxPct: 1,  diamonds: 125 },
+    { tier: 'TOP 3%', maxPct: 3,  diamonds: 75  },
+    { tier: 'TOP 5%', maxPct: 5,  diamonds: 25  },
+  ];
+  const eligible = TIERS.find(t => playerPercentile <= t.maxPct);
+  if (!eligible) return { ok: false, reason: 'not_eligible' };
+
+  const todayUtc = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD" UTC
+
+  try {
+    await pool.query(
+      `INSERT INTO koth_daily_claims (player_id, claim_date, tier, diamonds)
+       VALUES ($1, $2::date, $3, $4)`,
+      [playerId, todayUtc, eligible.tier, eligible.diamonds]
+    );
+  } catch (err: any) {
+    if (err.code === '23505') return { ok: false, reason: 'already_claimed' };
+    console.error('[DB] koth_daily_claims insert error:', err);
+    return null;
+  }
+
+  await addTrustedDiamonds(playerId, eligible.diamonds);
+  return { ok: true, tier: eligible.tier, diamonds: eligible.diamonds };
+}
+
+// Server-side KOTH weekly prize claim. weekStart: ISO Monday date "YYYY-MM-DD".
+// Uses ROW_NUMBER (not RANK) for deterministic tiebreaking so prizes are never over-distributed.
+// Returns null on DB error, otherwise an ok/reason object.
+export async function claimKothWeeklyPrize(
+  playerId: string,
+  weekStart: string
+): Promise<{ ok: boolean; reason?: string; rank?: number; prize?: number } | null> {
+  if (!pool || !dbAvailable) return null;
+
+  // Deterministic tiebreaker: player_id ASC so ties always resolve the same way
+  const rankRows = await query(`
+    WITH wins_cte AS (
+      SELECT player_id, COUNT(*)::INT AS wins
+      FROM game_results
+      WHERE mode = 'koth'
+        AND placement = 1
+        AND played_at >= $1::date
+        AND played_at <  $1::date + INTERVAL '7 days'
+      GROUP BY player_id
+    )
+    SELECT
+      player_id,
+      wins,
+      ROW_NUMBER() OVER (ORDER BY wins DESC, player_id ASC)::INT AS prize_rank
+    FROM wins_cte
+    WHERE player_id = $2
+  `, [weekStart, playerId]);
+
+  if (!rankRows || rankRows.length === 0) return { ok: false, reason: 'not_ranked' };
+  const prizeRank: number = rankRows[0].prize_rank;
+  if (prizeRank > 3) return { ok: false, reason: 'not_top3' };
+
+  // Server-authoritative pool: every game_results row for KOTH = one paid entry fee
+  const poolRows = await query(`
+    SELECT COUNT(*)::INT AS game_count
+    FROM game_results
+    WHERE mode = 'koth'
+      AND played_at >= $1::date
+      AND played_at <  $1::date + INTERVAL '7 days'
+  `, [weekStart]);
+  const gameCount: number = poolRows?.[0]?.game_count ?? 0;
+  const PRIZES = [0.60, 0.25, 0.15];
+  const prize = Math.floor(gameCount * 50 * 0.5 * PRIZES[prizeRank - 1]);
+
+  try {
+    await pool.query(
+      `INSERT INTO koth_prize_claims (player_id, week_start, rank, prize)
+       VALUES ($1, $2::date, $3, $4)`,
+      [playerId, weekStart, prizeRank, prize]
+    );
+  } catch (err: any) {
+    if (err.code === '23505') {
+      // Already claimed — return the stored result so the client can apply it
+      const existing = await query(
+        `SELECT rank, prize FROM koth_prize_claims WHERE player_id = $1 AND week_start = $2::date`,
+        [playerId, weekStart]
+      );
+      if (existing?.length) {
+        return { ok: false, reason: 'already_claimed', rank: existing[0].rank, prize: existing[0].prize };
+      }
+      return { ok: false, reason: 'already_claimed' };
+    }
+    console.error('[DB] koth_prize_claims insert error:', err);
+    return null;
+  }
+
+  if (prize > 0) await addTrustedDiamonds(playerId, prize);
+
+  const placeLabels = ['1st', '2nd', '3rd'];
+  await createPlayerNotification(
+    playerId,
+    `👑 KOTH ${placeLabels[prizeRank - 1]} Place Prize!`,
+    `You finished #${prizeRank} in King of the Hill this week and earned 💎 ${prize.toLocaleString()} diamonds!`,
+    'reward',
+    'diamonds',
+    prize
+  );
+
+  return { ok: true, rank: prizeRank, prize };
 }

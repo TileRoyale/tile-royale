@@ -627,6 +627,22 @@ function endGameFromServer(data) {
       try { saveState(); } catch(_) {}
     }
 
+    // ── Daily challenge progress ──────────────────────────────────────────────
+    // (mirrors the same block in gameLoop.js for the singleplayer/bot path)
+    try {
+      if (gameState.mode === 'koth') updateDcProgress('kothGames');
+      if (data.won) {
+        if (gameState.mode === 'rush')     updateDcProgress('rushWins');
+        if (gameState.mode === 'wild')     updateDcProgress('wildWins');
+      }
+      if (place <= 3)                      updateDcProgress('top3Today');
+      if (gameState.mode === 'buckshot')   updateDcProgress('buckshotGames');
+      renderMenuDailyChallenge();
+    } catch(e) { console.warn('[endGameFromServer] DC progress:', e); }
+
+    // ── Mission progress ──────────────────────────────────────────────────────
+    try { trackMissionEvent('match_end', { placement: place, taps: 0, xp, mode: gameState.mode }); } catch(e) {}
+
     // ── Reward UI ────────────────────────────────────────────────────────────
     document.getElementById('rewardDiamonds').textContent  = `+${diamonds}`;
     document.getElementById('rewardXP').textContent        = `+${xp}`;

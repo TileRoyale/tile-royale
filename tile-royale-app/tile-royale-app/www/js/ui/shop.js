@@ -327,7 +327,7 @@ function renderOnlyWhales(c) {
 
       <div class="store-section-hdr" style="color:var(--gold);">🐋 Unlock Whale Status</div>
       <div class="bundle-card" style="border-color:rgba(0,229,255,0.3);background:linear-gradient(135deg,rgba(0,229,255,0.04),var(--panel));cursor:pointer;"
-        onclick="buyBundle(STORE_BUNDLES.find(b=>b.id==='bundle_mobydick'))">
+        onclick="buyBundle('bundle_mobydick')">
         <div class="bundle-header">
           <div class="bundle-icon">🐋</div>
           <div class="bundle-info">
@@ -373,27 +373,41 @@ function renderOnlyWhales(c) {
   }
 
   // Whale is active — show real content (exclude Moby Dick — entry pack already used)
-  c.innerHTML += `<div class="store-section-hdr" style="color:var(--diamond);">🌊 Exclusive Whale Bundles</div>`;
+  // Build everything with appendChild so innerHTML += never wipes out onclick handlers.
+  const bundleHdr = document.createElement('div');
+  bundleHdr.className = 'store-section-hdr';
+  bundleHdr.style.color = 'var(--diamond)';
+  bundleHdr.textContent = '🌊 Exclusive Whale Bundles';
+  c.appendChild(bundleHdr);
+
   STORE_BUNDLES.filter(b => b.whale && b.id !== 'bundle_mobydick').forEach(b => {
     c.appendChild(buildBundleCard(b));
   });
 
-  // Exclusive whale skins preview
-  c.innerHTML += `
-    <div class="store-section-hdr" style="color:var(--diamond);">✨ Your Exclusive Skins</div>
-    <div style="background:var(--panel);border:1px solid rgba(0,229,255,0.2);border-radius:12px;padding:14px 16px;">
-      <div style="font-size:12px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">
-        These skins are in your profile — only you and other whales have them.
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${WHALE_EXCLUSIVE_SKINS.map(s => {
-          const owned = gameState.ownedSkins?.[s.id];
-          return `<div style="background:var(--bg);border:1px solid ${owned ? 'rgba(0,229,255,0.4)' : 'var(--border)'};
-            border-radius:8px;padding:8px 12px;font-size:13px;color:${owned ? 'var(--diamond)' : 'var(--muted)'};
-            letter-spacing:1px;">${s.icon} ${s.name} ${owned ? '✓' : '🔒'}</div>`;
-        }).join('')}
-      </div>
-    </div>`;
+  // Exclusive whale skins preview — also DOM-built so it never resets earlier event handlers
+  const skinsHdr = document.createElement('div');
+  skinsHdr.className = 'store-section-hdr';
+  skinsHdr.style.color = 'var(--diamond)';
+  skinsHdr.textContent = '✨ Your Exclusive Skins';
+  c.appendChild(skinsHdr);
+
+  const skinsBox = document.createElement('div');
+  skinsBox.style.cssText = 'background:var(--panel);border:1px solid rgba(0,229,255,0.2);border-radius:12px;padding:14px 16px;';
+  const skinsSub = document.createElement('div');
+  skinsSub.style.cssText = 'font-size:12px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;';
+  skinsSub.textContent = 'These skins are in your profile — only you and other whales have them.';
+  skinsBox.appendChild(skinsSub);
+  const skinsRow = document.createElement('div');
+  skinsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;';
+  (WHALE_EXCLUSIVE_SKINS || []).forEach(s => {
+    const owned = gameState.ownedSkins?.[s.id];
+    const chip = document.createElement('div');
+    chip.style.cssText = `background:var(--bg);border:1px solid ${owned ? 'rgba(0,229,255,0.4)' : 'var(--border)'};border-radius:8px;padding:8px 12px;font-size:13px;color:${owned ? 'var(--diamond)' : 'var(--muted)'};letter-spacing:1px;`;
+    chip.textContent = `${s.icon} ${s.name} ${owned ? '✓' : '🔒'}`;
+    skinsRow.appendChild(chip);
+  });
+  skinsBox.appendChild(skinsRow);
+  c.appendChild(skinsBox);
 }
 
 function buildBundleCard(b) {

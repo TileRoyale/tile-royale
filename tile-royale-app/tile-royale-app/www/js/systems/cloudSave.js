@@ -140,5 +140,7 @@ window.addEventListener('load', () => {
       console.warn('[CloudSave] startup sync error:', e);
       _csSetStatus('offline');
     }
+    // After state is loaded, check for any past KOTH weeks with unclaimed prizes
+    try { await checkKothPrizesOnAppStart(); } catch(e) {}
   }, 2500);
 });

@@ -1,50 +1,96 @@
 // ===== AD REWARD SYSTEM =====
 const AD_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
-// Weighted random item
+const ADMOB_REWARDED_ID = 'ca-app-pub-2005005437331878/4414084422';
+
+// ─── AdMob Bridge ─────────────────────────────────────────────────────────────
+
+function _adMob() {
+  return window.Capacitor?.Plugins?.AdMob ?? null;
+}
+
+// Initialize AdMob — called once on app load
+async function initAdMob() {
+  const admob = _adMob();
+  if (!admob) return;
+  try {
+    await admob.initialize({
+      requestTrackingAuthorization: false, // iOS only
+      initializeForTesting: false,
+    });
+    console.log('[AdMob] initialized');
+  } catch(e) {
+    console.warn('[AdMob] init error:', e?.message || e);
+  }
+}
+
+// Show one rewarded ad. Returns true if user earned the reward (watched to end).
+// Returns false on skip, failure, or if no ad is available.
+async function _showRewardedAd() {
+  const admob = _adMob();
+  if (!admob) return false;
+  try {
+    await admob.prepareRewardVideoAd({ adId: ADMOB_REWARDED_ID });
+  } catch(e) {
+    console.warn('[AdMob] load failed:', e?.message || e);
+    return false;
+  }
+  try {
+    const result = await admob.showRewardVideoAd();
+    return !!(result?.type);
+  } catch(e) {
+    // User closed the ad early, or show failed
+    console.warn('[AdMob] dismissed or failed:', e?.message || e);
+    return false;
+  }
+}
+
+// Browser / dev fallback — 5-second fake countdown so the UI stays testable
+function _simulateFallback() {
+  return new Promise(resolve => {
+    let t = 5;
+    const el = document.createElement('div');
+    el.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+      background:rgba(10,10,15,0.95);border:1px solid var(--border);border-radius:10px;
+      padding:12px 20px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;
+      color:var(--text);z-index:999;text-align:center;`;
+    el.textContent = `📺 AD PLAYING — ${t}s`;
+    document.body.appendChild(el);
+    const tick = setInterval(() => {
+      t--;
+      el.textContent = `📺 AD PLAYING — ${t}s`;
+      if (t <= 0) { clearInterval(tick); el.remove(); resolve(true); }
+    }, 1000);
+  });
+}
+
+// Public: real ad on device, simulation in browser
+async function _watchRewardedAd() {
+  if (_adMob() && window.Capacitor?.isNativePlatform?.()) {
+    return await _showRewardedAd();
+  }
+  return await _simulateFallback();
+}
+
+// ─── Reward helpers ───────────────────────────────────────────────────────────
+
 function rollAdReward() {
   const roll = Math.random() * 100;
-  if (roll < 80)  return { type:'tickets',    id:'ticket',     icon:'🎟️', name:'1 Ticket',     qty:1 };
-  if (roll < 90)  return { type:'item',       id:'crystal',    icon:'🔮', name:'Crystal Ball', qty:1 };
-  if (roll < 97)  return { type:'item',       id:'caltrops',   icon:'⚙️', name:'Caltrops',     qty:1 };
-  return               { type:'item',       id:'shadow_tile',icon:'🌑', name:'Shadow Tile',  qty:1 };
+  if (roll < 80)  return { type:'tickets',  id:'ticket',      icon:'🎟️', name:'1 Ticket',     qty:1 };
+  if (roll < 90)  return { type:'item',     id:'crystal',     icon:'🔮', name:'Crystal Ball', qty:1 };
+  if (roll < 97)  return { type:'item',     id:'caltrops',    icon:'⚙️', name:'Caltrops',     qty:1 };
+  return               { type:'item',     id:'shadow_tile', icon:'🌑', name:'Shadow Tile',  qty:1 };
 }
 
 function canWatchAd() {
-  const last = gameState.lastAdWatch || 0;
-  return Date.now() - last >= AD_COOLDOWN_MS;
+  return Date.now() - (gameState.lastAdWatch || 0) >= AD_COOLDOWN_MS;
 }
 
 function getAdCooldownText() {
-  const last = gameState.lastAdWatch || 0;
-  const diff = Math.max(0, AD_COOLDOWN_MS - (Date.now() - last));
+  const diff = Math.max(0, AD_COOLDOWN_MS - (Date.now() - (gameState.lastAdWatch || 0)));
   const m = Math.floor(diff / 60000);
   const s = Math.floor((diff % 60000) / 1000);
   return `Available in ${m}:${s.toString().padStart(2,'0')}`;
-}
-
-// Simulate watching ad (in production: call AdMob rewarded ad here)
-function simulateAdWatch(onComplete) {
-  showToast('📺 Ad starting...', 'var(--muted)');
-  let t = 5;
-  const toast = document.createElement('div');
-  toast.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
-    background:rgba(10,10,15,0.95);border:1px solid var(--border);border-radius:10px;
-    padding:12px 20px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;
-    color:var(--text);z-index:999;text-align:center;`;
-  toast.innerHTML = `📺 AD PLAYING — ${t}s`;
-  document.body.appendChild(toast);
-  const tick = setInterval(() => {
-    t--;
-    toast.innerHTML = `📺 AD PLAYING — ${t}s`;
-    if (t <= 0) {
-      clearInterval(tick);
-      toast.remove();
-      onComplete();
-    }
-  }, 1000);
-  // Store tick ref so it can be cancelled if needed
-  simulateAdWatch._tick = tick;
 }
 
 function giveAdReward(reward) {
@@ -55,19 +101,18 @@ function giveAdReward(reward) {
     addItemToInventory(reward.id, reward.qty);
   }
   gameState.lastAdWatch = Date.now();
-  saveState();
-  updateMenuStats();
-  updateInventoryUI();
-  updateTicketUI();
+  saveState(); updateMenuStats(); updateInventoryUI(); updateTicketUI();
 }
 
-// Watch 1 or 3 ads for tickets
+// ─── Public ad entry points ───────────────────────────────────────────────────
+
 let adWatchInProgress = false;
 
-function watchAdsForTickets(count) {
+// Watch 1 or 3 rewarded ads to earn tickets
+async function watchAdsForTickets(count) {
   if (adWatchInProgress) { showToast('Ad already playing...', 'var(--muted)'); return; }
   const adKey = `lastAdTicket_${count}`;
-  const last = gameState[adKey] || 0;
+  const last  = gameState[adKey] || 0;
   if (Date.now() - last < AD_COOLDOWN_MS) {
     const diff = AD_COOLDOWN_MS - (Date.now() - last);
     const m = Math.floor(diff / 60000);
@@ -79,73 +124,82 @@ function watchAdsForTickets(count) {
   adWatchInProgress = true;
 
   if (count === 1) {
-    simulateAdWatch(() => {
-      adWatchInProgress = false;
-      gameState.tickets = Math.min(TICKETS_MAX, getTickets() + 1);
-      gameState[adKey] = Date.now();
-      saveState(); updateTicketUI(); updateStoreAdTimer();
-      showToast('🎟️ +1 Ticket!', 'var(--gold)');
-      playSound('achieve');
-    });
+    showToast('📺 Loading ad...', 'var(--muted)');
+    const rewarded = await _watchRewardedAd();
+    adWatchInProgress = false;
+    if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
+    gameState.tickets = Math.min(TICKETS_MAX, getTickets() + 1);
+    gameState[adKey]  = Date.now();
+    saveState(); updateTicketUI(); updateStoreAdTimer();
+    showToast('🎟️ +1 Ticket!', 'var(--gold)');
+    playSound('achieve');
   } else {
-    showToast('📺 Ad 1/3 starting...', 'var(--muted)');
-    watchAdChain(3, 0, () => {
-      adWatchInProgress = false;
-      gameState.tickets = Math.min(TICKETS_MAX, getTickets() + 3);
-      gameState[adKey] = Date.now();
-      saveState(); updateTicketUI(); updateStoreAdTimer();
-      showToast('🎟️🎟️🎟️ +3 Tickets! Well played!', 'var(--gold)');
-      playSound('achieve'); vibrate([50, 50, 200]);
-    });
+    // Watch count ads in sequence — grant partial reward if chain breaks midway
+    let earned = 0;
+    for (let i = 1; i <= count; i++) {
+      showToast(`📺 Ad ${i}/${count}...`, 'var(--muted)');
+      const rewarded = await _watchRewardedAd();
+      if (!rewarded) {
+        adWatchInProgress = false;
+        if (earned > 0) {
+          gameState.tickets = Math.min(TICKETS_MAX, getTickets() + earned);
+          gameState[adKey]  = Date.now();
+          saveState(); updateTicketUI(); updateStoreAdTimer();
+          showToast(`🎟️ +${earned} Ticket${earned > 1 ? 's' : ''} (stopped early)`, 'var(--gold)');
+        } else {
+          showToast('Ad not available — try again later', 'var(--muted)');
+        }
+        return;
+      }
+      earned++;
+    }
+    adWatchInProgress = false;
+    gameState.tickets = Math.min(TICKETS_MAX, getTickets() + count);
+    gameState[adKey]  = Date.now();
+    saveState(); updateTicketUI(); updateStoreAdTimer();
+    showToast('🎟️🎟️🎟️ +3 Tickets! Well played!', 'var(--gold)');
+    playSound('achieve'); vibrate([50, 50, 200]);
   }
 }
 
-function watchAdChain(total, done, onComplete) {
-  if (done >= total) { onComplete(); return; }
-  const num = done + 1;
-  // Show brief pause between ads
-  setTimeout(() => {
-    if (num > 1) showToast(`📺 Ad ${num}/${total}...`, 'var(--muted)');
-    simulateAdWatch(() => {
-      watchAdChain(total, done + 1, onComplete);
-    });
-  }, num > 1 ? 800 : 0);
-}
-
-// Called from no-tickets box (single ad)
+// Single-ad shortcut used from the no-tickets box
 function watchAdForTicket() {
   watchAdsForTickets(1);
 }
 
-// Called from store featured
-function watchAdForRandomItem() {
-  if (!canWatchAd()) {
-    showToast(getAdCooldownText(), 'var(--muted)'); return;
-  }
-  simulateAdWatch(() => {
-    const reward = rollAdReward();
-    giveAdReward(reward);
-    showToast(`🎁 You got: ${reward.icon} ${reward.name}!`, 'var(--gold)');
-    playSound('achieve');
-    updateStoreAdTimer();
-  });
+// Store featured: watch one ad for a random item (1-hour cooldown)
+async function watchAdForRandomItem() {
+  if (!canWatchAd()) { showToast(getAdCooldownText(), 'var(--muted)'); return; }
+  if (adWatchInProgress) { showToast('Ad already playing...', 'var(--muted)'); return; }
+  adWatchInProgress = true;
+  showToast('📺 Loading ad...', 'var(--muted)');
+  const rewarded = await _watchRewardedAd();
+  adWatchInProgress = false;
+  if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
+  const reward = rollAdReward();
+  giveAdReward(reward);
+  showToast(`🎁 You got: ${reward.icon} ${reward.name}!`, 'var(--gold)');
+  playSound('achieve');
+  updateStoreAdTimer();
 }
 
 function updateStoreAdTimer() {
-  const box = document.getElementById('storeAdRewardBox');
+  const box   = document.getElementById('storeAdRewardBox');
   const timer = document.getElementById('storeAdTimer');
-  const btn = document.getElementById('storeAdBtn');
+  const btn   = document.getElementById('storeAdBtn');
   if (!box || !timer) return;
   if (canWatchAd()) {
-    box.className = 'ad-reward-box';
-    timer.className = 'ad-reward-timer';
+    box.className     = 'ad-reward-box';
+    timer.className   = 'ad-reward-timer';
     timer.textContent = 'Available now!';
     if (btn) btn.textContent = '▶ WATCH';
   } else {
-    box.className = 'ad-reward-box cooldown';
-    timer.className = 'ad-reward-timer cooldown-txt';
+    box.className     = 'ad-reward-box cooldown';
+    timer.className   = 'ad-reward-timer cooldown-txt';
     timer.textContent = getAdCooldownText();
     if (btn) btn.textContent = '⏱ WAIT';
   }
 }
 
+// ─── Startup ──────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => initAdMob());
