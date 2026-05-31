@@ -5,7 +5,7 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize } from "./db";
 
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
@@ -608,6 +608,79 @@ app.get("/save/:playerId", async (req, res) => {
   } catch {
     res.json({ found: false });
   }
+});
+
+// ─── KOTH Leaderboard ────────────────────────────────────────────────────────
+
+// GET /koth/leaderboard?playerId=xxx&period=current|prev
+// Returns weekly top-20 leaderboard + player's rank, and (for current) daily percentile.
+// period=prev queries the week that just ended — used by the client for prize distribution.
+app.get("/koth/leaderboard", async (req, res) => {
+  const playerId = (req.query.playerId as string) || '';
+  const period   = (req.query.period  as string) === 'prev' ? 'prev' : 'current';
+
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId)) {
+    return res.status(400).json({ error: 'invalid_player' });
+  }
+  if (!getDbStatus().available) {
+    return res.json({ dbAvailable: false, weekly: [], playerWeeklyRank: null, playerWeeklyWins: 0, daily: null });
+  }
+
+  const timeFilter = period === 'prev'
+    ? `AND played_at >= date_trunc('week', now() - interval '7 days') AND played_at < date_trunc('week', now())`
+    : `AND played_at >= date_trunc('week', now())`;
+
+  const [weeklyData, dailyStats, poolRows] = await Promise.all([
+    getKothWeeklyLeaderboard(playerId, period),
+    period === 'current' ? getKothDailyStats(playerId) : Promise.resolve(null),
+    query(`SELECT COUNT(*)::INT AS cnt FROM game_results WHERE mode = 'koth' ${timeFilter}`),
+  ]);
+
+  // Pool = game count × entry_fee × pool_pct (50 × 0.5 = 25 per game row)
+  const serverPool = Math.floor((poolRows?.[0]?.cnt ?? 0) * 25);
+
+  res.json({
+    dbAvailable:      true,
+    weekly:           weeklyData?.weekly          ?? [],
+    playerWeeklyRank: weeklyData?.playerRank      ?? null,
+    playerWeeklyWins: weeklyData?.playerWins      ?? 0,
+    daily:            dailyStats,
+    serverPool,
+  });
+});
+
+// POST /koth/daily/claim  { playerId }
+// Server validates today's percentile and grants the daily reward — idempotent via DB unique constraint.
+app.post("/koth/daily/claim", async (req, res) => {
+  const { playerId } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  }
+  if (!getDbStatus().available) {
+    return res.json({ ok: false, reason: 'db_unavailable' });
+  }
+  const result = await claimKothDailyReward(playerId);
+  if (!result) return res.json({ ok: false, reason: 'server_error' });
+  res.json(result);
+});
+
+// POST /koth/prizes/claim  { playerId, weekStart }
+// Server validates last week's rank and grants the prize — idempotent via DB unique constraint.
+// weekStart: ISO Monday date "YYYY-MM-DD" (UTC)
+app.post("/koth/prizes/claim", async (req, res) => {
+  const { playerId, weekStart } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  }
+  if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+    return res.status(400).json({ ok: false, error: 'invalid_week_start' });
+  }
+  if (!getDbStatus().available) {
+    return res.json({ ok: false, reason: 'db_unavailable' });
+  }
+  const result = await claimKothWeeklyPrize(playerId, weekStart);
+  if (!result) return res.json({ ok: false, reason: 'server_error' });
+  res.json(result);
 });
 
 app.use("/colyseus", monitor());

@@ -1626,14 +1626,14 @@
 
   <!-- Claim fastest daily -->
   <div id="kothFastestDailyClaimWrap" style="display:none; width:100%; margin-bottom:4px;">
-    <button class="btn-play" onclick="claimKothFastestDaily()" style="background:linear-gradient(135deg,#00ccff,#0066ff);">
+    <button id="kothFastestDailyBtn" class="btn-play" onclick="claimKothFastestDaily()" style="background:linear-gradient(135deg,#00ccff,#0066ff);">
       ⚡ CLAIM DAILY FASTEST — 💎 50
     </button>
   </div>
 
   <!-- Claim fastest weekly -->
   <div id="kothFastestWeeklyClaimWrap" style="display:none; width:100%; margin-bottom:8px;">
-    <button class="btn-play" onclick="claimKothFastestWeekly()" style="background:linear-gradient(135deg,var(--gold),var(--fire2));">
+    <button id="kothFastestWeeklyBtn" class="btn-play" onclick="claimKothFastestWeekly()" style="background:linear-gradient(135deg,var(--gold),var(--fire2));">
       🏆 CLAIM WEEKLY FASTEST — 💎 <span id="kothFastestWeeklyClaimAmt">0</span>
     </button>
   </div>
@@ -1654,6 +1654,7 @@
     <div class="koth-stat">
       <div class="koth-stat-val" id="kothYourRank">#—</div>
       <div class="koth-stat-lbl">Your Rank</div>
+      <div id="kothYourRankPrize" style="font-size:10px;color:var(--muted);letter-spacing:1px;text-align:center;margin-top:3px;min-height:14px;">—</div>
     </div>
     <div class="koth-stat">
       <div class="koth-stat-val" id="kothYourPool">💎 0</div>
@@ -2199,21 +2200,27 @@
       <button onclick="closeModeRewardPopup()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:0;line-height:1;">✕</button>
     </div>
 
-    <div style="font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">DAILY</div>
-    <div class="koth-daily-reward-box" style="margin-bottom:12px;">
+    <div style="font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+      <span>DAILY</span>
+      <span id="modeDailyTimer" style="color:var(--fire2);font-size:10px;">—</span>
+    </div>
+    <div class="koth-daily-reward-box" id="modeDailyTierBox" style="margin-bottom:12px;">
       <div class="koth-daily-row"><div class="koth-daily-tier" style="color:var(--gold);">🥇 Top 1%</div><div class="koth-daily-val">🎟️ 10</div></div>
       <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#c0c0c0;">🥈 Top 3%</div><div class="koth-daily-val">🎟️ 5</div></div>
       <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#cd7f32;">🥉 Top 5%</div><div class="koth-daily-val">🎟️ 3</div></div>
     </div>
 
-    <div style="font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">WEEKLY</div>
-    <div class="koth-daily-reward-box" style="margin-bottom:12px;">
+    <div style="font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+      <span>WEEKLY</span>
+      <span id="modeWeeklyTimer" style="color:var(--diamond);font-size:10px;">—</span>
+    </div>
+    <div class="koth-daily-reward-box" id="modeWeeklyTierBox" style="margin-bottom:12px;">
       <div class="koth-daily-row"><div class="koth-daily-tier" style="color:var(--gold);">🥇 Top 1%</div><div class="koth-daily-val">🎟️ 30</div></div>
       <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#c0c0c0;">🥈 Top 3%</div><div class="koth-daily-val">🎟️ 20</div></div>
       <div class="koth-daily-row"><div class="koth-daily-tier" style="color:#cd7f32;">🥉 Top 5%</div><div class="koth-daily-val">🎟️ 10</div></div>
     </div>
 
-    <div id="modeRewardPopupRank" style="text-align:center;color:var(--diamond);font-size:11px;letter-spacing:1px;margin-bottom:12px;">Win matches to earn rewards!</div>
+    <div id="modeRewardPopupRank" style="text-align:center;color:var(--diamond);font-size:11px;letter-spacing:1px;margin-bottom:12px;line-height:1.7;">Win matches to earn rewards!</div>
 
     <div id="modeDailyClaimWrap" style="display:none;margin-bottom:6px;">
       <button class="btn-play" id="modeDailyClaimBtn" onclick="claimModeDailyReward()" style="background:linear-gradient(135deg,#00aaff,#0044cc);">🎟️ CLAIM DAILY REWARD</button>
