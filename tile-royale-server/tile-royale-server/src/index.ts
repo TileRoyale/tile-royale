@@ -5,7 +5,7 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds } from "./db";
 
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
@@ -259,14 +259,32 @@ app.post("/friends/respond", async (req, res) => {
   const ok = await respondFriendRequest(targetId, requesterId, action as 'accept' | 'decline');
 
   if (ok && action === 'accept') {
-    // Notify the requester that their friend request was accepted
-    const targetStats = await getPlayerStats(targetId);
-    const targetName  = targetStats?.player_name || 'A player';
+    const REFERRAL_REWARD = 100;
+    const [targetStats, requesterStats] = await Promise.all([
+      getPlayerStats(targetId),
+      getPlayerStats(requesterId),
+    ]);
+    const targetName    = targetStats?.player_name    || 'A player';
+    const requesterName = requesterStats?.player_name || 'A player';
+
+    // Reward the requester (sent the request)
     createPlayerNotification(
       requesterId,
-      'Friend Request Accepted',
-      `You are now friends with ${targetName}.`,
-      'friend'
+      '🤝 Friend Added!',
+      `${targetName} accepted your friend request. Claim your referral reward!`,
+      'friend',
+      'diamonds',
+      REFERRAL_REWARD
+    ).catch(() => {});
+
+    // Reward the accepter
+    createPlayerNotification(
+      targetId,
+      '🤝 New Friend!',
+      `You and ${requesterName} are now friends. Claim your reward!`,
+      'friend',
+      'diamonds',
+      REFERRAL_REWARD
     ).catch(() => {});
   }
 
@@ -326,6 +344,10 @@ app.post("/notifications/claim", async (req, res) => {
   if (!getDbStatus().available) return res.json({ ok: false, error: 'db_unavailable' });
   const result = await claimNotificationReward(Number(notificationId), String(playerId));
   if (!result) return res.json({ ok: false, error: 'not_claimable' });
+  // Raise trusted ceiling for server-issued diamond rewards
+  if (result.reward_type === 'diamonds' && result.reward_amount > 0) {
+    addTrustedDiamonds(String(playerId), Number(result.reward_amount)).catch(() => {});
+  }
   res.json({ success: true, reward_type: result.reward_type, reward_amount: result.reward_amount });
 });
 
@@ -421,6 +443,100 @@ app.get("/validate", async (_req, res) => {
   res.json(results);
 });
 
+// ─── Promo Codes (server-side only — never sent to client) ────────────────────
+
+const PROMO_CODES: Record<string, {
+  diamonds?: number;
+  items?: Record<string, number>;
+  skins?: string[];
+  action?: string;
+  desc: string;
+  maxUses: number;
+  expires?: string;
+  dev?: boolean;
+}> = {
+  'WELCOME2025':  { diamonds: 500,  items: { crystal: 2, caltrops: 2 },        desc: 'Welcome gift!',                       maxUses: 999999 },
+  'TILEROYALE':   { diamonds: 1000, items: { crystal: 3 },                      desc: 'Official launch bonus!',              maxUses: 999999 },
+  'SUMMER2025':   { diamonds: 750,  items: { caltrops: 3 },                     desc: 'Summer campaign reward',              maxUses: 999999, expires: '2025-09-01' },
+  'WILDMODE':     { diamonds: 300,  items: { shadow_tile: 3 },                  desc: 'Wild mode launch reward',             maxUses: 999999 },
+  'KOTHWEEK1':    { diamonds: 500,  items: { crystal: 1, caltrops: 1 },         desc: 'King of the Hill launch!',            maxUses: 999999 },
+  'WHALE4EVER':   { diamonds: 2000, items: { shadow_tile: 5 },                  desc: 'Whale appreciation gift 🐋',          maxUses: 999999 },
+  'BUGFIX':       { diamonds: 200,                                               desc: 'Thanks for your patience!',           maxUses: 999999 },
+  'RAZ4WIN':      { action: 'koth_top3',                                        desc: 'KOTH Top 3 status + Custom Lobby unlock', maxUses: 999999 },
+  'DEV-GEMS':     { diamonds: 10000,                                             desc: 'Dev: +10 000 diamonds',               maxUses: 999999, dev: true },
+  'DEV-LEVEL10':  { action: 'level10',                                          desc: 'Dev: Set Level 10',                   maxUses: 999999, dev: true },
+  'DEV-GAUNTLET': { action: 'gauntlet',                                         desc: 'Dev: Open Gauntlet',                  maxUses: 999999, dev: true },
+};
+
+// POST /promo/redeem  { playerId, code }
+app.post("/promo/redeem", async (req, res) => {
+  const { playerId, code: rawCode } = req.body;
+
+  if (!playerId || typeof playerId !== 'string')
+    return res.json({ ok: false, error: 'missing_player' });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!rawCode || typeof rawCode !== 'string')
+    return res.json({ ok: false, error: 'missing_code' });
+
+  const code  = rawCode.trim().toUpperCase();
+  const promo = PROMO_CODES[code];
+
+  if (!promo)
+    return res.json({ ok: false, error: 'invalid_code' });
+  if (promo.expires && new Date() > new Date(promo.expires))
+    return res.json({ ok: false, error: 'expired' });
+  // Dev codes skip redemption recording — reusable indefinitely for testing
+  if (!promo.dev) {
+    if (!getDbStatus().available)
+      return res.json({ ok: false, error: 'db_unavailable' });
+    const result = await checkAndRecordPromoRedemption(playerId, code);
+    if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
+    if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
+  }
+
+  const reward: Record<string, any> = {};
+  if (promo.diamonds) reward.diamonds = promo.diamonds;
+  if (promo.items)    reward.items    = promo.items;
+  if (promo.skins)    reward.skins    = promo.skins;
+  if (promo.action)   reward.action   = promo.action;
+
+  // Raise the trusted ceiling so the next save isn't rejected for this legitimate gain
+  if (promo.diamonds) addTrustedDiamonds(playerId, promo.diamonds).catch(() => {});
+
+  res.json({ ok: true, desc: promo.desc, reward });
+});
+
+// GET /admin/promo/stats — redemption counts per code
+app.get("/admin/promo/stats", requireAdmin, async (_req, res) => {
+  if (!getDbStatus().available) return res.json({ stats: [], dbAvailable: false });
+  const stats = await getPromoStats();
+  res.json({ stats, dbAvailable: true });
+});
+
+// ─── Push Token Registration ──────────────────────────────────────────────────
+
+// POST /push/register  { playerId, token, platform }
+app.post("/push/register", async (req, res) => {
+  const { playerId, token, platform } = req.body;
+  if (!playerId || !token || typeof token !== 'string')
+    return res.json({ success: false, error: 'missing_params' });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ success: false, error: 'invalid_player' });
+  if (token.length < 10 || token.length > 500)
+    return res.json({ success: false, error: 'invalid_token' });
+  if (!getDbStatus().available) return res.json({ success: false, error: 'db_unavailable' });
+  const ok = await upsertPushToken(playerId, token, String(platform || 'android'));
+  res.json({ success: ok });
+});
+
+// GET /admin/push/count — total registered push tokens
+app.get("/admin/push/count", requireAdmin, async (_req, res) => {
+  if (!getDbStatus().available) return res.json({ totalTokens: 0, dbAvailable: false });
+  const totalTokens = await getPushTokenCount();
+  res.json({ totalTokens, dbAvailable: true });
+});
+
 // ─── Cloud Save ────────────────────────────────────────────────────────────────
 
 // POST /save — upsert full game state for a player
@@ -432,9 +548,36 @@ app.post("/save", async (req, res) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId)) {
     res.status(400).json({ ok: false, error: 'Invalid playerId' }); return;
   }
+
+  // ── Economy integrity: validate + clamp diamonds ──────────────────────────
+  // MAX_CLIENT_EARN covers all legitimate client-side earnings per save period:
+  // achievements, daily challenges, offline rewards, surprise drops, etc.
+  const MAX_CLIENT_EARN = 5000;
+  let finalData = saveData;
+  let adjustedDiamonds: number | undefined;
+
+  if (getDbStatus().available) {
+    const incoming = Math.max(0, Math.floor(Number(saveData.diamonds) || 0));
+    const trusted  = await getTrustedDiamonds(playerId);
+
+    if (trusted === null) {
+      // First save through this system — bootstrap the ceiling from the client value
+      await setTrustedDiamonds(playerId, incoming);
+    } else if (incoming > trusted + MAX_CLIENT_EARN) {
+      // Suspicious jump — cap to trusted ceiling, log for monitoring
+      adjustedDiamonds = trusted;
+      finalData = { ...saveData, diamonds: trusted };
+      console.warn(`[Economy] diamond cap ${playerId}: ${incoming} → ${trusted}`);
+    } else {
+      // Legitimate gain — advance the trusted ceiling
+      await setTrustedDiamonds(playerId, incoming);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   let saveJson: string;
   try {
-    saveJson = JSON.stringify(saveData);
+    saveJson = JSON.stringify(finalData);
   } catch {
     res.status(400).json({ ok: false, error: 'Invalid saveData' }); return;
   }
@@ -442,7 +585,9 @@ app.post("/save", async (req, res) => {
     res.status(400).json({ ok: false, error: 'Save data too large (max 1 MB)' }); return;
   }
   const ok = await savePlayerData(playerId, saveJson);
-  res.json({ ok: ok ?? false });
+  const resp: Record<string, any> = { ok: ok ?? false };
+  if (adjustedDiamonds !== undefined) resp.adjustedDiamonds = adjustedDiamonds;
+  res.json(resp);
 });
 
 // GET /save/:playerId — load cloud save
@@ -455,7 +600,11 @@ app.get("/save/:playerId", async (req, res) => {
   if (!result) { res.json({ found: false }); return; }
   try {
     const saveData = JSON.parse(result.saveJson);
-    res.json({ found: true, saveData, updatedAt: result.updatedAt });
+    // Return the server-trusted diamond value so the client can apply it as override
+    const trusted = getDbStatus().available ? await getTrustedDiamonds(playerId) : null;
+    const resp: Record<string, any> = { found: true, saveData, updatedAt: result.updatedAt };
+    if (trusted !== null) resp.trustedDiamonds = trusted;
+    res.json(resp);
   } catch {
     res.json({ found: false });
   }

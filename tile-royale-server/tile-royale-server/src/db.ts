@@ -160,6 +160,28 @@ async function createTables(): Promise<void> {
       save_json   TEXT         NOT NULL,
       updated_at  TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Push tokens: one row per FCM token (UNIQUE on token, indexed by player)
+    CREATE TABLE IF NOT EXISTS push_tokens (
+      id          SERIAL       PRIMARY KEY,
+      player_id   UUID         NOT NULL,
+      token       TEXT         NOT NULL,
+      platform    TEXT         NOT NULL DEFAULT 'android',
+      created_at  TIMESTAMPTZ  DEFAULT now(),
+      updated_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Promo code redemptions: one row per (code, player) pair
+    CREATE TABLE IF NOT EXISTS promo_redemptions (
+      id          SERIAL       PRIMARY KEY,
+      code        TEXT         NOT NULL,
+      player_id   UUID         NOT NULL,
+      redeemed_at TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Economy integrity: server-side diamond ceiling per player
+    -- NULL = not yet bootstrapped (first save through validation system sets it)
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS trusted_diamonds INTEGER;
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -169,6 +191,10 @@ async function createTables(): Promise<void> {
     CREATE        INDEX IF NOT EXISTS idx_friends_target     ON friends(target_player_id);
     CREATE        INDEX IF NOT EXISTS idx_player_notifs      ON player_notifications(player_id, created_at DESC);
     CREATE        INDEX IF NOT EXISTS idx_player_save_data   ON player_save_data(player_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_push_tokens_token       ON push_tokens(token);
+    CREATE        INDEX IF NOT EXISTS idx_push_tokens_player      ON push_tokens(player_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_promo_redemptions_pair  ON promo_redemptions(code, player_id);
+    CREATE        INDEX IF NOT EXISTS idx_promo_redemptions_code  ON promo_redemptions(code);
   `);
   console.log("[DB] Tables ready");
 }
@@ -851,4 +877,83 @@ export async function loadPlayerData(playerId: string): Promise<{ saveJson: stri
   );
   if (!rows?.length) return null;
   return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
+}
+
+// ─── Push Tokens ───────────────────────────────────────────────────────────────
+
+export async function upsertPushToken(playerId: string, token: string, platform: string): Promise<boolean> {
+  const rows = await query(`
+    INSERT INTO push_tokens (player_id, token, platform, updated_at)
+    VALUES ($1, $2, $3, now())
+    ON CONFLICT (token) DO UPDATE
+      SET player_id  = EXCLUDED.player_id,
+          platform   = EXCLUDED.platform,
+          updated_at = now()
+    RETURNING id
+  `, [playerId, token, platform]);
+  return (rows?.length ?? 0) > 0;
+}
+
+export async function getPushTokenCount(): Promise<number> {
+  const rows = await query(`SELECT COUNT(*)::INT AS total FROM push_tokens`);
+  return rows?.[0]?.total ?? 0;
+}
+
+// ─── Promo Codes ───────────────────────────────────────────────────────────────
+
+// Returns 'ok' | 'already_redeemed' | 'error'
+export async function checkAndRecordPromoRedemption(
+  playerId: string,
+  code: string
+): Promise<'ok' | 'already_redeemed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO promo_redemptions (code, player_id) VALUES ($1, $2)`,
+      [code, playerId]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_redeemed';
+    console.error('[DB] promo redemption error:', err);
+    return 'error';
+  }
+}
+
+export async function getPromoStats(): Promise<any[]> {
+  const rows = await query(`
+    SELECT code, COUNT(*)::INT AS redemptions, MAX(redeemed_at) AS last_redeemed_at
+    FROM promo_redemptions
+    GROUP BY code
+    ORDER BY redemptions DESC
+  `);
+  return rows || [];
+}
+
+// ─── Economy Integrity ─────────────────────────────────────────────────────────
+
+// Returns null when player has never been through the validation system yet
+export async function getTrustedDiamonds(playerId: string): Promise<number | null> {
+  const rows = await query(
+    `SELECT trusted_diamonds FROM players WHERE player_id = $1`,
+    [playerId]
+  );
+  if (!rows?.length) return null;
+  return rows[0].trusted_diamonds ?? null;
+}
+
+export async function setTrustedDiamonds(playerId: string, diamonds: number): Promise<void> {
+  await query(
+    `UPDATE players SET trusted_diamonds = $1 WHERE player_id = $2`,
+    [diamonds, playerId]
+  );
+}
+
+// Atomic increment — used when server issues a reward (promo code, inbox claim)
+// COALESCE handles the NULL bootstrap case: first server-issued reward sets the ceiling
+export async function addTrustedDiamonds(playerId: string, amount: number): Promise<void> {
+  await query(
+    `UPDATE players SET trusted_diamonds = COALESCE(trusted_diamonds, 0) + $1 WHERE player_id = $2`,
+    [amount, playerId]
+  );
 }
