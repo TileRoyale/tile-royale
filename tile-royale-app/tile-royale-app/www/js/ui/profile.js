@@ -5,40 +5,6 @@ let achCurrentFilter = 'all';
 let lbPeriod = 'weekly';
 let lbCategory = 'wins';
 
-// Generate realistic bot leaderboard data seeded by period+category
-function generateLbData(period, category) {
-  const seed = period === 'weekly' ? 1 : 7;
-  const names = [
-    ['TapKing','🦁'],['BlazeMaster','🔥'],['GridRipper','🐉'],['NightTapper','👻'],
-    ['SpeedDemon','⚡'],['FlameRunner','🦊'],['TileSlayer','🦂'],['QuickDraw','🎯'],
-    ['Inferno','💀'],['TapGod','👑'],['SwiftTile','🌪️'],['IronFist','⚔️'],
-    ['CyberTap','🤖'],['VoidTapper','🌑'],['CrimsonTap','🩸'],['FlameBolt','💥'],
-    ['DarkFlame','🐍'],['UltraFast','🦅'],['HyperTile','🧨'],['AlphaTap','🏴‍☠️'],
-  ];
-
-  const ranges = {
-    wins:     { weekly: [8,45],    alltime: [120,980] },
-    taps:     { weekly: [800,4500], alltime: [15000,95000] },
-    diamonds: { weekly: [400,2800], alltime: [8000,85000] },
-    level:    { weekly: [3,18],    alltime: [8,42] },
-    practice: { weekly: [12,48],   alltime: [30,95] },
-  };
-
-  const [min, max] = ranges[category][period];
-  // Deterministic shuffle based on seed
-  const shuffled = [...names].sort((a,b) => {
-    const ha = (a[0].charCodeAt(0) * seed * 7) % 100;
-    const hb = (b[0].charCodeAt(0) * seed * 7) % 100;
-    return ha - hb;
-  });
-
-  return shuffled.slice(0, 20).map((n, i) => {
-    const pct = 1 - (i / 20);
-    const val = Math.floor(min + (max - min) * pct * (0.85 + Math.random() * 0.15));
-    return { name: n[0], avatar: n[1], val };
-  }).sort((a,b) => b.val - a.val);
-}
-
 function getPlayerVal(category) {
   const s = gameState.achStats || {};
   if (category === 'wins')     return gameState.wins || 0;

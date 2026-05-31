@@ -42,7 +42,7 @@
     pointer-events:none;user-select:none;">TAP TO START</div>
 </div>
 
-<div id="versionBadge" style="position:fixed; bottom:8px; right:8px; font-size:10px; letter-spacing:1px; color:rgba(255,255,255,0.25); z-index:9999; pointer-events:none;">v0.5.4</div>
+<div id="versionBadge" style="position:fixed; bottom:8px; right:8px; font-size:10px; letter-spacing:1px; color:rgba(255,255,255,0.25); z-index:9999; pointer-events:none;">v0.5.5</div>
 
 <!-- ===== ONBOARDING SCREEN ===== -->
 <div class="screen active" id="onboardingScreen">
@@ -234,12 +234,12 @@
       <div class="mode-name">King of the Hill</div>
       <div class="mode-time" style="color:var(--gold);">💎 50 entry</div>
     </div>
-    <div class="mode-card practice-card" data-mode="practice" onclick="selectMode('practice', this)" style="grid-column:span 2; border-color:rgba(0,255,136,0.2);">
+    <div class="mode-card practice-card" data-mode="practice" onclick="selectMode('practice', this)" style="border-color:rgba(0,255,136,0.2);">
       <div class="mode-icon">🎯</div>
       <div class="mode-name">Practice</div>
       <div class="mode-time" style="color:var(--green);">Solo · Speed training</div>
     </div>
-    <div class="mode-card custom-lobby-card" data-mode="custom" onclick="selectMode('custom', this)" id="customLobbyModeCard" style="grid-column:span 2;">
+    <div class="mode-card custom-lobby-card" data-mode="custom" onclick="selectMode('custom', this)" id="customLobbyModeCard">
       <div class="mode-icon" id="customLobbyIcon">🏟️</div>
       <div class="mode-name">Custom Lobby</div>
       <div class="mode-time" id="customLobbySubtext" style="color:var(--muted);">🔒 KOTH Top 3 required</div>

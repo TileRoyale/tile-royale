@@ -216,7 +216,7 @@ const WILD_ITEM_LEVELS = {
   muscle_relaxant: 12,
 };
 
-const GAME_VERSION = "v0.5.4";
+const GAME_VERSION = "v0.5.5";
 let wildLoadout = []; // [{itemId, mode}] — built on wildScreen, consumed by auto-trigger system
 let wildItemCooldownEnd = 0;
 const WILD_ITEM_COOLDOWN_MS = 4000;
