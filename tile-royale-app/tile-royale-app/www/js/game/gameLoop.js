@@ -431,7 +431,7 @@ function _originalTapTile(idx) {
   if (el) {
     el.className = 'tile tapped'; el.innerHTML = '';
     const r = document.createElement('div'); r.className = getTapEffectClass(); el.appendChild(r);
-    setTimeout(() => r.remove(), 400);
+    setTimeout(() => r.remove(), 800);
   }
   burningTiles = burningTiles.filter(i => i !== idx);
   currentBurningTile = burningTiles[0] ?? null;

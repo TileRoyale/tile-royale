@@ -731,7 +731,7 @@ function tapTile(idx) {
       if (el) {
         el.className = 'tile tapped'; el.innerHTML = '✓';
         const r = document.createElement('div'); r.className = getTapEffectClass(); el.appendChild(r);
-        setTimeout(() => r.remove(), 400);
+        setTimeout(() => r.remove(), 800);
       }
       playSound('tap'); vibrate(25);
       hideFirstGameHint();
