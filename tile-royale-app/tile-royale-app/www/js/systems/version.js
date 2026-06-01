@@ -1,3 +1,25 @@
+// ===== VERSION — SINGLE SOURCE OF TRUTH =====
+// When bumping: update GAME_VERSION + BUILD_NUMBER here AND build.gradle versionName/versionCode
+const GAME_VERSION = 'v0.5.8';
+const BUILD_NUMBER  = 64;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const v = GAME_VERSION;
+  const b = BUILD_NUMBER;
+
+  const badge = document.getElementById('versionBadge');
+  if (badge) badge.textContent = v;
+
+  const aboutVer = document.getElementById('aboutVersionText');
+  if (aboutVer) aboutVer.textContent = `${v} · Build ${b}`;
+
+  const whatsNewHdr = document.getElementById('aboutWhatsNewHdr');
+  if (whatsNewHdr) whatsNewHdr.textContent = `🆕 What's New in ${v}`;
+
+  const historyEntry = document.getElementById('aboutVersionHistoryEntry');
+  if (historyEntry) historyEntry.textContent = `${v} — Launch`;
+});
+
 // ===== VERSION GATE =====
 function parseVersion(v) {
   return (v || '').replace(/^v/, '').split('.').map(Number);
@@ -25,4 +47,3 @@ async function checkClientVersion() {
     // Network unavailable — silently allow (don't block offline users)
   }
 }
-

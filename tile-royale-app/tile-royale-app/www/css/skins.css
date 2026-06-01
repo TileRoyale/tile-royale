@@ -248,7 +248,7 @@
     border-radius: 50%; border: 3px solid #00e5ff;
     box-shadow: 0 0 12px #00e5ff, inset 0 0 8px rgba(0,229,255,0.2);
     width: 100%; height: 100%;
-    animation: shockwaveAnim 0.5s ease-out forwards;
+    animation: shockwaveAnim 1.0s ease-out forwards;
   }
 
   /* Gold Crack — shattering gold fracture */
@@ -262,7 +262,7 @@
     background: conic-gradient(#ffd700, #ffaa00, #ff8c00, #ffd700, #ffe066, #ffd700);
     box-shadow: 0 0 16px rgba(255,215,0,0.8);
     width: 100%; height: 100%;
-    animation: goldcrackAnim 0.45s ease-out forwards;
+    animation: goldcrackAnim 0.9s ease-out forwards;
   }
 
   /* Also add whale table skin backgrounds to applyTableBgToEl */
@@ -339,7 +339,7 @@
     background: linear-gradient(135deg, #ff2200, #ff8800, #ffcc00);
     box-shadow: 0 0 16px rgba(255,100,0,0.8);
     width: 100%; height: 100%;
-    animation: meteorAnim 0.5s ease-out forwards;
+    animation: meteorAnim 1.0s ease-out forwards;
   }
 
   /* Skin tier badges */

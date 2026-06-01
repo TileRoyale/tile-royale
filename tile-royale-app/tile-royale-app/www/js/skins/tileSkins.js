@@ -78,9 +78,9 @@ const SKINS = {
     { id:'vic_disco',     name:'Disco Survivor',      icon:'🕺', price:200,  owned:false, tier:'rare',      preview:'disco',     art:'assets/victory-art/vic-disco.webp',     tagline:'Still standing. Still dancing.' },
     { id:'vic_goat',      name:'Greatest Of All Taps',icon:'🐐', price:400,  owned:false, tier:'epic',      preview:'goat',      art:'assets/victory-art/vic-goat.webp',      tagline:'The GOAT has arrived.' },
     { id:'vic_cheese',    name:'Big Cheese Energy',   icon:'🧀', price:400,  owned:false, tier:'epic',      preview:'cheese',    art:'assets/victory-art/vic-cheese.webp',    tagline:'Respect the cheese.' },
-    { id:'vic_404',       name:'404: Skill Found',    icon:'💻', price:800,  owned:false, tier:'legendary', preview:'404',                                                    tagline:'Error: Defeat not found.' },
-    { id:'vic_humble',    name:'Humble Brag',         icon:'🙄', price:800,  owned:false, tier:'legendary', preview:'humble',                                                 tagline:'Just lucky. Again.' },
-    { id:'vic_mobydick',  name:'Moby Dick',           icon:'🐋', price:0,    owned:false, tier:'default',   preview:'mobydick',  whale:true,                                  tagline:'The ocean answers to you.' },
+    { id:'vic_404',       name:'404: Skill Found',    icon:'💻', price:800,  owned:false, tier:'legendary', preview:'404',      art:'assets/victory-art/vic-404.webp',      tagline:'Error: Defeat not found.' },
+    { id:'vic_humble',    name:'Humble Brag',         icon:'🙄', price:800,  owned:false, tier:'legendary', preview:'humble',   art:'assets/victory-art/vic-humble.webp',   tagline:'Just lucky. Again.' },
+    { id:'vic_mobydick',  name:'Moby Dick',           icon:'🐋', price:0,    owned:false, tier:'default',   preview:'mobydick', art:'assets/victory-art/vic-mobydick.webp', whale:true, tagline:'The ocean answers to you.' },
   ],
   tapeffect: [
     { id: 'tap_ripple',    name: 'Ripple',        icon: '💧', price: 0,    owned: true,  tier:'default' },
@@ -315,20 +315,20 @@ function getBurningStyle(fxSkinId) {
 // Returns inline style for tap effect overlay div
 function getTapStyle(tapSkinId) {
   const styles = {
-    tap_ripple:    { borderRadius:'50%', background:'rgba(255,255,255,0.35)', animation:'rippleAnim 0.4s ease-out forwards' },
-    tap_explosion: { borderRadius:'20%', background:'radial-gradient(circle,#ff8800,#ff2200)', animation:'explodeAnim 0.4s ease-out forwards' },
-    tap_starburst: { background:'radial-gradient(circle,#ffff00,#ffaa00)', clipPath:'polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)', animation:'starAnim 0.45s ease-out forwards' },
-    tap_shatter:   { border:'2px solid #aaddff', borderRadius:'4px', animation:'shatterAnim 0.4s ease-out forwards' },
-    tap_lightning: { width:'3px', height:'100%', left:'50%', transform:'translateX(-50%)', background:'linear-gradient(to bottom,#ffff00,#ffffff)', boxShadow:'0 0 6px #ffff00', animation:'lightningAnim 0.3s ease-out forwards' },
-    tap_smoke:     { borderRadius:'50%', background:'radial-gradient(circle,rgba(180,180,180,0.6),transparent)', animation:'smokeAnim 0.5s ease-out forwards' },
-    tap_confetti:  { borderRadius:'30%', background:'conic-gradient(#ff0000,#ffff00,#00ff00,#0000ff,#ff00ff,#ff0000)', animation:'confettiAnim 0.5s ease-out forwards' },
-    tap_icecrack:  { border:'2px solid #aaddff', background:'rgba(150,200,255,0.3)', animation:'icecrackAnim 0.4s ease-out forwards' },
-    tap_portal:    { borderRadius:'50%', background:'conic-gradient(#8800ff,#0044ff,#8800ff)', animation:'portalAnim 0.5s ease-out forwards' },
-    tap_neonpulse: { borderRadius:'50%', border:'2px solid #00ffff', boxShadow:'0 0 8px #00ffff', animation:'neonpulseAnim 0.4s ease-out forwards' },
+    tap_ripple:    { borderRadius:'50%', background:'rgba(255,255,255,0.35)', animation:'rippleAnim 0.8s ease-out forwards' },
+    tap_explosion: { borderRadius:'20%', background:'radial-gradient(circle,#ff8800,#ff2200)', animation:'explodeAnim 0.8s ease-out forwards' },
+    tap_starburst: { background:'radial-gradient(circle,#ffff00,#ffaa00)', clipPath:'polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)', animation:'starAnim 0.9s ease-out forwards' },
+    tap_shatter:   { border:'2px solid #aaddff', borderRadius:'4px', animation:'shatterAnim 0.8s ease-out forwards' },
+    tap_lightning: { width:'3px', height:'100%', left:'50%', transform:'translateX(-50%)', background:'linear-gradient(to bottom,#ffff00,#ffffff)', boxShadow:'0 0 6px #ffff00', animation:'lightningAnim 0.6s ease-out forwards' },
+    tap_smoke:     { borderRadius:'50%', background:'radial-gradient(circle,rgba(180,180,180,0.6),transparent)', animation:'smokeAnim 1.0s ease-out forwards' },
+    tap_confetti:  { borderRadius:'30%', background:'conic-gradient(#ff0000,#ffff00,#00ff00,#0000ff,#ff00ff,#ff0000)', animation:'confettiAnim 1.0s ease-out forwards' },
+    tap_icecrack:  { border:'2px solid #aaddff', background:'rgba(150,200,255,0.3)', animation:'icecrackAnim 0.8s ease-out forwards' },
+    tap_portal:    { borderRadius:'50%', background:'conic-gradient(#8800ff,#0044ff,#8800ff)', animation:'portalAnim 1.0s ease-out forwards' },
+    tap_neonpulse: { borderRadius:'50%', border:'2px solid #00ffff', boxShadow:'0 0 8px #00ffff', animation:'neonpulseAnim 0.8s ease-out forwards' },
     // Whale exclusive
-    tap_shockwave: { borderRadius:'50%', border:'3px solid #00e5ff', boxShadow:'0 0 12px #00e5ff', animation:'shockwaveAnim 0.5s ease-out forwards' },
-    tap_goldcrack: { borderRadius:'8px', background:'conic-gradient(#ffd700,#ffaa00,#ff8c00,#ffd700)', boxShadow:'0 0 12px rgba(255,215,0,0.8)', animation:'goldcrackAnim 0.45s ease-out forwards' },
-    tap_meteor:    { borderRadius:'30% 70% 70% 30%', border:'2px solid #ff6600', background:'linear-gradient(135deg,#ff2200,#ff8800,#ffcc00)', boxShadow:'0 0 16px rgba(255,100,0,0.8)', animation:'meteorAnim 0.5s ease-out forwards' },
+    tap_shockwave: { borderRadius:'50%', border:'3px solid #00e5ff', boxShadow:'0 0 12px #00e5ff', animation:'shockwaveAnim 1.0s ease-out forwards' },
+    tap_goldcrack: { borderRadius:'8px', background:'conic-gradient(#ffd700,#ffaa00,#ff8c00,#ffd700)', boxShadow:'0 0 12px rgba(255,215,0,0.8)', animation:'goldcrackAnim 0.9s ease-out forwards' },
+    tap_meteor:    { borderRadius:'30% 70% 70% 30%', border:'2px solid #ff6600', background:'linear-gradient(135deg,#ff2200,#ff8800,#ffcc00)', boxShadow:'0 0 16px rgba(255,100,0,0.8)', animation:'meteorAnim 1.0s ease-out forwards' },
   };
   return styles[tapSkinId] || styles.tap_ripple;
 }
@@ -384,7 +384,7 @@ function startMiniAnimations(tab) {
         r.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
         Object.assign(r.style, tStyle);
         tile.appendChild(r);
-        setTimeout(() => r.remove(), 500);
+        setTimeout(() => r.remove(), 1000);
 
         step = 0;
         burnIdx = Math.floor(Math.random() * 9);
@@ -427,15 +427,16 @@ function closeBuyDialog() {
   document.getElementById('buyDialogOverlay').classList.remove('show');
   pendingBuySkin = null;
   pendingBuyTab = null;
+  window._storeBuyMode = false;
+  storePendingCb = null;
 }
 
 function confirmBuy() {
   // Store generic callback (bundles, items, ad rewards)
   if (window._storeBuyMode && storePendingCb) {
-    window._storeBuyMode = false;
+    const cb = storePendingCb;
     closeBuyDialog();
-    storePendingCb();
-    storePendingCb = null;
+    cb();
     return;
   }
   if (!pendingBuySkin || !pendingBuyTab) return;
