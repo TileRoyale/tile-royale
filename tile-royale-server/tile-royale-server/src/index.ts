@@ -5,7 +5,7 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade } from "./db";
 import { google } from "googleapis";
 
 const port   = Number(process.env.PORT   || 3000);
@@ -706,6 +706,109 @@ app.post("/koth/prizes/claim", async (req, res) => {
   const result = await claimKothWeeklyPrize(playerId, weekStart);
   if (!result) return res.json({ ok: false, reason: 'server_error' });
   res.json(result);
+});
+
+// ─── Ring System ─────────────────────────────────────────────────────────────
+
+// Server-side ring pool — mirrors client RINGS array (100 rings, indices 0-99).
+const RING_RARITIES_SERVER = [
+  { id: 'secret',    prob: 0.0001 },
+  { id: 'legendary', prob: 0.001  },
+  { id: 'epic',      prob: 0.05   },
+  { id: 'rare',      prob: 0.15   },
+  { id: 'uncommon',  prob: 0.30   },
+  { id: 'common',    prob: 0.4989 },
+];
+const RING_RARITY_RANGES: Record<string, [number, number]> = {
+  secret:    [0,  1],   // ring_0 .. ring_1
+  legendary: [2,  11],  // ring_2 .. ring_11
+  epic:      [12, 36],  // ring_12 .. ring_36
+  rare:      [37, 66],  // ring_37 .. ring_66
+  uncommon:  [67, 79],  // ring_67 .. ring_79
+  common:    [80, 99],  // ring_80 .. ring_99
+};
+
+function _serverRollRarity(): string {
+  const r = Math.random();
+  let cumulative = 0;
+  for (const rar of RING_RARITIES_SERVER) {
+    cumulative += rar.prob;
+    if (r < cumulative) return rar.id;
+  }
+  return 'common';
+}
+
+function _serverRollRing(rarityId: string): string {
+  const [lo, hi] = RING_RARITY_RANGES[rarityId] || [80, 99];
+  const idx = lo + Math.floor(Math.random() * (hi - lo + 1));
+  return `ring_${idx}`;
+}
+
+// POST /ring/spin  { playerId, spinType }
+// Server rolls the rarity and ring, records in ring_grants, returns to client.
+// spinType: 'free' | 'freeSpin' | 'ad' | 'diamond'
+app.post("/ring/spin", async (req, res) => {
+  const { playerId, spinType = 'free' } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const rarityId = _serverRollRarity();
+  const ringId   = _serverRollRing(rarityId);
+  const grantId  = await createRingGrant(playerId, ringId, rarityId, String(spinType));
+
+  if (!grantId) return res.json({ ok: false, error: 'grant_failed' });
+  res.json({ ok: true, ringId, rarityId, grantId });
+});
+
+// POST /ring/trade/create  { playerId, grantId, ringId }
+// Validates the grant and creates a trade code.
+app.post("/ring/trade/create", async (req, res) => {
+  const { playerId, grantId, ringId } = req.body;
+  if (!playerId || !grantId || !ringId)
+    return res.json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const status = await validateRingGrant(String(grantId), String(playerId), String(ringId));
+  if (status !== 'ok') return res.json({ ok: false, error: status });
+
+  const tradeCode = await createRingTrade(String(playerId), String(grantId), String(ringId));
+  if (!tradeCode) return res.json({ ok: false, error: 'trade_create_failed' });
+
+  res.json({ ok: true, tradeCode });
+});
+
+// POST /ring/trade/accept  { claimerPlayerId, tradeCode }
+// Validates the trade code and transfers the ring + new grant to the claimer.
+app.post("/ring/trade/accept", async (req, res) => {
+  const { claimerPlayerId, tradeCode } = req.body;
+  if (!claimerPlayerId || !tradeCode)
+    return res.json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const result = await acceptRingTrade(String(claimerPlayerId), String(tradeCode).toUpperCase());
+  if (result === 'not_found') return res.json({ ok: false, error: 'code_not_found' });
+  if (result === 'expired')   return res.json({ ok: false, error: 'code_expired' });
+  if (result === 'self')      return res.json({ ok: false, error: 'cannot_trade_with_self' });
+  if (!result)                return res.json({ ok: false, error: 'server_error' });
+
+  res.json({ ok: true, ringId: result.ringId, rarityId: result.rarityId, grantId: result.newGrantId });
+});
+
+// POST /ring/trade/cancel  { playerId, tradeCode }
+// Cancels a trade — returns the grant to 'held' status.
+app.post("/ring/trade/cancel", async (req, res) => {
+  const { playerId, tradeCode } = req.body;
+  if (!playerId || !tradeCode)
+    return res.json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const ok = await cancelRingTrade(String(playerId), String(tradeCode).toUpperCase());
+  res.json({ ok });
 });
 
 // ─── Practice Mode Leaderboard ───────────────────────────────────────────────

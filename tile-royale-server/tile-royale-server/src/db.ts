@@ -203,6 +203,30 @@ async function createTables(): Promise<void> {
       claimed_at  TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Ring grants: one row per ring issued from the wheel.
+    -- status: 'held' | 'in_trade' | 'traded'
+    CREATE TABLE IF NOT EXISTS ring_grants (
+      grant_id    TEXT         PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      ring_id     TEXT         NOT NULL,
+      rarity_id   TEXT         NOT NULL,
+      spin_type   TEXT         NOT NULL DEFAULT 'free',
+      status      TEXT         NOT NULL DEFAULT 'held',
+      granted_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Ring trades: active trade codes linking grants to potential claimers.
+    -- status: 'active' | 'completed' | 'cancelled'
+    CREATE TABLE IF NOT EXISTS ring_trades (
+      trade_code  TEXT         PRIMARY KEY,
+      grant_id    TEXT         NOT NULL REFERENCES ring_grants(grant_id),
+      seller_id   UUID         NOT NULL REFERENCES players(player_id),
+      ring_id     TEXT         NOT NULL,
+      status      TEXT         NOT NULL DEFAULT 'active',
+      created_at  TIMESTAMPTZ  DEFAULT now(),
+      expires_at  TIMESTAMPTZ  DEFAULT (now() + interval '4 hours')
+    );
+
     -- Practice mode scores: one row per player, UPSERT keeps personal bests only.
     CREATE TABLE IF NOT EXISTS practice_scores (
       player_id        UUID         PRIMARY KEY REFERENCES players(player_id),
@@ -230,6 +254,8 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_players_player_tag ON players(player_tag);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_friends_pair       ON friends(requester_player_id, target_player_id);
     CREATE        INDEX IF NOT EXISTS idx_purchase_receipts_player ON purchase_receipts(player_id);
+    CREATE        INDEX IF NOT EXISTS idx_ring_grants_player       ON ring_grants(player_id);
+    CREATE        INDEX IF NOT EXISTS idx_ring_trades_seller       ON ring_trades(seller_id);
     CREATE        INDEX IF NOT EXISTS idx_friends_requester  ON friends(requester_player_id);
     CREATE        INDEX IF NOT EXISTS idx_friends_target     ON friends(target_player_id);
     CREATE        INDEX IF NOT EXISTS idx_player_notifs      ON player_notifications(player_id, created_at DESC);
@@ -1310,6 +1336,155 @@ export async function getProcessedTokens(playerId: string): Promise<Set<string>>
     [playerId]
   );
   return new Set((rows || []).map((r: any) => r.purchase_token));
+}
+
+// ─── Ring Grants & Trades ─────────────────────────────────────────────────────
+
+function _uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+// Issue a new ring grant — called by the server's spin endpoint.
+export async function createRingGrant(
+  playerId: string, ringId: string, rarityId: string, spinType: string
+): Promise<string | null> {
+  const grantId = _uuid();
+  const rows = await query(
+    `INSERT INTO ring_grants (grant_id, player_id, ring_id, rarity_id, spin_type)
+     VALUES ($1, $2, $3, $4, $5) RETURNING grant_id`,
+    [grantId, playerId, ringId, rarityId, spinType]
+  );
+  return rows && rows.length > 0 ? rows[0].grant_id : null;
+}
+
+// Validate a grant belongs to the correct player and ring, and is not already in trade.
+// Returns: 'ok' | 'not_found' | 'wrong_player' | 'wrong_ring' | 'already_in_trade' | 'traded'
+export async function validateRingGrant(
+  grantId: string, playerId: string, ringId: string
+): Promise<string> {
+  const rows = await query(
+    `SELECT player_id, ring_id, status FROM ring_grants WHERE grant_id = $1`,
+    [grantId]
+  );
+  if (!rows || rows.length === 0) return 'not_found';
+  const g = rows[0];
+  if (g.player_id !== playerId)  return 'wrong_player';
+  if (g.ring_id   !== ringId)    return 'wrong_ring';
+  if (g.status === 'in_trade')   return 'already_in_trade';
+  if (g.status === 'traded')     return 'traded';
+  return 'ok';
+}
+
+// Create a trade code — marks the grant as 'in_trade' and inserts into ring_trades.
+export async function createRingTrade(
+  playerId: string, grantId: string, ringId: string
+): Promise<string | null> {
+  if (!pool || !dbAvailable) return null;
+  // Generate a human-readable 8-char code
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'R-';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+
+  try {
+    await pool.query('BEGIN');
+    await pool.query(
+      `UPDATE ring_grants SET status = 'in_trade' WHERE grant_id = $1 AND status = 'held'`,
+      [grantId]
+    );
+    await pool.query(
+      `INSERT INTO ring_trades (trade_code, grant_id, seller_id, ring_id)
+       VALUES ($1, $2, $3, $4)`,
+      [code, grantId, playerId, ringId]
+    );
+    await pool.query('COMMIT');
+    return code;
+  } catch (err: any) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error('[DB] createRingTrade error:', err);
+    return null;
+  }
+}
+
+// Accept a trade — transfers the ring to the claimer.
+// Returns { ringId, rarityId, newGrantId } on success, or null on failure.
+export async function acceptRingTrade(
+  claimerPlayerId: string, tradeCode: string
+): Promise<{ ringId: string; rarityId: string; newGrantId: string } | null | 'not_found' | 'expired' | 'self'> {
+  if (!pool || !dbAvailable) return null;
+
+  const rows = await query(
+    `SELECT t.grant_id, t.seller_id, t.ring_id, t.status, t.expires_at,
+            g.rarity_id, g.spin_type
+     FROM ring_trades t
+     JOIN ring_grants g ON g.grant_id = t.grant_id
+     WHERE t.trade_code = $1`,
+    [tradeCode]
+  );
+  if (!rows || rows.length === 0) return 'not_found';
+  const trade = rows[0];
+  if (trade.status !== 'active') return 'not_found';
+  if (new Date(trade.expires_at) < new Date()) return 'expired';
+  if (trade.seller_id === claimerPlayerId) return 'self';
+
+  const newGrantId = _uuid();
+  try {
+    await pool.query('BEGIN');
+    // Mark old grant as traded
+    await pool.query(
+      `UPDATE ring_grants SET status = 'traded' WHERE grant_id = $1`,
+      [trade.grant_id]
+    );
+    // Mark trade as completed
+    await pool.query(
+      `UPDATE ring_trades SET status = 'completed' WHERE trade_code = $1`,
+      [tradeCode]
+    );
+    // Issue new grant to claimer
+    await pool.query(
+      `INSERT INTO ring_grants (grant_id, player_id, ring_id, rarity_id, spin_type)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newGrantId, claimerPlayerId, trade.ring_id, trade.rarity_id, 'trade']
+    );
+    await pool.query('COMMIT');
+    return { ringId: trade.ring_id, rarityId: trade.rarity_id, newGrantId };
+  } catch (err: any) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error('[DB] acceptRingTrade error:', err);
+    return null;
+  }
+}
+
+// Cancel a trade — returns the grant to 'held' status.
+export async function cancelRingTrade(
+  playerId: string, tradeCode: string
+): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  const rows = await query(
+    `SELECT grant_id, seller_id FROM ring_trades WHERE trade_code = $1 AND status = 'active'`,
+    [tradeCode]
+  );
+  if (!rows || rows.length === 0) return false;
+  if (rows[0].seller_id !== playerId) return false;
+
+  try {
+    await pool.query('BEGIN');
+    await pool.query(
+      `UPDATE ring_grants SET status = 'held' WHERE grant_id = $1`,
+      [rows[0].grant_id]
+    );
+    await pool.query(
+      `UPDATE ring_trades SET status = 'cancelled' WHERE trade_code = $1`,
+      [tradeCode]
+    );
+    await pool.query('COMMIT');
+    return true;
+  } catch (err: any) {
+    await pool.query('ROLLBACK').catch(() => {});
+    return false;
+  }
 }
 
 // ─── Practice Scores ──────────────────────────────────────────────────────────
