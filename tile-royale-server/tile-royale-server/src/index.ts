@@ -83,7 +83,7 @@ app.get("/privacy", (_req, res) => {
 <h2>8. Changes to This Policy</h2>
 <p>We may update this policy from time to time. The latest version is always available at this URL.</p>
 
-<footer>© 2026 Timo Jakimainen · Tile Royale</footer>
+<footer>© 2026 Henly Games · Tile Royale</footer>
 </body>
 </html>`);
 });
