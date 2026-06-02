@@ -202,11 +202,24 @@ async function createTables(): Promise<void> {
       prize       INTEGER      NOT NULL DEFAULT 0,
       claimed_at  TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- IAP purchase receipts: one row per purchase token (UNIQUE prevents double-delivery)
+    -- granted_json stores the reward payload so restore can re-deliver the exact same items.
+    CREATE TABLE IF NOT EXISTS purchase_receipts (
+      id             BIGSERIAL    PRIMARY KEY,
+      player_id      UUID         NOT NULL,
+      product_id     TEXT         NOT NULL,
+      purchase_token TEXT         UNIQUE NOT NULL,
+      order_id       TEXT,
+      granted_json   TEXT,
+      verified_at    TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_players_player_tag ON players(player_tag);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_friends_pair       ON friends(requester_player_id, target_player_id);
+    CREATE        INDEX IF NOT EXISTS idx_purchase_receipts_player ON purchase_receipts(player_id);
     CREATE        INDEX IF NOT EXISTS idx_friends_requester  ON friends(requester_player_id);
     CREATE        INDEX IF NOT EXISTS idx_friends_target     ON friends(target_player_id);
     CREATE        INDEX IF NOT EXISTS idx_player_notifs      ON player_notifications(player_id, created_at DESC);
@@ -1244,4 +1257,47 @@ export async function claimKothWeeklyPrize(
   );
 
   return { ok: true, rank: prizeRank, prize };
+}
+
+// ─── IAP Purchase Receipts ────────────────────────────────────────────────────
+
+// Returns 'ok' | 'already_processed' | 'error'
+export async function recordPurchaseReceipt(
+  playerId: string,
+  productId: string,
+  purchaseToken: string,
+  orderId: string,
+  grantedJson: string
+): Promise<'ok' | 'already_processed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO purchase_receipts (player_id, product_id, purchase_token, order_id, granted_json)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [playerId, productId, purchaseToken, orderId || '', grantedJson]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_processed';
+    console.error('[DB] recordPurchaseReceipt error:', err);
+    return 'error';
+  }
+}
+
+// Returns the granted_json for an already-processed token, or null if not found.
+export async function getPurchaseReceipt(purchaseToken: string): Promise<string | null> {
+  const rows = await query(
+    `SELECT granted_json FROM purchase_receipts WHERE purchase_token = $1`,
+    [purchaseToken]
+  );
+  return rows && rows.length > 0 ? rows[0].granted_json : null;
+}
+
+// Returns all processed purchase tokens for a player (used by restore to skip already-granted items).
+export async function getProcessedTokens(playerId: string): Promise<Set<string>> {
+  const rows = await query(
+    `SELECT purchase_token FROM purchase_receipts WHERE player_id = $1`,
+    [playerId]
+  );
+  return new Set((rows || []).map((r: any) => r.purchase_token));
 }

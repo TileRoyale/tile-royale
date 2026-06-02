@@ -5,7 +5,8 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens } from "./db";
+import { google } from "googleapis";
 
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
@@ -705,6 +706,193 @@ app.post("/koth/prizes/claim", async (req, res) => {
   const result = await claimKothWeeklyPrize(playerId, weekStart);
   if (!result) return res.json({ ok: false, reason: 'server_error' });
   res.json(result);
+});
+
+// ─── IAP Purchase Verification ───────────────────────────────────────────────
+
+const PACKAGE_NAME = "com.tileroyale.game";
+
+// Server-authoritative product catalog — must match client shop.js exactly.
+// diamonds = total granted (amount + bonus combined).
+const PRODUCT_CATALOG: Record<string, {
+  type:         'diamonds' | 'bundle';
+  bundleId?:    string;
+  diamonds:     number;
+  items?:       Record<string, number>;
+  skins?:       string[];
+  tickets?:     number;
+  nameChanges?: number;
+  whaleBadge?:  boolean;
+  priceVal:     number;
+}> = {
+  'd.starter':       { type:'diamonds', diamonds:250,   priceVal:1.99  },
+  'd.popular':       { type:'diamonds', diamonds:700,   priceVal:4.99  },
+  'd.value':         { type:'diamonds', diamonds:1500,  priceVal:9.99  },
+  'd.mega':          { type:'diamonds', diamonds:3200,  priceVal:19.99 },  // 2800+400
+  'd.ultra':         { type:'diamonds', diamonds:7500,  priceVal:39.99 },  // 6500+1000
+  'd.legend':        { type:'diamonds', diamonds:17500, priceVal:79.99 },  // 15000+2500
+  'bundle.starter':  { type:'bundle', bundleId:'bundle.starter',  diamonds:750,   items:{crystal:5,caltrops:5},             tickets:10,  priceVal:4.99  },
+  'bundle.fire':     { type:'bundle', bundleId:'bundle.fire',     diamonds:1800,  items:{crystal:10,caltrops:10},            skins:['table_lava','tile_lava'],                                                             priceVal:11.99 },
+  'bundle.champion': { type:'bundle', bundleId:'bundle.champion', diamonds:4000,  items:{crystal:20,caltrops:20},            skins:['table_galaxy','tile_holo','fx_void'],                                                 priceVal:19.99 },
+  'bundle.legend':   { type:'bundle', bundleId:'bundle.legend',   diamonds:10000, items:{crystal:50,caltrops:50},            skins:['table_galaxy','tile_holo','fx_void','fx_rainbow','tap_portal'], tickets:50, nameChanges:5, priceVal:49.99 },
+  'bundle.mobydick': { type:'bundle', bundleId:'bundle.mobydick', diamonds:7500,  items:{crystal:10,caltrops:10,shadow_tile:5}, skins:['vic_mobydick'], tickets:20, whaleBadge:true, priceVal:49.99 },
+  'bundle.whale1':   { type:'bundle', bundleId:'bundle.whale1',   diamonds:16000, items:{shadow_tile:20},                   skins:['table_obsidian','tile_obsidian','tile_diamond'], tickets:100, whaleBadge:true, priceVal:79.99  },
+  'bundle.whale2':   { type:'bundle', bundleId:'bundle.whale2',   diamonds:26000, items:{shadow_tile:50},                   skins:['fx_godray','fx_blackhole','tap_shockwave','tap_goldcrack','table_aurora','table_obsidian','tile_obsidian','tile_diamond'], whaleBadge:true, priceVal:129.99 },
+};
+
+// Verify purchase with Google Play Developer API.
+// Returns true if purchaseState === 0 (Purchased).
+// Skipped (returns true) when GOOGLE_PLAY_KEY_JSON env var is not set.
+async function verifyWithGooglePlay(productId: string, purchaseToken: string): Promise<boolean> {
+  const keyJson = process.env.GOOGLE_PLAY_KEY_JSON;
+  if (!keyJson) {
+    console.log('[Purchase] GOOGLE_PLAY_KEY_JSON not set — skipping API verification (token deduplication only)');
+    return true;
+  }
+  try {
+    const credentials = JSON.parse(keyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/androidpublisher'],
+    });
+    const publisher = google.androidpublisher({ version: 'v3', auth });
+    const res = await publisher.purchases.products.get({
+      packageName: PACKAGE_NAME,
+      productId,
+      token: purchaseToken,
+    });
+    const state = res.data.purchaseState;
+    if (state !== 0) {
+      console.warn(`[Purchase] Google Play rejected token — purchaseState=${state}`);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error('[Purchase] Google Play API error:', err?.message || err);
+    return false;
+  }
+}
+
+// POST /purchase/verify  { playerId, productId, purchaseToken, orderId? }
+// Verifies with Google Play (if key configured), records in DB, grants reward.
+// Idempotent: returns the original grant on duplicate token.
+app.post("/purchase/verify", async (req, res) => {
+  const { playerId, productId, purchaseToken, orderId = '' } = req.body;
+
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!productId || typeof productId !== 'string')
+    return res.json({ ok: false, error: 'invalid_product' });
+  if (!purchaseToken || typeof purchaseToken !== 'string' || purchaseToken.length < 10)
+    return res.json({ ok: false, error: 'invalid_token' });
+
+  const product = PRODUCT_CATALOG[productId];
+  if (!product) return res.json({ ok: false, error: 'unknown_product' });
+
+  // Check for duplicate — return original grant so client can re-apply idempotently
+  const existing = await getPurchaseReceipt(purchaseToken);
+  if (existing !== null) {
+    try {
+      const grant = JSON.parse(existing);
+      return res.json({ ok: false, error: 'already_processed', grant });
+    } catch {
+      return res.json({ ok: false, error: 'already_processed' });
+    }
+  }
+
+  // Verify with Google Play (no-op when key not configured)
+  const valid = await verifyWithGooglePlay(productId, purchaseToken);
+  if (!valid) return res.json({ ok: false, error: 'google_play_rejected' });
+
+  // Build grant payload
+  const grant: Record<string, any> = {
+    type:     product.type,
+    bundleId: product.bundleId,
+    diamonds: product.diamonds,
+    priceVal: product.priceVal,
+  };
+  if (product.items)       grant.items       = product.items;
+  if (product.skins)       grant.skins       = product.skins;
+  if (product.tickets)     grant.tickets      = product.tickets;
+  if (product.nameChanges) grant.nameChanges  = product.nameChanges;
+  if (product.whaleBadge)  grant.whaleBadge   = true;
+
+  // Record in DB — UNIQUE on purchase_token prevents double-delivery
+  if (getDbStatus().available) {
+    const result = await recordPurchaseReceipt(
+      playerId, productId, purchaseToken, String(orderId), JSON.stringify(grant)
+    );
+    if (result === 'error') return res.json({ ok: false, error: 'db_error' });
+    if (result === 'already_processed') {
+      return res.json({ ok: false, error: 'already_processed', grant });
+    }
+    // Raise the server-trusted diamond ceiling for this legitimate purchase
+    await addTrustedDiamonds(playerId, product.diamonds);
+  }
+
+  console.log(`[Purchase] ✅ Verified ${productId} for ${playerId} (💎 ${product.diamonds})`);
+  res.json({ ok: true, grant });
+});
+
+// POST /purchase/restore  { playerId, purchases: [{ productId, purchaseToken, orderId? }] }
+// Processes all unacknowledged purchases returned by queryPurchasesAsync on the client.
+// Skips tokens already in purchase_receipts. Returns { restored: [...] } for newly granted items.
+app.post("/purchase/restore", async (req, res) => {
+  const { playerId, purchases } = req.body;
+
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!Array.isArray(purchases) || purchases.length === 0)
+    return res.json({ ok: true, restored: [] });
+  if (purchases.length > 50)
+    return res.json({ ok: false, error: 'too_many_purchases' });
+
+  const processedTokens = getDbStatus().available ? await getProcessedTokens(playerId) : new Set<string>();
+  const restored: Array<{ purchaseToken: string; grant: Record<string, any> }> = [];
+
+  for (const p of purchases) {
+    const { productId, purchaseToken, orderId = '' } = p;
+    if (!productId || !purchaseToken) continue;
+
+    const product = PRODUCT_CATALOG[productId];
+    if (!product) continue;
+
+    // Already processed — skip (client will still consume the token)
+    if (processedTokens.has(purchaseToken)) continue;
+
+    // Check DB directly for race conditions
+    const existing = await getPurchaseReceipt(purchaseToken);
+    if (existing !== null) continue;
+
+    // Verify with Google Play
+    const valid = await verifyWithGooglePlay(productId, purchaseToken);
+    if (!valid) continue;
+
+    const grant: Record<string, any> = {
+      type:     product.type,
+      bundleId: product.bundleId,
+      diamonds: product.diamonds,
+      priceVal: product.priceVal,
+    };
+    if (product.items)       grant.items       = product.items;
+    if (product.skins)       grant.skins       = product.skins;
+    if (product.tickets)     grant.tickets      = product.tickets;
+    if (product.nameChanges) grant.nameChanges  = product.nameChanges;
+    if (product.whaleBadge)  grant.whaleBadge   = true;
+
+    if (getDbStatus().available) {
+      const result = await recordPurchaseReceipt(
+        playerId, productId, purchaseToken, String(orderId), JSON.stringify(grant)
+      );
+      if (result !== 'ok') continue; // already processed by concurrent request — skip
+      await addTrustedDiamonds(playerId, product.diamonds);
+    }
+
+    restored.push({ purchaseToken, grant });
+    console.log(`[Purchase] 🔄 Restored ${productId} for ${playerId}`);
+  }
+
+  res.json({ ok: true, restored });
 });
 
 app.use("/colyseus", monitor());
