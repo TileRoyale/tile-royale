@@ -88,6 +88,65 @@ app.get("/privacy", (_req, res) => {
 </html>`);
 });
 
+// Data deletion request page
+app.get("/delete-data", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tile Royale – Data Deletion Request</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.7; }
+  h1 { font-size: 26px; } h2 { font-size: 18px; margin-top: 28px; }
+  p, li { font-size: 15px; } ul { padding-left: 20px; }
+  .step { background: #f5f5f5; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+  .step strong { display: block; margin-bottom: 4px; }
+  a { color: #1a73e8; }
+  footer { margin-top: 48px; font-size: 13px; color: #888; }
+</style>
+</head>
+<body>
+<h1>Tile Royale — Data Deletion Request</h1>
+<p>You can request deletion of all your Tile Royale data at any time. We will process your request within 30 days.</p>
+
+<h2>How to request deletion</h2>
+
+<div class="step">
+  <strong>Step 1 — Find your Player ID</strong>
+  Open Tile Royale → tap your profile icon → your Player ID is shown at the bottom of the profile screen (a long code starting with letters and numbers).
+</div>
+
+<div class="step">
+  <strong>Step 2 — Send an email</strong>
+  Email us at <a href="mailto:tileroyalegame@gmail.com">tileroyalegame@gmail.com</a> with:<br>
+  Subject: <em>Data Deletion Request</em><br>
+  Body: your Player ID
+</div>
+
+<h2>What data is deleted</h2>
+<ul>
+  <li>Player profile (name, avatar, Player ID)</li>
+  <li>Game statistics and match history</li>
+  <li>Game save data (progress, currencies, items, skins)</li>
+  <li>Purchase records</li>
+  <li>Push notification token</li>
+  <li>Friend connections and trade history</li>
+</ul>
+
+<h2>What data is retained</h2>
+<ul>
+  <li>Anonymised aggregate statistics (no personal identifiers) may be retained for up to 90 days for service improvement purposes.</li>
+</ul>
+
+<p>For questions, contact us at <a href="mailto:tileroyalegame@gmail.com">tileroyalegame@gmail.com</a>.</p>
+
+<footer>© 2026 Henly Games · Tile Royale</footer>
+</body>
+</html>`);
+});
+
 // Health check + region info (clients ping this to measure latency)
 app.get("/", (_req, res) => {
   const db = getDbStatus();
