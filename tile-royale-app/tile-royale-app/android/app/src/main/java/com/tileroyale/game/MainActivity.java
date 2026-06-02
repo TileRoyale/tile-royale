@@ -11,6 +11,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(BillingPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Full screen — hide status bar and navigation bar

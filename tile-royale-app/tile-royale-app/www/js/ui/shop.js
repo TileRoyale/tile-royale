@@ -435,11 +435,42 @@ function buildBundleCard(b) {
 }
 
 // ---- Buy functions ----
-function buyDiamondPackage(id) {
+async function buyDiamondPackage(id) {
   const pkg = DIAMOND_PACKAGES.find(p => p.id === id);
   if (!pkg) return;
   const total = pkg.amount + pkg.bonus;
-  showBuyDialog({ name: `💎 ${total.toLocaleString()} Diamonds`, icon:'💎', price: pkg.price, isRealMoney: true }, 'diamonds', pkg);
+
+  // Native Google Play Billing (Android)
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
+    try {
+      showToast('Opening store...', 'var(--blue)');
+      await nativePurchase(pkg.id);
+      // Deliver diamonds
+      gameState.diamonds = (gameState.diamonds || 0) + total;
+      gameState.totalDiamonds = (gameState.totalDiamonds || 0) + total;
+      // Track whale achievements
+      initAchStats();
+      gameState.achStats.diamondsPurchased = (gameState.achStats.diamondsPurchased || 0) + 1;
+      gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + Math.round(pkg.priceVal * 100);
+      checkAchievements();
+      saveState();
+      updateMenuStats();
+      const bal = document.getElementById('storeBalance');
+      if (bal) bal.textContent = (gameState.diamonds || 0).toLocaleString();
+      showToast(`💎 +${total.toLocaleString()} Diamonds added!`, 'var(--green)');
+    } catch (e) {
+      const msg = (e && (e.message || e.code || e));
+      if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');
+    }
+    return;
+  }
+
+  // Web/dev fallback — add diamonds directly for testing
+  gameState.diamonds = (gameState.diamonds || 0) + total;
+  saveState(); updateMenuStats();
+  const bal = document.getElementById('storeBalance');
+  if (bal) bal.textContent = (gameState.diamonds || 0).toLocaleString();
+  showToast(`[DEV] 💎 +${total.toLocaleString()} Diamonds`, 'var(--blue)');
 }
 
 function buyStoreItem(id) {

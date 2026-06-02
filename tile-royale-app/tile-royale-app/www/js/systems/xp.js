@@ -58,7 +58,8 @@ function initAchStats() {
   if (!gameState.unlockedAch) gameState.unlockedAch = [];
   const s = gameState.achStats;
   ['games','wins','totalTaps','top5','top3','rushWins','buckshotGames','buckshotWins',
-   'wildGames','wildWins','totalDiamonds','skinsBought','winStreak','bestWinStreak'].forEach(k => {
+   'wildGames','wildWins','totalDiamonds','skinsBought','winStreak','bestWinStreak',
+   'diamondsPurchased','totalSpentCents'].forEach(k => {
     if (s[k] === undefined) s[k] = 0;
   });
 }
