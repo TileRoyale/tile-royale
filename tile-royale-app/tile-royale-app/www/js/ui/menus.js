@@ -779,7 +779,7 @@ async function buyFirstWeekOffer() {
     if (!gameState.ownedSkins) gameState.ownedSkins = {};
     gameState.ownedSkins['table_lava'] = true;
     addItemToInventory('crystal', 5);
-    gameState.tickets = (gameState.tickets || 0) + 10;
+    gameState.tickets = (gameState.tickets || 0) + 5;
     initAchStats();
     gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + 199;
     checkAchievements();
@@ -792,7 +792,7 @@ async function buyFirstWeekOffer() {
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
     try {
       showToast('Opening store...', 'var(--blue)');
-      await nativePurchase('offer_firstweek');
+      await nativePurchase('offer.firstweek');
       deliverOffer();
     } catch (e) {
       const msg = (e && (e.message || e.code || e));

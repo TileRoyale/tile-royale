@@ -43,6 +43,7 @@ function renderAvatarPicker() {
     koth:        '👑 KOTH Exclusive',
     bundle:      '📦 Bundle Unlocks',
     whale:       '🐋 Whale Exclusive',
+    solo:        '🎯 Solo Exclusive',
   };
   Object.entries(AVATARS).forEach(([section, avatars]) => {
     const lbl = document.createElement('div');

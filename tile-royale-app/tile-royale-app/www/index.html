@@ -249,6 +249,18 @@
     </div>
   </div>
 
+  <!-- Solo Mode button -->
+  <button class="solo-menu-btn" onclick="openSoloHub()">
+    <div class="solo-menu-btn-left">
+      <div class="solo-menu-btn-icon">🎯</div>
+      <div class="solo-menu-btn-text">
+        <div class="solo-menu-btn-title">SOLO MODE</div>
+        <div class="solo-menu-btn-sub">100 levels · offline · no tickets</div>
+      </div>
+    </div>
+    <div class="solo-menu-btn-lives" id="soloMenuLives">❤️ 5</div>
+  </button>
+
   <button class="btn-play" onclick="tryFindMatch()" style="margin-bottom:10px;" id="btnFindMatch">
     ⚡ FIND MATCH &nbsp;<span class="ticket-counter" id="menuTicketCounter">🎟️ 10</span>
   </button>
@@ -517,7 +529,7 @@
       <div class="first-week-item">💎 3,000 Diamonds</div>
       <div class="first-week-item">🌋 Lava Field Table Skin</div>
       <div class="first-week-item">🔮 Crystal Ball ×5</div>
-      <div class="first-week-item">🎟️ 10 Extra Tickets</div>
+      <div class="first-week-item">🎟️ 5 Extra Tickets</div>
     </div>
 
     <div class="first-week-price-row">
@@ -2173,6 +2185,7 @@
   <script src="js/modes/wild.js"></script>
   <script src="js/modes/rush.js"></script>
   <script src="js/modes/buckshot.js"></script>
+  <script src="js/modes/solo.js"></script>
 
   <!-- Game engine -->
   <script src="js/game/tileSystem.js"></script>
@@ -2191,6 +2204,119 @@
 
   <!-- Push token registration (loaded after cloudSave — needs getActiveServer) -->
   <script src="js/systems/push.js"></script>
+
+<!-- ===== SOLO SCREEN (Hub) ===== -->
+<div class="screen" id="soloScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:16px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('menuScreen')">← BACK</button>
+    <div class="screen-title" style="color:#c39bd3;">🎯 SOLO MODE</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <div class="solo-lives-display" id="soloHubLives">❤️❤️❤️❤️❤️</div>
+  <div class="solo-lives-timer" id="soloHubLivesTimer">Lives full</div>
+
+  <div class="solo-progress-wrap">
+    <div class="solo-progress-label" id="soloHubStars">0 / 300 ⭐</div>
+    <div class="solo-progress-bar-bg">
+      <div class="solo-progress-bar-fill" id="soloHubProgressBar" style="width:0%;"></div>
+    </div>
+    <div class="solo-progress-sub" id="soloHubLevelLabel">Level 1 of 100</div>
+  </div>
+
+  <button class="btn-play" id="soloContinueBtn" onclick="soloContinue()" style="margin-bottom:10px;">
+    ⚡ PLAY — Level <span id="soloContinueLevelNum">1</span>
+  </button>
+  <button class="btn-secondary" onclick="openSoloLevelSelect()" style="width:100%;margin-bottom:10px;">☰ LEVEL SELECT</button>
+</div>
+
+<!-- ===== SOLO LEVEL SELECT SCREEN ===== -->
+<div class="screen" id="soloLevelSelectScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('soloScreen')">← BACK</button>
+    <div class="screen-title" style="color:#c39bd3;">LEVEL SELECT</div>
+    <div style="width:80px;"></div>
+  </div>
+  <div class="solo-level-grid" id="soloLevelGrid"></div>
+</div>
+
+<!-- ===== SOLO PRE-LEVEL SCREEN ===== -->
+<div class="screen" id="soloPreLevelScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px;">
+    <button class="btn-secondary screen-back-btn" onclick="openSoloLevelSelect()">← BACK</button>
+    <div class="screen-title" id="soloPreLevelTitle" style="color:#c39bd3;">LEVEL 1</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <div class="solo-prelevel-card">
+    <div class="solo-prelevel-row">
+      <span>Grid size</span>
+      <span class="solo-prelevel-val" id="soloPreGrid">2×2</span>
+    </div>
+    <div class="solo-prelevel-row">
+      <span>Difficulty</span>
+      <span class="solo-prelevel-val" id="soloPreDiff">⭐</span>
+    </div>
+    <div class="solo-prelevel-row">
+      <span>Tile speed</span>
+      <span class="solo-prelevel-val" id="soloPreSpeed">1.5s</span>
+    </div>
+    <div class="solo-prelevel-row">
+      <span>Taps needed</span>
+      <span class="solo-prelevel-val" id="soloPreTiles">18</span>
+    </div>
+    <div class="solo-prelevel-row" id="soloPreBestRow" style="display:none;">
+      <span>Best result</span>
+      <span class="solo-prelevel-val" id="soloPreBest">—</span>
+    </div>
+  </div>
+
+  <div class="solo-bomb-warning" id="soloPreBombWarning" style="display:none;">
+    ⚠️ <span id="soloPreBombCount">0</span> BOMBS ACTIVE
+  </div>
+
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;" id="soloPreLivesInfo">❤️ 5 / 5 lives</div>
+  <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:14px;" id="soloPreLivesTimer"></div>
+
+  <button class="btn-play" id="soloPlayBtn" onclick="startSoloLevel()" style="margin-bottom:10px;">
+    ▶ PLAY
+  </button>
+  <div id="soloNoLivesBox" style="display:none;width:100%;background:rgba(255,0,0,0.06);border:1px solid rgba(255,0,0,0.25);border-radius:10px;padding:12px;text-align:center;margin-bottom:10px;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:#ff6b6b;margin-bottom:6px;">No lives! Watch ad for +1 ❤️</div>
+    <button class="btn-secondary" onclick="soloWatchAdForLife()" style="width:100%;">📺 WATCH AD — +1 ❤️</button>
+  </div>
+</div>
+
+<!-- ===== SOLO GAME OVER OVERLAY ===== -->
+<div id="soloGameOverOverlay">
+  <div class="solo-gameover-vignette"></div>
+  <div class="solo-overlay-card">
+    <div class="solo-gameover-icon" id="soloGameOverIcon">💣</div>
+    <div class="solo-gameover-title" id="soloGameOverTitle">BOOM!</div>
+    <div style="font-size:13px;color:var(--muted);letter-spacing:1px;margin-bottom:20px;" id="soloGameOverSub"></div>
+    <button class="btn-play" id="soloTryAgainBtn" onclick="soloTryAgain()" style="margin-bottom:10px;background:linear-gradient(135deg,#6c2fa3,#9b59b6);">
+      TRY AGAIN — <span id="soloTryAgainLives"></span>
+    </button>
+    <button class="btn-secondary" style="width:100%;" onclick="openSoloLevelSelect()">LEVEL SELECT</button>
+  </div>
+</div>
+
+<!-- ===== SOLO LEVEL COMPLETE OVERLAY ===== -->
+<div id="soloLevelCompleteOverlay">
+  <div class="solo-overlay-card">
+    <div class="solo-complete-title" id="soloCompleteTitle">LEVEL COMPLETE!</div>
+    <div class="solo-stars-row" id="soloCompleteStars">⭐⭐⭐</div>
+    <div class="solo-complete-reward" id="soloCompleteReward">+1❤️ +60💎</div>
+    <div class="solo-milestone-box" id="soloMilestoneBox">
+      <div class="solo-milestone-title" id="soloMilestoneTitle">MILESTONE!</div>
+      <div style="font-size:13px;color:var(--text);margin-top:4px;" id="soloMilestoneDesc"></div>
+    </div>
+    <button class="btn-play" id="soloNextLevelBtn" onclick="soloNextLevel()" style="margin-bottom:10px;background:linear-gradient(135deg,#6c2fa3,#9b59b6);">
+      NEXT LEVEL ▶
+    </button>
+    <button class="btn-secondary" style="width:100%;" onclick="soloReplayLevel()">↩ REPLAY</button>
+  </div>
+</div>
 
 <!-- ===== MODE REWARD POPUP ===== -->
 <div id="modeRewardPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9100;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeModeRewardPopup()">

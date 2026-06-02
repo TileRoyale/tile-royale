@@ -1193,6 +1193,14 @@
   .vic-royal { background:linear-gradient(135deg,#1a1000,#2a1a00); border:2px solid var(--gold); box-shadow:0 0 14px rgba(255,180,0,0.4); animation:royalThumbShimmer 2.5s ease-in-out infinite; }
   @keyframes royalThumbShimmer { 0%,100%{box-shadow:0 0 8px rgba(255,180,0,0.3);} 50%{box-shadow:0 0 22px rgba(255,215,0,0.8);} }
 
+  /* Solo Legend */
+  .vic-solo-legend { background:linear-gradient(135deg,#1a0e00,#2e1800); border:2px solid #e8a020; box-shadow:0 0 16px rgba(232,160,32,0.5); animation:soloLegendPulse 2s ease-in-out infinite; }
+  @keyframes soloLegendPulse { 0%,100%{box-shadow:0 0 10px rgba(232,160,32,0.4);} 50%{box-shadow:0 0 28px rgba(255,200,60,0.9);} }
+
+  /* Lone Wolf */
+  .vic-lone-wolf { background:linear-gradient(135deg,#050a15,#0a1020); border:1px solid #6688bb; box-shadow:0 0 12px rgba(100,136,187,0.3); animation:loneWolfPulse 3s ease-in-out infinite; }
+  @keyframes loneWolfPulse { 0%,100%{box-shadow:0 0 8px rgba(100,136,187,0.3);} 50%{box-shadow:0 0 20px rgba(150,180,220,0.7);} }
+
   /* ===== RESULT SCREEN OVERLAY CLASSES (gradient backgrounds) ===== */
   /* Artwork is now shown as a card image inside the screen, not as background */
   .result-vic-neon      { background: linear-gradient(180deg,#000510 0%,#0a0a0f 100%) !important; }
@@ -1356,6 +1364,14 @@
 
   /* Humble Brag */
   .result-vic-humble { background: linear-gradient(180deg, #0a0a20 0%, #050510 100%) !important; }
+
+  /* Solo Legend */
+  .result-vic-solo-legend { background: linear-gradient(180deg, #1a0e00 0%, #100800 50%, #0a0a0f 100%) !important; animation: soloLegendResultPulse 3s ease-in-out infinite; }
+  @keyframes soloLegendResultPulse { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.15);} }
+
+  /* Lone Wolf */
+  .result-vic-lone-wolf { background: radial-gradient(ellipse at top, #050e1a 0%, #030810 50%, #020508 100%) !important; }
+
   .spec-tile {
     aspect-ratio:1; border-radius:6px; border:1px solid var(--border);
     background:var(--panel); display:flex; align-items:center;
@@ -3369,4 +3385,363 @@
     box-shadow: 0 0 20px rgba(155,89,182,0.15);
   }
   .ring-won-btn:active { transform: scale(0.96); box-shadow: none; }
+
+/* ===== SOLO BOMB TILE EFFECT (fx_bomb skin) ===== */
+/* When fx_bomb is active, the burning tile shows 💣 like bomb tiles */
+.tile.burning.fx-bomb-effect::after {
+  content: '💣';
+  font-size: 36px;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* Red explosion tap effect (tap_bomb_explosion skin) */
+.solo-tap-explosion {
+  position: absolute;
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,80,0,0.9) 0%, rgba(255,0,0,0.6) 40%, transparent 70%);
+  pointer-events: none;
+  animation: soloExplosion 0.45s ease-out forwards;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+}
+@keyframes soloExplosion {
+  0%   { transform: translate(-50%,-50%) scale(0.2); opacity: 1; }
+  60%  { transform: translate(-50%,-50%) scale(1.4); opacity: 0.8; }
+  100% { transform: translate(-50%,-50%) scale(2.0); opacity: 0; }
+}
+
+/* ===== SOLO MODE ===== */
+
+/* Bomb tile */
+.tile.bomb {
+  background: radial-gradient(circle, #2a0a0a 0%, #0d0000 100%) !important;
+  border: 2px solid #ff0000 !important;
+  animation: bombPulse 0.5s ease-in-out infinite alternate;
+  position: relative;
+}
+.tile.bomb::after {
+  content: '💣';
+  font-size: 108px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+@keyframes bombPulse {
+  0%   { box-shadow: 0 0 8px rgba(255,0,0,0.6), inset 0 0 8px rgba(255,0,0,0.2); border-color: #ff0000; }
+  100% { box-shadow: 0 0 20px rgba(255,0,0,1.0), inset 0 0 16px rgba(255,0,0,0.4); border-color: #ff4444; }
+}
+
+/* Solo menu button */
+.solo-menu-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #1a0a2e, #0d0018);
+  border: 1px solid rgba(155,89,182,0.4);
+  border-radius: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  transition: all 0.2s;
+}
+.solo-menu-btn:active { transform: scale(0.98); }
+.solo-menu-btn-left { display: flex; align-items: center; gap: 10px; }
+.solo-menu-btn-icon { font-size: 22px; }
+.solo-menu-btn-text { text-align: left; }
+.solo-menu-btn-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  letter-spacing: 3px;
+  color: #c39bd3;
+}
+.solo-menu-btn-sub { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+.solo-menu-btn-lives {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: #ff6b6b;
+}
+
+/* Solo screens — do NOT set display here; .screen/.screen.active handles show/hide */
+#soloScreen, #soloLevelSelectScreen, #soloPreLevelScreen {
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.solo-screen-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  letter-spacing: 6px;
+  color: #c39bd3;
+  margin-bottom: 4px;
+}
+
+.solo-lives-display {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 2px;
+  color: #ff6b6b;
+  margin-bottom: 4px;
+}
+
+.solo-lives-timer {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+.solo-progress-wrap {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+.solo-progress-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  letter-spacing: 3px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.solo-progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.solo-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #9b59b6, #c39bd3);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.solo-progress-sub { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+
+/* Solo level select */
+.solo-level-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+.solo-level-cell {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.solo-level-cell:active { transform: scale(0.95); }
+.solo-level-cell.locked { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+.solo-level-cell.current { border-color: var(--fire); background: rgba(255,69,0,0.08); }
+.solo-level-cell.completed { border-color: rgba(155,89,182,0.5); }
+.solo-level-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--text);
+  line-height: 1;
+}
+.solo-level-stars { font-size: 9px; letter-spacing: 0; line-height: 1; }
+
+/* Solo pre-level screen */
+.solo-prelevel-card {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+.solo-prelevel-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+.solo-prelevel-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  color: var(--gold);
+  letter-spacing: 2px;
+}
+.solo-bomb-warning {
+  width: 100%;
+  background: rgba(255,0,0,0.08);
+  border: 1px solid rgba(255,0,0,0.3);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  text-align: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: #ff6b6b;
+}
+
+/* Solo game overlays */
+.solo-game-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 10;
+  pointer-events: none;
+}
+.solo-hud-lives { font-size: 20px; letter-spacing: 2px; }
+.solo-hud-taps {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: var(--text);
+}
+
+.solo-countdown-wrap {
+  width: 100%;
+  margin: 8px 0;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.solo-countdown-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.1s linear, background-color 0.3s;
+}
+
+/* Centered card inside overlays */
+.solo-overlay-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 380px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Game over overlay */
+#soloGameOverOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 500;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+#soloGameOverOverlay.show { display: flex; }
+.solo-gameover-vignette {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(255,0,0,0.25) 100%);
+  pointer-events: none;
+}
+.solo-gameover-icon { font-size: 64px; margin-bottom: 8px; }
+.solo-gameover-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 36px;
+  letter-spacing: 6px;
+  color: #ff4444;
+  margin-bottom: 20px;
+}
+@keyframes soloFlashRed {
+  0%   { background: rgba(255,0,0,0.35); }
+  100% { background: transparent; }
+}
+.solo-flash-red {
+  position: fixed;
+  inset: 0;
+  z-index: 490;
+  pointer-events: none;
+  animation: soloFlashRed 0.4s ease-out forwards;
+}
+
+/* Level complete overlay */
+#soloLevelCompleteOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 500;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+#soloLevelCompleteOverlay.show { display: flex; }
+.solo-complete-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 32px;
+  letter-spacing: 6px;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+.solo-stars-row {
+  font-size: 40px;
+  margin-bottom: 14px;
+  letter-spacing: 4px;
+}
+.solo-complete-reward {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 3px;
+  color: #c39bd3;
+  margin-bottom: 6px;
+}
+.solo-milestone-box {
+  width: 100%;
+  background: rgba(255,215,0,0.08);
+  border: 1px solid rgba(255,215,0,0.3);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  display: none;
+}
+.solo-milestone-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  letter-spacing: 3px;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
 
