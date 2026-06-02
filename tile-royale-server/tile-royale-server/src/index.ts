@@ -5,7 +5,7 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard } from "./db";
 import { google } from "googleapis";
 
 const port   = Number(process.env.PORT   || 3000);
@@ -706,6 +706,33 @@ app.post("/koth/prizes/claim", async (req, res) => {
   const result = await claimKothWeeklyPrize(playerId, weekStart);
   if (!result) return res.json({ ok: false, reason: 'server_error' });
   res.json(result);
+});
+
+// ─── Practice Mode Leaderboard ───────────────────────────────────────────────
+
+// POST /practice/score  { playerId, playerName, avatar, taps30s, reactionMs }
+// Submits a practice result — server keeps personal bests only (UPSERT).
+app.post("/practice/score", async (req, res) => {
+  const { playerId, playerName, avatar, taps30s, reactionMs } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: false, error: 'db_unavailable' });
+
+  const t = Math.max(0, Math.min(Number(taps30s)   || 0, 999));
+  const r = Math.max(0, Math.min(Number(reactionMs) || 0, 9999));
+  const name   = String(playerName  || 'Player').substring(0, 16);
+  const av     = String(avatar      || '🔥').substring(0, 10);
+
+  await upsertPracticeScore(playerId, name, av, t, r);
+  res.json({ ok: true });
+});
+
+// GET /practice/leaderboard — top 10 by taps and top 10 by reaction
+app.get("/practice/leaderboard", async (_req, res) => {
+  if (!getDbStatus().available) return res.json({ dbAvailable: false, taps: [], reaction: [] });
+  const lb = await getPracticeLeaderboard();
+  if (!lb) return res.json({ dbAvailable: false, taps: [], reaction: [] });
+  res.json({ dbAvailable: true, taps: lb.taps, reaction: lb.reaction });
 });
 
 // ─── IAP Purchase Verification ───────────────────────────────────────────────

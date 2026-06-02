@@ -203,6 +203,16 @@ async function createTables(): Promise<void> {
       claimed_at  TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Practice mode scores: one row per player, UPSERT keeps personal bests only.
+    CREATE TABLE IF NOT EXISTS practice_scores (
+      player_id        UUID         PRIMARY KEY REFERENCES players(player_id),
+      player_name      TEXT         NOT NULL,
+      avatar           TEXT         NOT NULL DEFAULT '🔥',
+      best_taps_30s    INTEGER      DEFAULT 0,
+      best_reaction_ms INTEGER      DEFAULT 0,
+      updated_at       TIMESTAMPTZ  DEFAULT now()
+    );
+
     -- IAP purchase receipts: one row per purchase token (UNIQUE prevents double-delivery)
     -- granted_json stores the reward payload so restore can re-deliver the exact same items.
     CREATE TABLE IF NOT EXISTS purchase_receipts (
@@ -1300,4 +1310,57 @@ export async function getProcessedTokens(playerId: string): Promise<Set<string>>
     [playerId]
   );
   return new Set((rows || []).map((r: any) => r.purchase_token));
+}
+
+// ─── Practice Scores ──────────────────────────────────────────────────────────
+
+// UPSERT a player's practice score — only advances the columns that improved.
+export async function upsertPracticeScore(
+  playerId: string,
+  playerName: string,
+  avatar: string,
+  taps30s: number,
+  reactionMs: number
+): Promise<void> {
+  await query(`
+    INSERT INTO practice_scores (player_id, player_name, avatar, best_taps_30s, best_reaction_ms, updated_at)
+    VALUES ($1, $2, $3, $4, $5, now())
+    ON CONFLICT (player_id) DO UPDATE
+      SET player_name      = EXCLUDED.player_name,
+          avatar           = EXCLUDED.avatar,
+          best_taps_30s    = GREATEST(practice_scores.best_taps_30s,    EXCLUDED.best_taps_30s),
+          best_reaction_ms = CASE
+            WHEN EXCLUDED.best_reaction_ms > 0
+             AND (practice_scores.best_reaction_ms = 0
+                  OR EXCLUDED.best_reaction_ms < practice_scores.best_reaction_ms)
+            THEN EXCLUDED.best_reaction_ms
+            ELSE practice_scores.best_reaction_ms
+          END,
+          updated_at       = now()
+  `, [playerId, playerName, avatar, taps30s, reactionMs]);
+}
+
+// Top 10 by taps (descending) and top 10 by reaction (ascending, 0s excluded).
+export async function getPracticeLeaderboard(): Promise<{
+  taps: any[];
+  reaction: any[];
+} | null> {
+  const [taps, reaction] = await Promise.all([
+    query(`
+      SELECT player_id, player_name, avatar, best_taps_30s AS value
+      FROM practice_scores
+      WHERE best_taps_30s > 0
+      ORDER BY best_taps_30s DESC
+      LIMIT 10
+    `),
+    query(`
+      SELECT player_id, player_name, avatar, best_reaction_ms AS value
+      FROM practice_scores
+      WHERE best_reaction_ms > 0
+      ORDER BY best_reaction_ms ASC
+      LIMIT 10
+    `),
+  ]);
+  if (taps === null && reaction === null) return null;
+  return { taps: taps || [], reaction: reaction || [] };
 }
