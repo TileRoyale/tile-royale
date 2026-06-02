@@ -33,7 +33,8 @@ function renderVictorySkins(grid) {
       ? `<span class="skin-tier-badge ${tierColors[skin.tier]||''}">${tierLabels[skin.tier]||''}</span>`
       : '';
     const priceText = skin.whale ? '🐋 Whale Only'
-      : isOwned ? (isActive ? '✓ Active' : 'Owned')
+      : skin.solo && !isOwned  ? `🎯 ${skin.unlockDesc || 'Solo Only'}`
+      : isOwned                ? (isActive ? '✓ Active' : 'Owned')
       : `💎 ${skin.price}`;
 
     const artStyle = skin.art
@@ -55,6 +56,9 @@ function renderVictorySkins(grid) {
 function selectVictorySkin(skin, isOwned) {
   if (skin.whale && !gameState.whaleBadge) {
     showToast('🐋 Whale exclusive — only for whale owners!', 'var(--diamond)'); return;
+  }
+  if (skin.solo && !isOwned) {
+    showToast(`🎯 ${skin.unlockDesc || 'Earn stars in Solo Mode to unlock!'}`, 'var(--muted)'); return;
   }
   if (isOwned) {
     activeSkins.victory = skin.id;

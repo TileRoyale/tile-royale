@@ -2,12 +2,12 @@
 let currentStoreTab = 'featured';
 
 const DIAMOND_PACKAGES = [
-  { id:'d_starter',   amount:250,  bonus:0,    price:'1.99€',  priceVal:1.99,  icon:'💎',    label:'',          css:'' },
-  { id:'d_popular',   amount:700,  bonus:0,    price:'4.99€',  priceVal:4.99,  icon:'💎💎',  label:'popular',   css:'popular' },
-  { id:'d_value',     amount:1500, bonus:0,    price:'9.99€',  priceVal:9.99,  icon:'💎💎💎', label:'best-value',css:'best-value' },
-  { id:'d_mega',      amount:2800, bonus:400,  price:'19.99€', priceVal:19.99, icon:'👑',    label:'',          css:'' },
-  { id:'d_ultra',     amount:6500, bonus:1000, price:'39.99€', priceVal:39.99, icon:'🌟',    label:'',          css:'' },
-  { id:'d_legend',    amount:15000,bonus:2500, price:'79.99€', priceVal:79.99, icon:'⚡',    label:'',          css:'' },
+  { id:'d.starter',   amount:250,  bonus:0,    price:'1.99€',  priceVal:1.99,  icon:'💎',    label:'',          css:'' },
+  { id:'d.popular',   amount:700,  bonus:0,    price:'4.99€',  priceVal:4.99,  icon:'💎💎',  label:'popular',   css:'popular' },
+  { id:'d.value',     amount:1500, bonus:0,    price:'9.99€',  priceVal:9.99,  icon:'💎💎💎', label:'best-value',css:'best-value' },
+  { id:'d.mega',      amount:2800, bonus:400,  price:'19.99€', priceVal:19.99, icon:'👑',    label:'',          css:'' },
+  { id:'d.ultra',     amount:6500, bonus:1000, price:'39.99€', priceVal:39.99, icon:'🌟',    label:'',          css:'' },
+  { id:'d.legend',    amount:15000,bonus:2500, price:'79.99€', priceVal:79.99, icon:'⚡',    label:'',          css:'' },
 ];
 
 const STORE_ITEMS = [
@@ -29,28 +29,28 @@ const STORE_ITEMS = [
 
 const STORE_BUNDLES = [
   {
-    id:'bundle_starter', icon:'🚀', name:'Starter Pack', tagline:'Perfect for new players',
-    contents:['💎 3,000 Diamonds','🔮 Crystal Ball x5','⚙️ Caltrops x5','🎟️ 10 Tickets'],
+    id:'bundle.starter', icon:'🚀', name:'Starter Pack', tagline:'Perfect for new players',
+    contents:['💎 750 Diamonds','🔮 Crystal Ball x5','⚙️ Caltrops x5','🎟️ 10 Tickets'],
     originalPrice:'9.99€', price:'4.99€', save:'50% OFF', priceVal:4.99,
-    diamondAmt:300, items:{crystal:5, caltrops:5}, tickets:10
+    diamondAmt:750, items:{crystal:5, caltrops:5}, tickets:10
   },
   {
-    id:'bundle_fire', icon:'🔥', name:'Fire Pack', tagline:'For competitive players',
-    contents:['💎 10,000 Diamonds','🔮 Crystal Ball x10','⚙️ Caltrops x10','🎨 Lava Field Table Skin','🟧 Lava Tile Skin'],
+    id:'bundle.fire', icon:'🔥', name:'Fire Pack', tagline:'For competitive players',
+    contents:['💎 1,800 Diamonds','🔮 Crystal Ball x10','⚙️ Caltrops x10','🎨 Lava Field Table Skin','🟧 Lava Tile Skin'],
     originalPrice:'19.99€', price:'11.99€', save:'40% OFF', priceVal:11.99,
-    diamondAmt:1000, items:{crystal:10, caltrops:10},
+    diamondAmt:1800, items:{crystal:10, caltrops:10},
     skins:['table_lava','tile_lava']
   },
   {
-    id:'bundle_champion', icon:'👑', name:'Champion Bundle', tagline:'Everything a champion needs',
-    contents:['💎 30,000 Diamonds','🔮 Crystal Ball x20','⚙️ Caltrops x20','🌌 Galaxy Table Skin','💠 Hologram Tile Skin','🌑 Void Effect','⭐ XP Boost x10'],
+    id:'bundle.champion', icon:'👑', name:'Champion Bundle', tagline:'Everything a champion needs',
+    contents:['💎 4,000 Diamonds','🔮 Crystal Ball x20','⚙️ Caltrops x20','🌌 Galaxy Table Skin','💠 Hologram Tile Skin','🌑 Void Effect','⭐ XP Boost x10'],
     originalPrice:'39.99€', price:'19.99€', save:'50% OFF', priceVal:19.99,
-    diamondAmt:3000, items:{crystal:20, caltrops:20},
+    diamondAmt:4000, items:{crystal:20, caltrops:20},
     skins:['table_galaxy','tile_holo','fx_void']
   },
   {
-    id:'bundle_legend', icon:'🌟', name:'Legend Bundle', tagline:'Ultimate collection',
-    contents:['💎 100,000 Diamonds','🔮 Crystal Ball x50','⚙️ Caltrops x50','All 3 exclusive skins','🏷️ Free name changes x5','🎟️ 50 Tickets','⭐ XP Boost x20'],
+    id:'bundle.legend', icon:'🌟', name:'Legend Bundle', tagline:'Ultimate collection',
+    contents:['💎 10,000 Diamonds','🔮 Crystal Ball x50','⚙️ Caltrops x50','All 3 exclusive skins','🏷️ Free name changes x5','🎟️ 50 Tickets','⭐ XP Boost x20'],
     originalPrice:'99.99€', price:'49.99€', save:'50% OFF', priceVal:49.99,
     diamondAmt:10000, items:{crystal:50, caltrops:50},
     skins:['table_galaxy','tile_holo','fx_void','fx_rainbow','tap_portal'],
@@ -58,24 +58,24 @@ const STORE_BUNDLES = [
   },
   // WHALE BUNDLES
   {
-    id:'bundle_mobydick', icon:'🐋', name:'Moby Dick', tagline:'The ultimate whale hunter trophy', whale:true,
-    contents:['💎 5,000 Diamonds','🏆 Moby Dick Victory Screen (exclusive)','🔮 Crystal Ball ×10','⚙️ Caltrops ×10','🌑 Shadow Tile ×5','🎟️ 20 Tickets','🐋 Whale Badge'],
+    id:'bundle.mobydick', icon:'🐋', name:'Moby Dick', tagline:'The ultimate whale hunter trophy', whale:true,
+    contents:['💎 7,500 Diamonds','🏆 Moby Dick Victory Screen (exclusive)','🔮 Crystal Ball ×10','⚙️ Caltrops ×10','🌑 Shadow Tile ×5','🎟️ 20 Tickets','🐋 Whale Badge'],
     originalPrice:'79.99€', price:'49.99€', save:'38% OFF', priceVal:49.99,
-    diamondAmt:5000, items:{crystal:10, caltrops:10, shadow_tile:5}, tickets:20,
+    diamondAmt:7500, items:{crystal:10, caltrops:10, shadow_tile:5}, tickets:20,
     skins:['vic_mobydick'], whaleBadge:true
   },
   {
-    id:'bundle_whale_1', icon:'🐋', name:'Whale Pack', tagline:'Exclusive whale-only content', whale:true,
-    contents:['💎 150,000 Diamonds','🌑 Shadow Tile x20','⬛ Obsidian Table (Exclusive)','🖤 Obsidian Tile (Exclusive)','💎 Diamond Tile (Exclusive)','🐋 Whale Badge','🎟️ 100 Tickets'],
+    id:'bundle.whale1', icon:'🐋', name:'Whale Pack', tagline:'Exclusive whale-only content', whale:true,
+    contents:['💎 16,000 Diamonds','🌑 Shadow Tile x20','⬛ Obsidian Table (Exclusive)','🖤 Obsidian Tile (Exclusive)','💎 Diamond Tile (Exclusive)','🐋 Whale Badge','🎟️ 100 Tickets'],
     originalPrice:'149.99€', price:'79.99€', save:'47% OFF', priceVal:79.99,
-    diamondAmt:15000, items:{shadow_tile:20}, tickets:100,
+    diamondAmt:16000, items:{shadow_tile:20}, tickets:100,
     skins:['table_obsidian','tile_obsidian','tile_diamond'], whaleBadge:true
   },
   {
-    id:'bundle_whale_2', icon:'🌊', name:'Deep Ocean Bundle', tagline:'For the true elite', whale:true,
-    contents:['💎 300,000 Diamonds','✨ God Ray Effect (Exclusive)','🌀 Black Hole Effect (Exclusive)','💫 Shockwave Tap (Exclusive)','🥇 Gold Crack Tap (Exclusive)','🌠 Aurora Table (Exclusive)','🌑 Shadow Tile x50','All Whale Pack content'],
+    id:'bundle.whale2', icon:'🌊', name:'Deep Ocean Bundle', tagline:'For the true elite', whale:true,
+    contents:['💎 26,000 Diamonds','✨ God Ray Effect (Exclusive)','🌀 Black Hole Effect (Exclusive)','💫 Shockwave Tap (Exclusive)','🥇 Gold Crack Tap (Exclusive)','🌠 Aurora Table (Exclusive)','🌑 Shadow Tile x50','All Whale Pack content'],
     originalPrice:'249.99€', price:'129.99€', save:'48% OFF', priceVal:129.99,
-    diamondAmt:30000, items:{shadow_tile:50},
+    diamondAmt:26000, items:{shadow_tile:50},
     skins:['fx_godray','fx_blackhole','tap_shockwave','tap_goldcrack','table_aurora','table_obsidian','tile_obsidian','tile_diamond'],
     whaleBadge:true
   },
@@ -154,7 +154,7 @@ function renderFeatured(c) {
         <div class="ad-reward-icon">🎁</div>
         <div class="ad-reward-info">
           <div class="ad-reward-title">Welcome Offer — 1.99€</div>
-          <div class="ad-reward-sub">💎 3,000 + Lava Skin + Crystal Ball ×5 + 10 Tickets</div>
+          <div class="ad-reward-sub">💎 300 + Lava Skin + Crystal Ball ×5 + 5 Tickets</div>
           <div class="ad-reward-timer">${getFirstWeekTimer()}</div>
         </div>
         <div class="ad-reward-btn" style="border-color:var(--fire);color:var(--fire);">VIEW</div>
@@ -327,7 +327,7 @@ function renderOnlyWhales(c) {
 
       <div class="store-section-hdr" style="color:var(--gold);">🐋 Unlock Whale Status</div>
       <div class="bundle-card" style="border-color:rgba(0,229,255,0.3);background:linear-gradient(135deg,rgba(0,229,255,0.04),var(--panel));cursor:pointer;"
-        onclick="buyBundle('bundle_mobydick')">
+        onclick="buyBundle('bundle.mobydick')">
         <div class="bundle-header">
           <div class="bundle-icon">🐋</div>
           <div class="bundle-info">
@@ -347,7 +347,7 @@ function renderOnlyWhales(c) {
       <div class="store-section-hdr" style="color:var(--diamond);">👁️ Preview — After Whale Status</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;opacity:0.5;pointer-events:none;">`;
 
-    STORE_BUNDLES.filter(b => b.whale && b.id !== 'bundle_mobydick').forEach(b => {
+    STORE_BUNDLES.filter(b => b.whale && b.id !== 'bundle.mobydick').forEach(b => {
       c.innerHTML += `
         <div style="background:var(--panel);border:1px solid rgba(0,229,255,0.2);border-radius:14px;
           padding:16px;position:relative;overflow:hidden;">
@@ -380,7 +380,7 @@ function renderOnlyWhales(c) {
   bundleHdr.textContent = '🌊 Exclusive Whale Bundles';
   c.appendChild(bundleHdr);
 
-  STORE_BUNDLES.filter(b => b.whale && b.id !== 'bundle_mobydick').forEach(b => {
+  STORE_BUNDLES.filter(b => b.whale && b.id !== 'bundle.mobydick').forEach(b => {
     c.appendChild(buildBundleCard(b));
   });
 
@@ -435,11 +435,42 @@ function buildBundleCard(b) {
 }
 
 // ---- Buy functions ----
-function buyDiamondPackage(id) {
+async function buyDiamondPackage(id) {
   const pkg = DIAMOND_PACKAGES.find(p => p.id === id);
   if (!pkg) return;
   const total = pkg.amount + pkg.bonus;
-  showBuyDialog({ name: `💎 ${total.toLocaleString()} Diamonds`, icon:'💎', price: pkg.price, isRealMoney: true }, 'diamonds', pkg);
+
+  // Native Google Play Billing (Android)
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
+    try {
+      showToast('Opening store...', 'var(--blue)');
+      await nativePurchase(pkg.id);
+      // Deliver diamonds
+      gameState.diamonds = (gameState.diamonds || 0) + total;
+      gameState.totalDiamonds = (gameState.totalDiamonds || 0) + total;
+      // Track whale achievements
+      initAchStats();
+      gameState.achStats.diamondsPurchased = (gameState.achStats.diamondsPurchased || 0) + 1;
+      gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + Math.round(pkg.priceVal * 100);
+      checkAchievements();
+      saveState();
+      updateMenuStats();
+      const bal = document.getElementById('storeBalance');
+      if (bal) bal.textContent = (gameState.diamonds || 0).toLocaleString();
+      showToast(`💎 +${total.toLocaleString()} Diamonds added!`, 'var(--green)');
+    } catch (e) {
+      const msg = (e && (e.message || e.code || e));
+      if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');
+    }
+    return;
+  }
+
+  // Web/dev fallback — add diamonds directly for testing
+  gameState.diamonds = (gameState.diamonds || 0) + total;
+  saveState(); updateMenuStats();
+  const bal = document.getElementById('storeBalance');
+  if (bal) bal.textContent = (gameState.diamonds || 0).toLocaleString();
+  showToast(`[DEV] 💎 +${total.toLocaleString()} Diamonds`, 'var(--blue)');
 }
 
 function buyStoreItem(id) {
@@ -458,30 +489,45 @@ function buyStoreItem(id) {
   });
 }
 
-function buyBundle(id) {
+async function buyBundle(id) {
   const b = STORE_BUNDLES.find(x => x.id === id);
   if (!b) return;
-  showStoreBuyDialog(b.name, b.icon, b.price, () => {
-    // Add diamonds
+
+  const deliverBundle = () => {
     gameState.diamonds = (gameState.diamonds||0) + b.diamondAmt;
-    // Add items
+    gameState.totalDiamonds = (gameState.totalDiamonds||0) + b.diamondAmt;
     if (b.items) Object.entries(b.items).forEach(([k,v]) => addItemToInventory(k,v));
-    // Add skins
     if (b.skins) { if (!gameState.ownedSkins) gameState.ownedSkins={}; b.skins.forEach(s => gameState.ownedSkins[s]=true); }
     if (b.tickets) gameState.tickets = (gameState.tickets||0) + b.tickets;
     if (b.nameChanges) gameState.renames = Math.max(0, (gameState.renames||3) - b.nameChanges);
     if (b.whaleBadge) { gameState.whaleBadge = true; showToast('🐋 Whale status unlocked!', 'var(--diamond)'); }
-    // Unlock avatar tied to this bundle
     const linkedAvatars = ALL_AVATARS.filter(av => av.unlock === b.id);
     (linkedAvatars||[]).forEach(av => unlockAvatar(av.id));
-    // Track bundle purchase for achievements
     initAchStats();
     gameState.achStats.bundlesBought = (gameState.achStats.bundlesBought || 0) + 1;
+    gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + Math.round(b.priceVal * 100);
     checkAchievements();
     saveState(); updateMenuStats(); updateInventoryUI();
-    document.getElementById('storeBalance').textContent = (gameState.diamonds||0).toLocaleString();
+    const bal = document.getElementById('storeBalance');
+    if (bal) bal.textContent = (gameState.diamonds||0).toLocaleString();
     showToast(`✅ ${b.name} unlocked!`, 'var(--gold)');
-  });
+  };
+
+  // Native Google Play Billing (Android)
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
+    try {
+      showToast('Opening store...', 'var(--blue)');
+      await nativePurchase(b.id);
+      deliverBundle();
+    } catch (e) {
+      const msg = (e && (e.message || e.code || e));
+      if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');
+    }
+    return;
+  }
+
+  // Web/dev fallback
+  showStoreBuyDialog(b.name, b.icon, b.price, deliverBundle);
 }
 
 function buyDailyDeal() {

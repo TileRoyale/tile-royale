@@ -59,6 +59,7 @@ const SKINS = {
     { id: 'fx_supernova',  name: 'Supernova',     icon: '💥', price: 1500, owned: false, tier:'prestige', prestige:true },
     { id: 'fx_godray',     name: 'God Ray',       icon: '✨', price: 0,    owned: false, whale: true },
     { id: 'fx_blackhole',  name: 'Black Hole',    icon: '🌀', price: 0,    owned: false, whale: true },
+    { id: 'fx_bomb',       name: 'Bomb Effect',   icon: '💣', price: 0,    owned: false, solo: true, unlockDesc:'200 Solo ⭐' },
   ],
   victory: [
     { id:'vic_classic',   name:'Classic',             icon:'🏆', price:0,    owned:true,  tier:'default',   preview:'gold',      art:'assets/victory-art/vic-classic.webp',   tagline:'Victory never goes out of style.' },
@@ -81,6 +82,8 @@ const SKINS = {
     { id:'vic_404',       name:'404: Skill Found',    icon:'💻', price:800,  owned:false, tier:'legendary', preview:'404',      art:'assets/victory-art/vic-404.webp',      tagline:'Error: Defeat not found.' },
     { id:'vic_humble',    name:'Humble Brag',         icon:'🙄', price:800,  owned:false, tier:'legendary', preview:'humble',   art:'assets/victory-art/vic-humble.webp',   tagline:'Just lucky. Again.' },
     { id:'vic_mobydick',  name:'Moby Dick',           icon:'🐋', price:0,    owned:false, tier:'default',   preview:'mobydick', art:'assets/victory-art/vic-mobydick.webp', whale:true, tagline:'The ocean answers to you.' },
+    { id:'vic_solo_legend', name:'Solo Legend',       icon:'👑', price:0,    owned:false, tier:'prestige',  preview:'solo-legend', art:'assets/victory-art/vic-solo-legend.png', tagline:'No team. No problem.', solo:true, unlockDesc:'300 Solo ⭐' },
+    { id:'vic_lone_wolf',   name:'Lone Wolf',         icon:'🐺', price:0,    owned:false, tier:'legendary', preview:'lone-wolf',   art:'assets/victory-art/vic-lone-wolf.png',   tagline:'Hunted alone. Won alone.',        solo:true, unlockDesc:'250 Solo ⭐' },
   ],
   tapeffect: [
     { id: 'tap_ripple',    name: 'Ripple',        icon: '💧', price: 0,    owned: true,  tier:'default' },
@@ -94,8 +97,9 @@ const SKINS = {
     { id: 'tap_neonpulse', name: 'Neon Pulse',    icon: '🔆', price: 800,  owned: false, tier:'legendary' },
     { id: 'tap_portal',    name: 'Portal',        icon: '🌀', price: 800,  owned: false, tier:'legendary' },
     { id: 'tap_meteor',    name: 'Meteor',        icon: '☄️', price: 1500, owned: false, tier:'prestige', prestige:true },
-    { id: 'tap_shockwave', name: 'Shockwave',     icon: '💫', price: 0,    owned: false, whale: true },
-    { id: 'tap_goldcrack', name: 'Gold Crack',    icon: '🥇', price: 0,    owned: false, whale: true },
+    { id: 'tap_shockwave',       name: 'Shockwave',       icon: '💫', price: 0, owned: false, whale: true },
+    { id: 'tap_goldcrack',       name: 'Gold Crack',       icon: '🥇', price: 0, owned: false, whale: true },
+    { id: 'tap_bomb_explosion',  name: 'Bomb Explosion',   icon: '💣', price: 0, owned: false, solo: true, unlockDesc:'200 Solo ⭐' },
   ]
 };
 
@@ -238,11 +242,13 @@ function renderSkinGrid(tab) {
       ? `<span class="skin-tier-badge ${tierColors[skin.tier]||''}">${tierLabels[skin.tier]||''}</span>`
       : '';
 
-    const priceText = isWhale ? '🐋 Whale Only'
-      : isOwned ? (isActive ? '✓ Equipped' : 'Owned')
-      : isPrestige ? `⭐ ${skin.price} 💎`
+    const isSolo = skin.solo;
+    const priceText = isWhale  ? '🐋 Whale Only'
+      : isSolo && !isOwned     ? `🎯 ${skin.unlockDesc || 'Solo Only'}`
+      : isOwned                ? (isActive ? '✓ Equipped' : 'Owned')
+      : isPrestige             ? `⭐ ${skin.price} 💎`
       : `💎 ${skin.price}`;
-    const priceClass = (skin.price === 0 && !isWhale) ? 'free' : isWhale ? '' : '';
+    const priceClass = (skin.price === 0 && !isWhale && !isSolo) ? 'free' : '';
 
     card.innerHTML = `
       <div class="skin-mini-preview" id="mini-${skin.id}"></div>
@@ -397,6 +403,14 @@ function startMiniAnimations(tab) {
 
 function selectSkin(tab, skin, isOwned) {
   if (!isOwned) {
+    if (skin.solo) {
+      showToast(`🎯 ${skin.unlockDesc || 'Earn stars in Solo Mode to unlock!'}`, 'var(--muted)');
+      return;
+    }
+    if (skin.whale) {
+      showToast('🐋 Whale exclusive — not for sale!', 'var(--muted)');
+      return;
+    }
     if (gameState.diamonds < skin.price) {
       showToast(`Need 💎 ${skin.price} — not enough diamonds!`, 'var(--red)');
       return;

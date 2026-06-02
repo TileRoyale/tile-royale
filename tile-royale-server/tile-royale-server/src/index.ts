@@ -5,7 +5,8 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade } from "./db";
+import { google } from "googleapis";
 
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
@@ -705,6 +706,323 @@ app.post("/koth/prizes/claim", async (req, res) => {
   const result = await claimKothWeeklyPrize(playerId, weekStart);
   if (!result) return res.json({ ok: false, reason: 'server_error' });
   res.json(result);
+});
+
+// ─── Ring System ─────────────────────────────────────────────────────────────
+
+// Server-side ring pool — mirrors client RINGS array (100 rings, indices 0-99).
+const RING_RARITIES_SERVER = [
+  { id: 'secret',    prob: 0.0001 },
+  { id: 'legendary', prob: 0.001  },
+  { id: 'epic',      prob: 0.05   },
+  { id: 'rare',      prob: 0.15   },
+  { id: 'uncommon',  prob: 0.30   },
+  { id: 'common',    prob: 0.4989 },
+];
+const RING_RARITY_RANGES: Record<string, [number, number]> = {
+  secret:    [0,  1],   // ring_0 .. ring_1
+  legendary: [2,  11],  // ring_2 .. ring_11
+  epic:      [12, 36],  // ring_12 .. ring_36
+  rare:      [37, 66],  // ring_37 .. ring_66
+  uncommon:  [67, 79],  // ring_67 .. ring_79
+  common:    [80, 99],  // ring_80 .. ring_99
+};
+
+function _serverRollRarity(): string {
+  const r = Math.random();
+  let cumulative = 0;
+  for (const rar of RING_RARITIES_SERVER) {
+    cumulative += rar.prob;
+    if (r < cumulative) return rar.id;
+  }
+  return 'common';
+}
+
+function _serverRollRing(rarityId: string): string {
+  const [lo, hi] = RING_RARITY_RANGES[rarityId] || [80, 99];
+  const idx = lo + Math.floor(Math.random() * (hi - lo + 1));
+  return `ring_${idx}`;
+}
+
+// POST /ring/spin  { playerId, spinType }
+// Server rolls the rarity and ring, records in ring_grants, returns to client.
+// spinType: 'free' | 'freeSpin' | 'ad' | 'diamond'
+app.post("/ring/spin", async (req, res) => {
+  const { playerId, spinType = 'free' } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const rarityId = _serverRollRarity();
+  const ringId   = _serverRollRing(rarityId);
+  const grantId  = await createRingGrant(playerId, ringId, rarityId, String(spinType));
+
+  if (!grantId) return res.json({ ok: false, error: 'grant_failed' });
+  res.json({ ok: true, ringId, rarityId, grantId });
+});
+
+// POST /ring/trade/create  { playerId, grantId, ringId }
+// Validates the grant and creates a trade code.
+app.post("/ring/trade/create", async (req, res) => {
+  const { playerId, grantId, ringId } = req.body;
+  if (!playerId || !grantId || !ringId)
+    return res.json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const status = await validateRingGrant(String(grantId), String(playerId), String(ringId));
+  if (status !== 'ok') return res.json({ ok: false, error: status });
+
+  const tradeCode = await createRingTrade(String(playerId), String(grantId), String(ringId));
+  if (!tradeCode) return res.json({ ok: false, error: 'trade_create_failed' });
+
+  res.json({ ok: true, tradeCode });
+});
+
+// POST /ring/trade/accept  { claimerPlayerId, tradeCode }
+// Validates the trade code and transfers the ring + new grant to the claimer.
+app.post("/ring/trade/accept", async (req, res) => {
+  const { claimerPlayerId, tradeCode } = req.body;
+  if (!claimerPlayerId || !tradeCode)
+    return res.json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const result = await acceptRingTrade(String(claimerPlayerId), String(tradeCode).toUpperCase());
+  if (result === 'not_found') return res.json({ ok: false, error: 'code_not_found' });
+  if (result === 'expired')   return res.json({ ok: false, error: 'code_expired' });
+  if (result === 'self')      return res.json({ ok: false, error: 'cannot_trade_with_self' });
+  if (!result)                return res.json({ ok: false, error: 'server_error' });
+
+  res.json({ ok: true, ringId: result.ringId, rarityId: result.rarityId, grantId: result.newGrantId });
+});
+
+// POST /ring/trade/cancel  { playerId, tradeCode }
+// Cancels a trade — returns the grant to 'held' status.
+app.post("/ring/trade/cancel", async (req, res) => {
+  const { playerId, tradeCode } = req.body;
+  if (!playerId || !tradeCode)
+    return res.json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  const ok = await cancelRingTrade(String(playerId), String(tradeCode).toUpperCase());
+  res.json({ ok });
+});
+
+// ─── Practice Mode Leaderboard ───────────────────────────────────────────────
+
+// POST /practice/score  { playerId, playerName, avatar, taps30s, reactionMs }
+// Submits a practice result — server keeps personal bests only (UPSERT).
+app.post("/practice/score", async (req, res) => {
+  const { playerId, playerName, avatar, taps30s, reactionMs } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: false, error: 'db_unavailable' });
+
+  const t = Math.max(0, Math.min(Number(taps30s)   || 0, 999));
+  const r = Math.max(0, Math.min(Number(reactionMs) || 0, 9999));
+  const name   = String(playerName  || 'Player').substring(0, 16);
+  const av     = String(avatar      || '🔥').substring(0, 10);
+
+  await upsertPracticeScore(playerId, name, av, t, r);
+  res.json({ ok: true });
+});
+
+// GET /practice/leaderboard — top 10 by taps and top 10 by reaction
+app.get("/practice/leaderboard", async (_req, res) => {
+  if (!getDbStatus().available) return res.json({ dbAvailable: false, taps: [], reaction: [] });
+  const lb = await getPracticeLeaderboard();
+  if (!lb) return res.json({ dbAvailable: false, taps: [], reaction: [] });
+  res.json({ dbAvailable: true, taps: lb.taps, reaction: lb.reaction });
+});
+
+// ─── IAP Purchase Verification ───────────────────────────────────────────────
+
+const PACKAGE_NAME = "com.tileroyale.game";
+
+// Server-authoritative product catalog — must match client shop.js exactly.
+// diamonds = total granted (amount + bonus combined).
+const PRODUCT_CATALOG: Record<string, {
+  type:         'diamonds' | 'bundle';
+  bundleId?:    string;
+  diamonds:     number;
+  items?:       Record<string, number>;
+  skins?:       string[];
+  tickets?:     number;
+  nameChanges?: number;
+  whaleBadge?:  boolean;
+  priceVal:     number;
+}> = {
+  'd.starter':       { type:'diamonds', diamonds:250,   priceVal:1.99  },
+  'd.popular':       { type:'diamonds', diamonds:700,   priceVal:4.99  },
+  'd.value':         { type:'diamonds', diamonds:1500,  priceVal:9.99  },
+  'd.mega':          { type:'diamonds', diamonds:3200,  priceVal:19.99 },  // 2800+400
+  'd.ultra':         { type:'diamonds', diamonds:7500,  priceVal:39.99 },  // 6500+1000
+  'd.legend':        { type:'diamonds', diamonds:17500, priceVal:79.99 },  // 15000+2500
+  'bundle.starter':  { type:'bundle', bundleId:'bundle.starter',  diamonds:750,   items:{crystal:5,caltrops:5},             tickets:10,  priceVal:4.99  },
+  'bundle.fire':     { type:'bundle', bundleId:'bundle.fire',     diamonds:1800,  items:{crystal:10,caltrops:10},            skins:['table_lava','tile_lava'],                                                             priceVal:11.99 },
+  'bundle.champion': { type:'bundle', bundleId:'bundle.champion', diamonds:4000,  items:{crystal:20,caltrops:20},            skins:['table_galaxy','tile_holo','fx_void'],                                                 priceVal:19.99 },
+  'bundle.legend':   { type:'bundle', bundleId:'bundle.legend',   diamonds:10000, items:{crystal:50,caltrops:50},            skins:['table_galaxy','tile_holo','fx_void','fx_rainbow','tap_portal'], tickets:50, nameChanges:5, priceVal:49.99 },
+  'bundle.mobydick': { type:'bundle', bundleId:'bundle.mobydick', diamonds:7500,  items:{crystal:10,caltrops:10,shadow_tile:5}, skins:['vic_mobydick'], tickets:20, whaleBadge:true, priceVal:49.99 },
+  'bundle.whale1':   { type:'bundle', bundleId:'bundle.whale1',   diamonds:16000, items:{shadow_tile:20},                   skins:['table_obsidian','tile_obsidian','tile_diamond'], tickets:100, whaleBadge:true, priceVal:79.99  },
+  'bundle.whale2':   { type:'bundle', bundleId:'bundle.whale2',   diamonds:26000, items:{shadow_tile:50},                   skins:['fx_godray','fx_blackhole','tap_shockwave','tap_goldcrack','table_aurora','table_obsidian','tile_obsidian','tile_diamond'], whaleBadge:true, priceVal:129.99 },
+};
+
+// Verify purchase with Google Play Developer API.
+// Returns true if purchaseState === 0 (Purchased).
+// Skipped (returns true) when GOOGLE_PLAY_KEY_JSON env var is not set.
+async function verifyWithGooglePlay(productId: string, purchaseToken: string): Promise<boolean> {
+  const keyJson = process.env.GOOGLE_PLAY_KEY_JSON;
+  if (!keyJson) {
+    console.log('[Purchase] GOOGLE_PLAY_KEY_JSON not set — skipping API verification (token deduplication only)');
+    return true;
+  }
+  try {
+    const credentials = JSON.parse(keyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/androidpublisher'],
+    });
+    const publisher = google.androidpublisher({ version: 'v3', auth });
+    const res = await publisher.purchases.products.get({
+      packageName: PACKAGE_NAME,
+      productId,
+      token: purchaseToken,
+    });
+    const state = res.data.purchaseState;
+    if (state !== 0) {
+      console.warn(`[Purchase] Google Play rejected token — purchaseState=${state}`);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error('[Purchase] Google Play API error:', err?.message || err);
+    return false;
+  }
+}
+
+// POST /purchase/verify  { playerId, productId, purchaseToken, orderId? }
+// Verifies with Google Play (if key configured), records in DB, grants reward.
+// Idempotent: returns the original grant on duplicate token.
+app.post("/purchase/verify", async (req, res) => {
+  const { playerId, productId, purchaseToken, orderId = '' } = req.body;
+
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!productId || typeof productId !== 'string')
+    return res.json({ ok: false, error: 'invalid_product' });
+  if (!purchaseToken || typeof purchaseToken !== 'string' || purchaseToken.length < 10)
+    return res.json({ ok: false, error: 'invalid_token' });
+
+  const product = PRODUCT_CATALOG[productId];
+  if (!product) return res.json({ ok: false, error: 'unknown_product' });
+
+  // Check for duplicate — return original grant so client can re-apply idempotently
+  const existing = await getPurchaseReceipt(purchaseToken);
+  if (existing !== null) {
+    try {
+      const grant = JSON.parse(existing);
+      return res.json({ ok: false, error: 'already_processed', grant });
+    } catch {
+      return res.json({ ok: false, error: 'already_processed' });
+    }
+  }
+
+  // Verify with Google Play (no-op when key not configured)
+  const valid = await verifyWithGooglePlay(productId, purchaseToken);
+  if (!valid) return res.json({ ok: false, error: 'google_play_rejected' });
+
+  // Build grant payload
+  const grant: Record<string, any> = {
+    type:     product.type,
+    bundleId: product.bundleId,
+    diamonds: product.diamonds,
+    priceVal: product.priceVal,
+  };
+  if (product.items)       grant.items       = product.items;
+  if (product.skins)       grant.skins       = product.skins;
+  if (product.tickets)     grant.tickets      = product.tickets;
+  if (product.nameChanges) grant.nameChanges  = product.nameChanges;
+  if (product.whaleBadge)  grant.whaleBadge   = true;
+
+  // Record in DB — UNIQUE on purchase_token prevents double-delivery
+  if (getDbStatus().available) {
+    const result = await recordPurchaseReceipt(
+      playerId, productId, purchaseToken, String(orderId), JSON.stringify(grant)
+    );
+    if (result === 'error') return res.json({ ok: false, error: 'db_error' });
+    if (result === 'already_processed') {
+      return res.json({ ok: false, error: 'already_processed', grant });
+    }
+    // Raise the server-trusted diamond ceiling for this legitimate purchase
+    await addTrustedDiamonds(playerId, product.diamonds);
+  }
+
+  console.log(`[Purchase] ✅ Verified ${productId} for ${playerId} (💎 ${product.diamonds})`);
+  res.json({ ok: true, grant });
+});
+
+// POST /purchase/restore  { playerId, purchases: [{ productId, purchaseToken, orderId? }] }
+// Processes all unacknowledged purchases returned by queryPurchasesAsync on the client.
+// Skips tokens already in purchase_receipts. Returns { restored: [...] } for newly granted items.
+app.post("/purchase/restore", async (req, res) => {
+  const { playerId, purchases } = req.body;
+
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!Array.isArray(purchases) || purchases.length === 0)
+    return res.json({ ok: true, restored: [] });
+  if (purchases.length > 50)
+    return res.json({ ok: false, error: 'too_many_purchases' });
+
+  const processedTokens = getDbStatus().available ? await getProcessedTokens(playerId) : new Set<string>();
+  const restored: Array<{ purchaseToken: string; grant: Record<string, any> }> = [];
+
+  for (const p of purchases) {
+    const { productId, purchaseToken, orderId = '' } = p;
+    if (!productId || !purchaseToken) continue;
+
+    const product = PRODUCT_CATALOG[productId];
+    if (!product) continue;
+
+    // Already processed — skip (client will still consume the token)
+    if (processedTokens.has(purchaseToken)) continue;
+
+    // Check DB directly for race conditions
+    const existing = await getPurchaseReceipt(purchaseToken);
+    if (existing !== null) continue;
+
+    // Verify with Google Play
+    const valid = await verifyWithGooglePlay(productId, purchaseToken);
+    if (!valid) continue;
+
+    const grant: Record<string, any> = {
+      type:     product.type,
+      bundleId: product.bundleId,
+      diamonds: product.diamonds,
+      priceVal: product.priceVal,
+    };
+    if (product.items)       grant.items       = product.items;
+    if (product.skins)       grant.skins       = product.skins;
+    if (product.tickets)     grant.tickets      = product.tickets;
+    if (product.nameChanges) grant.nameChanges  = product.nameChanges;
+    if (product.whaleBadge)  grant.whaleBadge   = true;
+
+    if (getDbStatus().available) {
+      const result = await recordPurchaseReceipt(
+        playerId, productId, purchaseToken, String(orderId), JSON.stringify(grant)
+      );
+      if (result !== 'ok') continue; // already processed by concurrent request — skip
+      await addTrustedDiamonds(playerId, product.diamonds);
+    }
+
+    restored.push({ purchaseToken, grant });
+    console.log(`[Purchase] 🔄 Restored ${productId} for ${playerId}`);
+  }
+
+  res.json({ ok: true, restored });
 });
 
 app.use("/colyseus", monitor());

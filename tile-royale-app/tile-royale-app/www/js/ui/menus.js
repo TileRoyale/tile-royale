@@ -771,19 +771,38 @@ function closeFirstWeekOffer() {
   document.getElementById('firstWeekOverlay').classList.remove('show');
 }
 
-function buyFirstWeekOffer() {
-  // In production: trigger in-app purchase
-  // For now: simulate purchase (demo mode)
-  gameState.firstWeekClaimed = true;
-  gameState.diamonds = (gameState.diamonds || 0) + 300;
-  if (!gameState.ownedSkins) gameState.ownedSkins = {};
-  gameState.ownedSkins['table_lava'] = true;
-  addItemToInventory('crystal', 5);
-  gameState.tickets = (gameState.tickets || 0) + 10;
-  saveState(); updateMenuStats(); updateInventoryUI();
-  closeFirstWeekOffer();
-  showToast('🎉 Welcome offer claimed! Enjoy Tile Royale!', 'var(--gold)');
-  playSound('achieve'); vibrate([50,50,200]);
+async function buyFirstWeekOffer() {
+  const deliverOffer = () => {
+    gameState.firstWeekClaimed = true;
+    gameState.diamonds = (gameState.diamonds || 0) + 300;
+    gameState.totalDiamonds = (gameState.totalDiamonds || 0) + 300;
+    if (!gameState.ownedSkins) gameState.ownedSkins = {};
+    gameState.ownedSkins['table_lava'] = true;
+    addItemToInventory('crystal', 5);
+    gameState.tickets = (gameState.tickets || 0) + 5;
+    initAchStats();
+    gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + 199;
+    checkAchievements();
+    saveState(); updateMenuStats(); updateInventoryUI();
+    closeFirstWeekOffer();
+    showToast('🎉 Welcome offer claimed! Enjoy Tile Royale!', 'var(--gold)');
+    playSound('achieve'); vibrate([50,50,200]);
+  };
+
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
+    try {
+      showToast('Opening store...', 'var(--blue)');
+      await nativePurchase('offer.firstweek');
+      deliverOffer();
+    } catch (e) {
+      const msg = (e && (e.message || e.code || e));
+      if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');
+    }
+    return;
+  }
+
+  // Web/dev fallback
+  deliverOffer();
 }
 
 // Check first week offer on menu open (returning users)

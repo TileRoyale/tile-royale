@@ -13,5 +13,6 @@ function updateMenuStats() {
   document.getElementById('statDiamonds').textContent = (gameState.diamonds||0).toLocaleString();
   document.getElementById('statTickets').textContent = gameState.tickets;
   updateTicketUI();
+  if (typeof updateSoloMenuLives === 'function') updateSoloMenuLives();
 }
 
