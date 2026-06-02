@@ -489,30 +489,45 @@ function buyStoreItem(id) {
   });
 }
 
-function buyBundle(id) {
+async function buyBundle(id) {
   const b = STORE_BUNDLES.find(x => x.id === id);
   if (!b) return;
-  showStoreBuyDialog(b.name, b.icon, b.price, () => {
-    // Add diamonds
+
+  const deliverBundle = () => {
     gameState.diamonds = (gameState.diamonds||0) + b.diamondAmt;
-    // Add items
+    gameState.totalDiamonds = (gameState.totalDiamonds||0) + b.diamondAmt;
     if (b.items) Object.entries(b.items).forEach(([k,v]) => addItemToInventory(k,v));
-    // Add skins
     if (b.skins) { if (!gameState.ownedSkins) gameState.ownedSkins={}; b.skins.forEach(s => gameState.ownedSkins[s]=true); }
     if (b.tickets) gameState.tickets = (gameState.tickets||0) + b.tickets;
     if (b.nameChanges) gameState.renames = Math.max(0, (gameState.renames||3) - b.nameChanges);
     if (b.whaleBadge) { gameState.whaleBadge = true; showToast('🐋 Whale status unlocked!', 'var(--diamond)'); }
-    // Unlock avatar tied to this bundle
     const linkedAvatars = ALL_AVATARS.filter(av => av.unlock === b.id);
     (linkedAvatars||[]).forEach(av => unlockAvatar(av.id));
-    // Track bundle purchase for achievements
     initAchStats();
     gameState.achStats.bundlesBought = (gameState.achStats.bundlesBought || 0) + 1;
+    gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + Math.round(b.priceVal * 100);
     checkAchievements();
     saveState(); updateMenuStats(); updateInventoryUI();
-    document.getElementById('storeBalance').textContent = (gameState.diamonds||0).toLocaleString();
+    const bal = document.getElementById('storeBalance');
+    if (bal) bal.textContent = (gameState.diamonds||0).toLocaleString();
     showToast(`✅ ${b.name} unlocked!`, 'var(--gold)');
-  });
+  };
+
+  // Native Google Play Billing (Android)
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
+    try {
+      showToast('Opening store...', 'var(--blue)');
+      await nativePurchase(b.id);
+      deliverBundle();
+    } catch (e) {
+      const msg = (e && (e.message || e.code || e));
+      if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');
+    }
+    return;
+  }
+
+  // Web/dev fallback
+  showStoreBuyDialog(b.name, b.icon, b.price, deliverBundle);
 }
 
 function buyDailyDeal() {
