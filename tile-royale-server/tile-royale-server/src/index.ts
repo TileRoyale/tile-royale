@@ -78,7 +78,7 @@ app.get("/privacy", (_req, res) => {
 <p>You may request access to, correction of, or deletion of your data at any time by contacting us. Because the Game uses an anonymous Player ID, please include the Player ID shown in your in-game profile when making a request.</p>
 
 <h2>7. Contact</h2>
-<p>Email: <a href="mailto:timo.jakimainen@gmail.com">timo.jakimainen@gmail.com</a></p>
+<p>Email: <a href="mailto:tileroyalegame@gmail.com">tileroyalegame@gmail.com</a></p>
 
 <h2>8. Changes to This Policy</h2>
 <p>We may update this policy from time to time. The latest version is always available at this URL.</p>
