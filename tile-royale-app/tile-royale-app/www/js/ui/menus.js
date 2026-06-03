@@ -3,6 +3,11 @@ const FLOAT_BACK_HIDDEN = new Set([
   'gameScreen', 'lobbyScreen', 'menuScreen', 'onboardingScreen', 'appLoadScreen',
 ]);
 
+// Screens where Android back gesture does nothing (game in progress)
+const BACK_GESTURE_BLOCKED = new Set(['gameScreen', 'lobbyScreen']);
+
+window.currentScreen = 'menuScreen';
+
 function showScreen(id) {
   try { playSound('menu'); } catch(e) {}
   if (id === 'menuScreen') {
@@ -30,9 +35,34 @@ function showScreen(id) {
       window.scrollTo(0, 0);
     } catch(e2) {}
   }
+  window.currentScreen = id;
   const fab = document.getElementById('floatBackBtn');
   if (fab) fab.classList.toggle('visible', !FLOAT_BACK_HIDDEN.has(id));
 }
+
+// ===== ANDROID BACK GESTURE / BACK BUTTON =====
+window.addEventListener('load', () => {
+  if (!window.Capacitor?.isNativePlatform?.()) return;
+  try {
+    if (!window.Capacitor.Plugins?.App && window.Capacitor.registerPlugin) {
+      window.Capacitor.registerPlugin('App', {});
+    }
+    const CapApp = window.Capacitor.Plugins?.App;
+    if (!CapApp) return;
+    CapApp.addListener('backButton', () => {
+      const screen = window.currentScreen || 'menuScreen';
+      if (BACK_GESTURE_BLOCKED.has(screen)) return;   // mängu ajal ei tee midagi
+      if (screen === 'menuScreen') {
+        try { CapApp.minimizeApp(); } catch(e) {}      // pealehel: saadab äpi tausta
+        return;
+      }
+      showScreen('menuScreen');                         // kõigil teistel: tagasi menüüsse
+    });
+    console.log('[BackGesture] Android back handler registered');
+  } catch(e) {
+    console.warn('[BackGesture] setup failed:', e);
+  }
+});
 
 // Safe navigation wrapper — prevents black screen on any crash
 function safeNav(fn, fallbackScreen) {
