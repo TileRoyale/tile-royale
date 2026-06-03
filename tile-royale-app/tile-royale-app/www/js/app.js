@@ -12,8 +12,8 @@ window.onerror = function(msg, src, line, col, err) {
   return false;
 };
 // ===== PERSISTENT PLAYER IDENTITY =====
-// Stored separately from gameState so it survives saveState() rewrites.
-// Uses manual UUID generation for Capacitor/Android WebView compatibility.
+// If user is signed in with Google, their ID is used (survives reinstall).
+// Otherwise falls back to a device-local UUID.
 if (!localStorage.getItem('tr_player_id')) {
   const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
@@ -21,7 +21,10 @@ if (!localStorage.getItem('tr_player_id')) {
   });
   localStorage.setItem('tr_player_id', uuid);
 }
-const PLAYER_ID = localStorage.getItem('tr_player_id');
+const _googleId = localStorage.getItem('tr_google_id');
+let PLAYER_ID = _googleId
+  ? `google_${_googleId}`
+  : localStorage.getItem('tr_player_id');
 
 // ===== STATE =====
 
