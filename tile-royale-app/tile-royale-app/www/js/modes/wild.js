@@ -68,15 +68,13 @@ const THEMES = [
 function getActiveTheme() { return gameState.activeTheme || 'default'; }
 
 function applyTheme(themeId) {
-  const body   = document.body;
-  const game   = document.getElementById('gameScreen');
-  const lobby  = document.getElementById('lobbyScreen');
+  const body = document.body;
 
   // Remove all theme classes
   ['pimple','eye','bug','cosmic','fruit'].forEach(t => {
     body.classList.remove('theme-' + t);
-    body.classList.remove('theme-active');
   });
+  body.classList.remove('theme-active');
 
   if (themeId && themeId !== 'default') {
     body.classList.add('theme-' + themeId);
@@ -85,6 +83,9 @@ function applyTheme(themeId) {
 
   gameState.activeTheme = themeId || 'default';
   saveState();
+
+  // Rebuild <img> tile renderers with new theme
+  if (typeof startThemeRenderer === 'function') startThemeRenderer();
 }
 
 function buyTheme(themeId) {
@@ -139,17 +140,32 @@ function renderThemeStore() {
   (THEMES||[]).forEach(theme => {
     const owned  = gameState.ownedThemes.includes(theme.id);
     const active = activeTheme === theme.id;
-    const canAfford = diamonds >= theme.price;
 
     const card = document.createElement('div');
     card.className = 'theme-card' + (owned ? ' owned' : '') + (active ? ' active-theme' : '');
 
-    // 2x2 preview grid
-    const previewHtml = theme.preview.map((col, i) =>
-      '<div class="theme-preview-tile" style="background:' + col + ';' +
-        (i === 1 ? 'box-shadow:0 0 6px ' + theme.previewBurn + ';' : '') +
-      '"></div>'
-    ).join('');
+    // 2×2 preview using direct <img> tags — no CSS cascade issues
+    const cellStyle = 'width:100%;height:100%;border-radius:5px;overflow:hidden;background:#0a0a12;';
+    const imgStyle  = 'width:100%;height:100%;object-fit:fill;display:block;';
+    let previewHtml;
+    if (theme.id === 'default') {
+      previewHtml =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;width:78px;height:78px;padding:3px;background:#07070f;border-radius:8px;flex-shrink:0;">' +
+          '<div style="' + cellStyle + 'background:#1a1a25;"></div>' +
+          '<div style="' + cellStyle + 'background:linear-gradient(135deg,#ff2200,#ff6600);"></div>' +
+          '<div style="' + cellStyle + 'background:#1a2a1a;"></div>' +
+          '<div style="' + cellStyle + 'background:#1a1a25;"></div>' +
+        '</div>';
+    } else {
+      const base = 'img/themes/' + theme.id + '/';
+      previewHtml =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;width:78px;height:78px;padding:3px;background:#07070f;border-radius:8px;flex-shrink:0;">' +
+          '<div style="' + cellStyle + '"><img src="' + base + 'tile.png" style="' + imgStyle + '"></div>' +
+          '<div style="' + cellStyle + '"><img src="' + base + 'fx-2.png" style="' + imgStyle + '"></div>' +
+          '<div style="' + cellStyle + '"><img src="' + base + 'tap-2.png" style="' + imgStyle + '"></div>' +
+          '<div style="' + cellStyle + '"><img src="' + base + 'tile.png" style="' + imgStyle + 'opacity:0.5;"></div>' +
+        '</div>';
+    }
 
     const badgeHtml = active
       ? '<div class="theme-card-badge active">✓ ACTIVE</div>'
@@ -158,7 +174,7 @@ function renderThemeStore() {
         : '<div class="theme-card-badge locked">💎 ' + theme.price.toLocaleString() + '</div>';
 
     card.innerHTML =
-      '<div class="theme-card-preview" style="background:#0a0a0f;">' + previewHtml + '</div>' +
+      previewHtml +
       '<div class="theme-card-info">' +
         '<div class="theme-card-name">' + theme.emoji + ' ' + theme.name + '</div>' +
         '<div class="theme-card-desc">' + theme.desc + '</div>' +
@@ -203,6 +219,7 @@ const _origSwitchSkinTab = window.switchSkinTab;
 function initThemeEngine() {
   if (!gameState.ownedThemes) gameState.ownedThemes = ['default'];
   applyTheme(gameState.activeTheme || 'default');
+  if (typeof startThemeRenderer === 'function') startThemeRenderer();
 }
 
 // ═══════════════════════════════════════════════
