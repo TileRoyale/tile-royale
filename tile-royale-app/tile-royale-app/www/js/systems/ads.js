@@ -5,10 +5,18 @@ const ADMOB_REWARDED_ID = 'ca-app-pub-1687381057809117/7980217936';
 
 // ─── AdMob Bridge ─────────────────────────────────────────────────────────────
 
+// Returns true only when running inside the native Capacitor Android/iOS app
+function _isNative() {
+  const cap = window.Capacitor;
+  if (!cap) return false;
+  if (typeof cap.isNativePlatform === 'function') return cap.isNativePlatform();
+  if (typeof cap.isNative === 'boolean') return cap.isNative;
+  // Last resort: nativePromise is only injected by the native bridge
+  return typeof cap.nativePromise === 'function';
+}
+
+// Get the AdMob plugin proxy, auto-registering it if needed
 function _adMob() {
-  // Auto-register the native AdMob plugin if the plugin bundle wasn't loaded separately.
-  // registerPlugin creates a proxy that routes calls to the native Android implementation
-  // via Capacitor.nativePromise when PluginHeaders includes 'AdMob'.
   if (!window.Capacitor?.Plugins?.AdMob && window.Capacitor?.registerPlugin) {
     try { window.Capacitor.registerPlugin('AdMob', {}); } catch(e) {}
   }
@@ -17,13 +25,16 @@ function _adMob() {
 
 // Initialize AdMob — called once on app load
 async function initAdMob() {
+  if (!_isNative()) return;
+  const cap = window.Capacitor;
+  // Try plugin proxy first, fall back to nativePromise
   const admob = _adMob();
-  if (!admob) return;
   try {
-    await admob.initialize({
-      requestTrackingAuthorization: false, // iOS only
-      initializeForTesting: false,
-    });
+    if (admob) {
+      await admob.initialize({ requestTrackingAuthorization: false, initializeForTesting: false });
+    } else if (cap?.nativePromise) {
+      await cap.nativePromise('AdMob', 'initialize', { requestTrackingAuthorization: false, initializeForTesting: false });
+    }
     console.log('[AdMob] initialized');
   } catch(e) {
     console.warn('[AdMob] init error:', e?.message || e);
@@ -31,21 +42,32 @@ async function initAdMob() {
 }
 
 // Show one rewarded ad. Returns true if user earned the reward (watched to end).
-// Returns false on skip, failure, or if no ad is available.
 async function _showRewardedAd() {
+  const cap = window.Capacitor;
   const admob = _adMob();
-  if (!admob) return false;
+  // Prepare (load) the ad
   try {
-    await admob.prepareRewardVideoAd({ adId: ADMOB_REWARDED_ID });
+    if (admob) {
+      await admob.prepareRewardVideoAd({ adId: ADMOB_REWARDED_ID });
+    } else if (cap?.nativePromise) {
+      await cap.nativePromise('AdMob', 'prepareRewardVideoAd', { adId: ADMOB_REWARDED_ID });
+    } else {
+      return false;
+    }
   } catch(e) {
     console.warn('[AdMob] load failed:', e?.message || e);
     return false;
   }
+  // Show and wait for reward
   try {
-    const result = await admob.showRewardVideoAd();
+    let result;
+    if (admob) {
+      result = await admob.showRewardVideoAd();
+    } else {
+      result = await cap.nativePromise('AdMob', 'showRewardVideoAd', {});
+    }
     return !!(result?.type);
   } catch(e) {
-    // User closed the ad early, or show failed
     console.warn('[AdMob] dismissed or failed:', e?.message || e);
     return false;
   }
@@ -72,9 +94,15 @@ function _simulateFallback() {
 
 // Public: real ad on device, simulation in browser
 async function _watchRewardedAd() {
-  if (_adMob() && window.Capacitor?.isNativePlatform?.()) {
-    return await _showRewardedAd();
-  }
+  const native = _isNative();
+  console.log('[AdMob] check —', {
+    native,
+    hasCapacitor: !!window.Capacitor,
+    hasNativePromise: typeof window.Capacitor?.nativePromise,
+    hasPlugin: !!window.Capacitor?.Plugins?.AdMob,
+    hasRegister: typeof window.Capacitor?.registerPlugin,
+  });
+  if (native) return await _showRewardedAd();
   return await _simulateFallback();
 }
 
