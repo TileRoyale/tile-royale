@@ -1,3 +1,11 @@
+function onPlayGauntletBtn() {
+  if (gameState.gauntletUnlocked) {
+    openGauntletHub();
+  } else {
+    showGauntletModeTeaser();
+  }
+}
+
 function openRingInventory() {
   renderRingInventory();
   document.getElementById('ringInventoryOverlay').style.display = 'block';

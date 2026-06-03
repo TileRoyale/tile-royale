@@ -2699,3 +2699,496 @@
   }
 
   /* End VISUAL POLISH v3 */
+
+/* ===== GAUNTLET MODE ===== */
+
+/* ── Gauntlet screens layout ── */
+#gauntletHubScreen, #gauntletLobbyScreen, #gauntletResultsScreen {
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+#gauntletLobbyScreen {
+  min-height: 100vh;
+  justify-content: flex-start;
+}
+
+/* ── Gauntlet Hub — Season of the Void background ── */
+#gauntletHubScreen {
+  background: url('../img/season-void.png') center center / contain no-repeat, #000;
+  position: relative;
+}
+#gauntletHubScreen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 0;
+}
+#gauntletHubScreen > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Season of the Void game background ── */
+#gauntletGameScreen {
+  background: url('../img/season-void.png') center center / contain no-repeat, #000;
+  position: relative;
+  min-height: 100vh;
+  justify-content: flex-start;
+  padding: 16px;
+  box-sizing: border-box;
+}
+#gauntletGameScreen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 0;
+}
+#gauntletGameScreen > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Gauntlet colour tiles — same sizing pattern as .tile ── */
+.gm-tile {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.08s, box-shadow 0.08s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  overflow: hidden;
+}
+.gm-tile:active { transform: scale(0.92); }
+.gm-tile.gm-common    { background: #4a4a4a; border-color: #888888; }
+.gm-tile.gm-uncommon  { background: #1a4a1a; border-color: #00cc00; box-shadow: 0 0 6px rgba(0,204,0,0.4); }
+.gm-tile.gm-rare      { background: #0a1a4a; border-color: #0066ff; box-shadow: 0 0 6px rgba(0,102,255,0.4); }
+.gm-tile.gm-epic      { background: #2a0a4a; border-color: #9b00ff; box-shadow: 0 0 6px rgba(155,0,255,0.4); }
+.gm-tile.gm-legendary { background: #4a2a00; border-color: #ff8800; box-shadow: 0 0 8px rgba(255,136,0,0.5); }
+.gm-tile.gm-secret    { background: #4a0000; border-color: #ff0000; box-shadow: 0 0 8px rgba(255,0,0,0.5); }
+.gm-tile.gm-empty     { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); cursor: default; }
+
+/* ── Void bomb tile ── */
+.gm-tile.gm-void {
+  background: radial-gradient(circle, #1a0030 0%, #0a0015 100%);
+  border: 2px solid #9b00ff;
+  animation: voidPulse 0.3s ease-in-out infinite alternate;
+  font-size: 24px;
+  flex-direction: column;
+  gap: 1px;
+}
+.gm-tile.gm-void .gm-void-countdown {
+  font-size: 11px;
+  font-family: 'Bebas Neue', sans-serif;
+  color: #ff4444;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+.gm-tile.gm-void.gm-void-critical {
+  border-color: #ff0000;
+  animation: voidPulse 0.1s ease-in-out infinite alternate;
+}
+
+@keyframes voidPulse {
+  0%   { box-shadow: 0 0 10px rgba(155,0,255,0.8), inset 0 0 10px rgba(155,0,255,0.3); }
+  100% { box-shadow: 0 0 25px rgba(155,0,255,1.0), inset 0 0 20px rgba(155,0,255,0.5); }
+}
+
+/* ── Target colour indicator ── */
+.gm-target-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.gm-target-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 2px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+.gm-target-tile {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  animation: targetPulse 1s ease-in-out infinite alternate;
+}
+.gm-target-tile.gm-common    { background: #4a4a4a; border-color: #888888; }
+.gm-target-tile.gm-uncommon  { background: #1a4a1a; border-color: #00cc00; }
+.gm-target-tile.gm-rare      { background: #0a1a4a; border-color: #0066ff; }
+.gm-target-tile.gm-epic      { background: #2a0a4a; border-color: #9b00ff; }
+.gm-target-tile.gm-legendary { background: #4a2a00; border-color: #ff8800; }
+.gm-target-tile.gm-secret    { background: #4a0000; border-color: #ff0000; }
+
+@keyframes targetPulse {
+  0%   { transform: scale(1);    opacity: 0.9; }
+  100% { transform: scale(1.06); opacity: 1; }
+}
+
+/* ── In-game HUD ── */
+.gm-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+.gm-score-display {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  letter-spacing: 2px;
+  color: #fff;
+  text-shadow: 0 0 12px rgba(155,0,255,0.7);
+}
+.gm-score-display.gm-score-neg { color: #ff4444; text-shadow: 0 0 12px rgba(255,68,68,0.7); }
+.gm-timer-display {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  letter-spacing: 2px;
+  color: #fff;
+}
+.gm-timer-display.gm-timer-low { color: #ff4444; animation: timerFlash 0.5s infinite; }
+@keyframes timerFlash { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+.gm-alive-count {
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 1.5px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+
+/* ── 5x5 grid — same sizing as regular #tileGrid ── */
+.gm-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 18px;
+  box-sizing: border-box;
+  background: rgba(0,0,0,0.3);
+}
+
+/* ── Elimination overlay ── */
+.gm-eliminated-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.82);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  gap: 8px;
+}
+.gm-elim-icon { font-size: 48px; }
+.gm-elim-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  letter-spacing: 4px;
+  color: #ff4444;
+}
+.gm-elim-sub {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 2px;
+}
+
+/* ── Gauntlet Hub screen ── */
+.gh-season-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #1a0030, #0a0018);
+  border: 1px solid rgba(155,0,255,0.5);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 40px;
+  letter-spacing: 3px;
+  color: #9b00ff;
+  margin-bottom: 4px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+.gh-season-timer {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+.gh-mmr-card {
+  background: linear-gradient(135deg, #0d0020 0%, #120030 100%);
+  border: 1px solid rgba(155,0,255,0.35);
+  border-radius: 16px;
+  padding: 16px;
+  width: 100%;
+  text-align: center;
+  margin-bottom: 16px;
+  box-shadow: 0 0 20px rgba(155,0,255,0.15);
+}
+.gh-mmr-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 48px;
+  letter-spacing: 4px;
+  color: #fff;
+  line-height: 1;
+}
+.gh-mmr-label {
+  font-size: 11px;
+  color: rgba(155,0,255,0.8);
+  letter-spacing: 4px;
+  margin-top: 2px;
+}
+.gh-mmr-rank {
+  font-size: 10px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 2px;
+  margin-top: 6px;
+}
+.gh-leaderboard {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+.gh-lb-title {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: rgba(155,0,255,0.7);
+  margin-bottom: 8px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+.gh-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+.gh-lb-rank { color: var(--muted); min-width: 22px; font-family: 'Bebas Neue', sans-serif; }
+.gh-lb-rank.gh-rank-1 { color: #ffd700; }
+.gh-lb-name { flex: 1; }
+.gh-lb-mmr  { color: #9b00ff; font-family: 'Bebas Neue', sans-serif; font-size: 14px; }
+
+/* ── Lobby screen ── */
+.gl-mmr-display {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 32px;
+  color: #9b00ff;
+  letter-spacing: 3px;
+  margin-bottom: 4px;
+}
+.gl-matchmaking-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(155,0,255,0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+.gl-matchmaking-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a00aa, #9b00ff);
+  border-radius: 3px;
+  transition: width 2s ease;
+}
+.gl-players-found {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.gl-search-range {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+.gl-countdown {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 48px;
+  letter-spacing: 4px;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 8px;
+}
+
+/* ── Results screen ── */
+.gr-place {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 64px;
+  letter-spacing: 4px;
+  line-height: 1;
+  color: #fff;
+}
+.gr-place.gr-first { color: #ffd700; text-shadow: 0 0 20px rgba(255,215,0,0.6); }
+.gr-place.gr-second { color: #c0c0c0; }
+.gr-place.gr-third  { color: #cd7f32; }
+.gr-score-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 3px;
+  margin-top: 4px;
+}
+.gr-score-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 36px;
+  letter-spacing: 3px;
+  color: #fff;
+  margin-bottom: 12px;
+}
+.gr-mmr-change {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 3px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  margin-bottom: 16px;
+}
+.gr-mmr-change.gr-mmr-pos { color: #00ff88; background: rgba(0,255,136,0.12); border: 1px solid rgba(0,255,136,0.3); }
+.gr-mmr-change.gr-mmr-neg { color: #ff4444; background: rgba(255,68,68,0.12); border: 1px solid rgba(255,68,68,0.3); }
+.gr-mmr-change.gr-mmr-zero { color: var(--muted); background: var(--panel); border: 1px solid var(--border); }
+.gr-survival-tag {
+  font-size: 11px;
+  color: rgba(155,0,255,0.8);
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+.gr-stats-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+.gr-stat-box {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 8px;
+  text-align: center;
+}
+.gr-stat-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: #fff;
+  letter-spacing: 2px;
+}
+.gr-stat-lbl {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1.5px;
+  margin-top: 2px;
+}
+
+/* ── Gauntlet Mode effects panel in gauntlet screen ── */
+.gm-effects-panel {
+  background: linear-gradient(135deg, #0d0020 0%, #0a0015 100%);
+  border: 1px solid rgba(155,0,255,0.3);
+  border-radius: 12px;
+  padding: 12px;
+  width: 100%;
+  margin-top: 12px;
+}
+.gm-effects-title {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: rgba(155,0,255,0.7);
+  margin-bottom: 10px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+.gm-effect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--text);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.gm-effect-row:last-child { border-bottom: none; }
+.gm-effect-name { color: rgba(255,255,255,0.6); letter-spacing: 1px; }
+.gm-effect-val  { font-family: 'Bebas Neue', sans-serif; font-size: 13px; color: #9b00ff; letter-spacing: 1px; }
+.gm-effect-val.gm-eff-active { color: #00ff88; }
+.gm-survival-bonus {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(155,0,255,0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(155,0,255,0.2);
+  text-align: center;
+}
+.gm-survival-bonus.gm-surv-locked {
+  opacity: 0.45;
+}
+.gm-surv-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: rgba(155,0,255,0.7);
+  margin-bottom: 3px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+.gm-surv-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  color: #fff;
+  letter-spacing: 2px;
+}
+.gm-surv-locked-msg {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-top: 3px;
+}
+
+/* ── Gauntlet leaderboard rows ── */
+.gm-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgba(255,255,255,0.03);
+}
+.gm-lb-row.gm-lb-you {
+  background: rgba(155,0,255,0.12);
+  border: 1px solid rgba(155,0,255,0.3);
+}
+.gm-lb-place {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 14px;
+  min-width: 26px;
+  color: var(--muted);
+}
+.gm-lb-place.gm-p1 { color: #ffd700; }
+.gm-lb-place.gm-p2 { color: #c0c0c0; }
+.gm-lb-place.gm-p3 { color: #cd7f32; }
+.gm-lb-name { flex: 1; color: var(--text); letter-spacing: 0.5px; }
+.gm-lb-you-tag {
+  font-size: 9px;
+  color: #9b00ff;
+  letter-spacing: 1.5px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+.gm-lb-score {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: #fff;
+  min-width: 36px;
+  text-align: right;
+}
