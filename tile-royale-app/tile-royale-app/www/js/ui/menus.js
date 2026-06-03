@@ -4,7 +4,7 @@ const FLOAT_BACK_HIDDEN = new Set([
 ]);
 
 // Screens where Android back gesture does nothing (game in progress)
-const BACK_GESTURE_BLOCKED = new Set(['gameScreen', 'lobbyScreen']);
+const BACK_GESTURE_BLOCKED = new Set(['gameScreen']);
 
 window.currentScreen = 'menuScreen';
 
@@ -40,6 +40,28 @@ function showScreen(id) {
   if (fab) fab.classList.toggle('visible', !FLOAT_BACK_HIDDEN.has(id));
 }
 
+// ===== POPUP CLOSE HELPER =====
+// Returns true if a popup was found and closed, false if nothing was open.
+function _closeTopPopup() {
+  // Each entry: [elementId, closeFunction]
+  const popups = [
+    ['modeRewardPopup',       () => { try { closeModeRewardPopup(); } catch(e) {} }],
+    ['achPopupOverlay',       () => { try { closeAchPopup(); } catch(e) {} }],
+    ['skinPreviewOverlay',    () => { try { closeSkinPreview(); } catch(e) {} }],
+    ['ringInventoryOverlay',  () => { try { closeRingInventory(); } catch(e) {} }],
+    ['playerProfileOverlay',  () => { try { closePublicProfile(); } catch(e) {} }],
+    ['avatarPickerOverlay',   () => { try { closeAvatarPicker(); } catch(e) {} }],
+    ['noTicketsBox',          () => { const el = document.getElementById('noTicketsBox'); if (el) el.style.display = 'none'; }],
+  ];
+  for (const [id, closeFn] of popups) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const visible = el.style.display !== 'none' && el.style.display !== '';
+    if (visible) { closeFn(); return true; }
+  }
+  return false;
+}
+
 // ===== ANDROID BACK GESTURE / BACK BUTTON =====
 window.addEventListener('load', () => {
   if (!window.Capacitor?.isNativePlatform?.()) return;
@@ -52,8 +74,14 @@ window.addEventListener('load', () => {
     CapApp.addListener('backButton', () => {
       const screen = window.currentScreen || 'menuScreen';
       if (BACK_GESTURE_BLOCKED.has(screen)) return;   // mängu ajal ei tee midagi
-      if (screen === 'menuScreen') {
-        try { CapApp.minimizeApp(); } catch(e) {}      // pealehel: saadab äpi tausta
+
+      // Try to close any open popup first (works on any screen incl. menuScreen)
+      if (_closeTopPopup()) return;
+
+      if (screen === 'menuScreen') return;             // menüüs: ei tee midagi
+
+      if (screen === 'lobbyScreen') {
+        try { cancelLobby(); } catch(e) { showScreen('menuScreen'); }
         return;
       }
       showScreen('menuScreen');                         // kõigil teistel: tagasi menüüsse
