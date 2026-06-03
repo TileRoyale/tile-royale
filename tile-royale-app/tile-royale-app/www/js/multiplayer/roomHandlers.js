@@ -22,12 +22,15 @@ function updateSpectatorTiles() {
 }
 
 // ===== CUSTOM LOBBY SYSTEM =====
-let customLobbyMode     = 'rush';
-let customLobbyCode       = null;
+let customLobbyMode        = 'rush';
+let customLobbyCode        = null;
 let customLobbySuddenDeath = false;
-let suddenDeathMode        = false; // active during game
-let customLobbyPlayers  = [];
-let customLobbyMaxPlayers = 10;
+let suddenDeathMode        = false;
+let customLobbyPlayers     = [];
+let customLobbyMaxPlayers  = 10;
+let customLobbyGridSize    = 5;
+let customLobbyBuckshotTiles = 3;
+let customLobbyWildItems   = ['crystal','caltrops','shadow_tile','pepper_spray','muscle_relaxant'];
 let customLobbyPollInterval = null;
 let customLobbyStartTimeout = null;
 let isCustomLobbyGame = false;
@@ -60,11 +63,25 @@ function selectCustomMode(mode, el) {
   customLobbyMode = mode;
   document.querySelectorAll('#clCreatePanel .settings-select-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
+  document.getElementById('clBuckshotSettings').style.display = mode === 'buckshot' ? 'block' : 'none';
+  document.getElementById('clWildSettings').style.display     = mode === 'wild'     ? 'block' : 'none';
 }
 
 function updateCustomPlayers(val) {
   customLobbyMaxPlayers = parseInt(val);
   document.getElementById('clPlayersVal').textContent = val;
+}
+
+function updateCustomGrid(val) {
+  customLobbyGridSize = parseInt(val);
+  document.getElementById('clGridVal').textContent  = `${val}×${val}`;
+  document.getElementById('clGridDesc').textContent = `${val}×${val} grid`;
+}
+
+function updateCustomBuckshot(val) {
+  customLobbyBuckshotTiles = parseInt(val);
+  document.getElementById('clBuckshotVal').textContent  = val;
+  document.getElementById('clBuckshotDesc').textContent = `${val} tile${val > 1 ? 's' : ''} ignite each round`;
 }
 
 function updateCustomBotSpeed(val) {
@@ -85,7 +102,13 @@ function generateLobbyCode() {
 function createCustomLobby() {
   customLobbyCode       = generateLobbyCode();
   customLobbyIsPublic   = false;
-  customLobbySuddenDeath = document.getElementById('clSuddenDeath').classList.contains('on');
+  customLobbySuddenDeath   = document.getElementById('clSuddenDeath').classList.contains('on');
+  customLobbyGridSize      = parseInt(document.getElementById('clGridSlider').value);
+  customLobbyBuckshotTiles = parseInt(document.getElementById('clBuckshotSlider').value);
+  customLobbyWildItems     = ['crystal','caltrops','shadow_tile','pepper_spray','muscle_relaxant'].filter(id => {
+    const map = { crystal:'clWildCrystal', caltrops:'clWildCaltrops', shadow_tile:'clWildShadow', pepper_spray:'clWildPepper', muscle_relaxant:'clWildMuscle' };
+    return document.getElementById(map[id])?.classList.contains('on');
+  });
   clearInterval(customLobbyFillInterval);
   const av = getActiveAvatar();
   customLobbyPlayers = [{
@@ -128,6 +151,9 @@ function createCustomLobby() {
     hostAvatar:    av.icon,
     players:       customLobbyPlayers,
     suddenDeath:   customLobbySuddenDeath,
+    gridSize:      customLobbyGridSize,
+    buckshotTiles: customLobbyBuckshotTiles,
+    wildItems:     customLobbyWildItems,
     created:       Date.now(),
   };
   saveState();

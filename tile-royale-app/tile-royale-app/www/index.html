@@ -481,6 +481,7 @@
     <div id="spinResult" style="text-align:center;margin-top:8px;font-size:13px;color:var(--muted);min-height:20px;letter-spacing:1px;"></div>
   </div>
 
+
 </div>
 
 <!-- ===== TRADING SCREEN ===== -->
@@ -691,7 +692,6 @@
   <div class="lb-period-row" style="margin-bottom:16px;">
     <button class="lb-period-btn active" id="clTabCreate" onclick="switchCustomTab('create', this)">CREATE</button>
     <button class="lb-period-btn" id="clTabJoin" onclick="switchCustomTab('join', this)">JOIN</button>
-    <button class="lb-period-btn" id="clTabSpectate" onclick="switchCustomTab('spectate', this)">WATCH</button>
   </div>
 
   <!-- CREATE PANEL -->
@@ -718,6 +718,62 @@
         <input type="range" class="settings-slider" id="clPlayersSlider"
           min="2" max="30" value="10" oninput="updateCustomPlayers(this.value)">
         <div class="settings-slider-val" id="clPlayersVal">10</div>
+      </div>
+    </div>
+
+    <div class="settings-row" style="margin-bottom:8px;">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Grid Size</div>
+        <div class="settings-row-desc" id="clGridDesc">5×5 grid</div>
+      </div>
+      <div class="settings-slider-wrap">
+        <input type="range" class="settings-slider" id="clGridSlider"
+          min="2" max="10" value="5" oninput="updateCustomGrid(this.value)">
+        <div class="settings-slider-val" id="clGridVal">5×5</div>
+      </div>
+    </div>
+
+    <!-- Buckshot-specific settings -->
+    <div id="clBuckshotSettings" style="display:none;">
+      <div class="settings-row" style="margin-bottom:8px;">
+        <div class="settings-row-info">
+          <div class="settings-row-name">Tiles per Round</div>
+          <div class="settings-row-desc" id="clBuckshotDesc">3 tiles ignite each round</div>
+        </div>
+        <div class="settings-slider-wrap">
+          <input type="range" class="settings-slider" id="clBuckshotSlider"
+            min="1" max="99" value="3" oninput="updateCustomBuckshot(this.value)">
+          <div class="settings-slider-val" id="clBuckshotVal">3</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wild-specific settings -->
+    <div id="clWildSettings" style="display:none;margin-bottom:8px;">
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:10px;padding-bottom:14px;">
+        <div class="settings-row-name">Allowed Items</div>
+        <div id="clWildItemToggles" style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:13px;color:var(--text);">🔮 Crystal Ball</span>
+            <div class="toggle on" id="clWildCrystal" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:13px;color:var(--text);">⚙️ Caltrops</span>
+            <div class="toggle on" id="clWildCaltrops" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:13px;color:var(--text);">🌑 Shadow Tile</span>
+            <div class="toggle on" id="clWildShadow" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:13px;color:var(--text);">🌶️ Pepper Spray</span>
+            <div class="toggle on" id="clWildPepper" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:13px;color:var(--text);">💊 Muscle Relaxant</span>
+            <div class="toggle on" id="clWildMuscle" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2026,9 +2082,9 @@
     <div class="summary-table" id="summaryTable"></div>
   </div>
 
-  <button class="btn-play" onclick="playAgain()" style="margin-bottom:10px;">⚡ PLAY AGAIN</button>
+  <button class="btn-play" id="resultPlayAgainBtn" onclick="playAgain()" style="margin-bottom:10px;">⚡ PLAY AGAIN</button>
   <button class="btn-share" onclick="shareResult()">📤 SHARE RESULT</button>
-  <button class="btn-secondary" onclick="showScreen('menuScreen')">← MAIN MENU</button>
+  <button class="btn-secondary" id="resultMenuBtn" onclick="showScreen('menuScreen')">← MAIN MENU</button>
 </div>
 
 <!-- ===== ELIMINATED OVERLAY ===== -->
@@ -2215,6 +2271,7 @@
   <script src="js/modes/rush.js"></script>
   <script src="js/modes/buckshot.js"></script>
   <script src="js/modes/solo.js"></script>
+  <script src="js/modes/gauntletMode.js"></script>
 
   <!-- Game engine -->
   <script src="js/game/tileSystem.js"></script>
@@ -2354,6 +2411,136 @@
       </button>
       <button class="btn-secondary" style="width:100%;" onclick="soloReplayLevel()">↩ REPLAY</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== GAUNTLET HUB ===== -->
+<div class="screen" id="gauntletHubScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:12px;">
+    <button class="btn-secondary screen-back-btn" onclick="showScreen('gauntletScreen')">← BACK</button>
+    <div class="screen-title" style="color:#9b00ff;font-size:20px;">⚔️ GAUNTLET</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <div class="gh-mmr-card">
+    <div class="gh-mmr-value" id="ghMmrValue">0</div>
+    <div class="gh-mmr-label">MMR</div>
+    <div class="gh-mmr-rank" id="ghMmrRank">Unranked</div>
+    <div class="gh-season-timer" id="ghSeasonTimer" style="margin-top:8px;">Season ends in — days</div>
+  </div>
+
+  <div class="gh-leaderboard">
+    <div class="gh-lb-title">⚔ WEEKLY TOP 5</div>
+    <div id="ghLeaderboard"></div>
+  </div>
+
+  <button class="btn-play" style="width:100%;background:linear-gradient(135deg,#4a00aa,#9b00ff);box-shadow:0 0 20px rgba(155,0,255,0.4);" onclick="startGauntletLobby()">
+    ⚔ PLAY
+  </button>
+
+  <!-- Gauntlet Mode ring effects panel -->
+  <div id="gmEffectsPanel" class="gm-effects-panel"></div>
+</div>
+
+<!-- ===== GAUNTLET LOBBY ===== -->
+<div class="screen" id="gauntletLobbyScreen">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:20px;">
+    <button class="btn-secondary screen-back-btn" onclick="cancelGauntletLobby()">✕ CANCEL</button>
+    <div class="screen-title" style="color:#9b00ff;">MATCHMAKING</div>
+    <div style="width:80px;"></div>
+  </div>
+
+  <div style="text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
+    <div style="font-size:36px;margin-bottom:8px;">⚔️</div>
+    <div class="gl-countdown" id="glCountdown">90</div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.4);letter-spacing:2px;">seconds until game starts</div>
+
+    <div class="gl-matchmaking-bar">
+      <div class="gl-matchmaking-fill" id="glMatchFill" style="width:0%;"></div>
+    </div>
+
+    <div class="gl-players-found" id="glPlayersFound">0 players found</div>
+    <div class="gl-search-range" id="glSearchRange">Searching ±100 MMR</div>
+
+    <div style="margin-top:16px;padding:10px 16px;background:var(--panel);border:1px solid var(--border);border-radius:10px;">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:2px;">YOUR MMR</div>
+      <div class="gl-mmr-display" id="glYourMmr">0</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== GAUNTLET GAME ===== -->
+<div class="screen" id="gauntletGameScreen">
+  <!-- Eliminated overlay (hidden by default) -->
+  <div class="gm-eliminated-overlay" id="gmEliminatedOverlay" style="display:none;">
+    <div class="gm-elim-icon">💥</div>
+    <div class="gm-elim-text">ELIMINATED</div>
+    <div class="gm-elim-sub">VOID BOMB EXPLODED</div>
+    <button onclick="_gmEndGame()" style="margin-top:24px;padding:12px 32px;background:rgba(155,0,255,0.15);border:1px solid rgba(155,0,255,0.4);border-radius:12px;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:3px;cursor:pointer;">← LEAVE GAME</button>
+  </div>
+
+  <!-- HUD row -->
+  <div class="gm-hud">
+    <div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:2px;">SCORE</div>
+      <div class="gm-score-display" id="gmScore">0</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:2px;">TIME</div>
+      <div class="gm-timer-display" id="gmTimer">35</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:2px;">ALIVE</div>
+      <div class="gm-alive-count" id="gmAlive">—</div>
+    </div>
+  </div>
+
+  <!-- Target colour -->
+  <div class="gm-target-wrap">
+    <div class="gm-target-label">TAP →</div>
+    <div class="gm-target-tile" id="gmTargetTile"></div>
+    <div id="gmTargetName" style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:rgba(255,255,255,0.7);"></div>
+  </div>
+
+  <!-- 5x5 grid -->
+  <div class="gm-grid" id="gmGrid"></div>
+</div>
+
+<!-- ===== GAUNTLET RESULTS ===== -->
+<div class="screen" id="gauntletResultsScreen">
+  <div style="text-align:center;width:100%;padding-top:16px;">
+    <div style="font-size:11px;letter-spacing:4px;color:rgba(155,0,255,0.7);font-family:'Bebas Neue',sans-serif;margin-bottom:4px;">SEASON OF THE VOID</div>
+    <div class="gr-place" id="grPlace">#1</div>
+    <div class="gr-score-label">FINAL SCORE</div>
+    <div class="gr-score-value" id="grScore">0</div>
+    <div class="gr-mmr-change gr-mmr-pos" id="grMmrChange">+50 MMR</div>
+    <div class="gr-survival-tag" id="grSurvivalTag" style="display:none;">💣 Survived × 1</div>
+  </div>
+
+  <div class="gr-stats-row">
+    <div class="gr-stat-box">
+      <div class="gr-stat-val" id="grCorrectTaps">0</div>
+      <div class="gr-stat-lbl">CORRECT</div>
+    </div>
+    <div class="gr-stat-box">
+      <div class="gr-stat-val" id="grWrongTaps">0</div>
+      <div class="gr-stat-lbl">WRONG</div>
+    </div>
+    <div class="gr-stat-box">
+      <div class="gr-stat-val" id="grNewMmr">0</div>
+      <div class="gr-stat-lbl">NEW MMR</div>
+    </div>
+  </div>
+
+  <!-- Full leaderboard — all players sorted by score -->
+  <div style="width:100%;margin-bottom:12px;">
+    <div style="font-size:10px;letter-spacing:3px;color:rgba(155,0,255,0.7);font-family:'Bebas Neue',sans-serif;margin-bottom:6px;">⚔ LEADERBOARD</div>
+    <div id="gmLeaderboard" style="display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;"></div>
+  </div>
+
+  <div style="width:100%;display:flex;flex-direction:column;gap:8px;padding-bottom:8px;">
+    <button class="btn-play" style="background:linear-gradient(135deg,#4a00aa,#9b00ff);" onclick="startGauntletLobby()">⚔ PLAY AGAIN</button>
+    <button class="btn-secondary" style="width:100%;" onclick="showScreen('gauntletHubScreen');renderGauntletHub()">← BACK TO GAUNTLET</button>
   </div>
 </div>
 

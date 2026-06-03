@@ -188,7 +188,7 @@ function renderGauntletHand() {
     <div class="gv2-art-container">
       <img class="gv2-art-img" src="img/gauntlet.png" alt="Mystic Gauntlet" draggable="false">
       ${hotspots}
-      <button class="gauntlet-mode-overlay-btn" onclick="event.stopPropagation();showGauntletModeTeaser()">
+      <button class="gauntlet-mode-overlay-btn" onclick="event.stopPropagation();onPlayGauntletBtn()">
         PLAY GAUNTLET<br>MODE
       </button>
     </div>`;
@@ -305,6 +305,7 @@ function equipRingToFinger(fingerIdx) {
         <div class="gv2-pr-info">
           <div class="gv2-pr-name">${ring.name}</div>
           <div class="gv2-pr-rar ${rar.cls}">${rar.label}</div>
+          ${(()=>{ const e=(typeof gmGetSingleRingEffect==='function')?gmGetSingleRingEffect(rid):null; return e?`<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:1px;">${e.label} <b>${e.pct}</b></div>`:''; })()}
           ${count > 1 ? `<div class="gv2-pr-cnt">×${count} owned</div>` : ''}
         </div>
         <button class="gv2-pr-equip">EQUIP</button>`;
@@ -360,6 +361,7 @@ function renderRingInventory() {
       <div class="ring-info">
         <div class="ring-name">${ring.name}${count>1?` ×${count}`:''}</div>
         <div class="ring-rarity ${rar.cls}">${rar.label}</div>
+        ${(()=>{ const e=(typeof gmGetSingleRingEffect==='function')?gmGetSingleRingEffect(rid):null; return e?`<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:2px;">${e.label} <b>${e.pct}</b></div>`:''; })()}
         ${equippedFinger ? `<div style="font-size:9px;letter-spacing:1.5px;color:var(--gold);margin-top:2px;opacity:0.85;">${equippedFinger.toUpperCase()}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:row;gap:5px;flex-shrink:0;align-items:center;">

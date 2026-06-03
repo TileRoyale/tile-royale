@@ -1,10 +1,11 @@
 // ===== UI HELPERS =====
 const FLOAT_BACK_HIDDEN = new Set([
   'gameScreen', 'lobbyScreen', 'menuScreen', 'onboardingScreen', 'appLoadScreen',
+  'gauntletGameScreen', 'gauntletLobbyScreen',
 ]);
 
 // Screens where Android back gesture does nothing (game in progress)
-const BACK_GESTURE_BLOCKED = new Set(['gameScreen']);
+const BACK_GESTURE_BLOCKED = new Set(['gameScreen', 'gauntletGameScreen']);
 
 window.currentScreen = 'menuScreen';
 

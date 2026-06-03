@@ -530,9 +530,16 @@ function _showRingWonPopup(ring, rarDef) {
     rarEl.style.color   = rarDef.color;
   }
 
-  // Slot in inventory count
+  // Effect + inventory count
   const total = (gameState.ringInventory || []).filter(id => id === ring.id).length;
-  if (descEl) descEl.textContent = total > 1 ? `×${total} in inventory` : 'Added to inventory';
+  const eff = (typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(ring.id) : null;
+  if (descEl) {
+    const effHtml = eff
+      ? `<div style="margin-top:6px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2px;color:${rarDef.color};">${eff.label} ${eff.pct}</div>`
+      : '';
+    const cntHtml = `<div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-top:4px;">${total > 1 ? `×${total} in inventory` : 'Added to inventory'}</div>`;
+    descEl.innerHTML = effHtml + cntHtml;
+  }
 
   // Tint popup border to rarity colour
   if (popupEl) popupEl.style.borderColor = rarDef.color + '55';
