@@ -383,3 +383,41 @@
   .tile.missed { background: #2a0a0a; border-color: var(--red); animation: missedFlash 0.5s ease-out; }
   @keyframes missedFlash { 0% { background: #ff0000; } 100% { background: #2a0a0a; } }
 
+  /* ═══════════════════════════════════════════════════════════════
+     VISUAL THEMES — CSS SUPPRESSION LAYER
+     Images are injected as <img class="theme-img"> by themeRenderer.js.
+     This CSS block ONLY suppresses base tile CSS. No images here.
+  ════════════════════════════════════════════════════════════════ */
+
+  /* Strip every CSS visual off game grid tiles only (not previews) */
+  body.theme-active #tileGrid .tile,
+  body.theme-active #tileGrid .tile.burning,
+  body.theme-active #tileGrid .tile.tapped {
+    background:    none        !important;
+    border:        none        !important;
+    border-radius: 0           !important;
+    box-shadow:    none        !important;
+    filter:        none        !important;
+    animation:     none        !important;
+    outline:       none        !important;
+    transition:    transform 0.08s !important;
+  }
+  body.theme-active #tileGrid .tile::before,
+  body.theme-active #tileGrid .tile::after,
+  body.theme-active #tileGrid .tile.burning::after,
+  body.theme-active #tileGrid .tile.tapped::after { content: '' !important; display: none !important; }
+
+  /* Tapped: dim */
+  body.theme-active #tileGrid .tile.tapped { opacity: 0.45 !important; }
+
+  /* .theme-img — the <img> element injected by themeRenderer.js */
+  .theme-img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: fill;
+    display: block;
+    pointer-events: none;
+    z-index: 0;
+    border: none; border-radius: 0; box-shadow: none;
+  }
+

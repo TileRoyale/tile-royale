@@ -297,8 +297,21 @@ function buildMiniPreview(skinId, tab) {
   }
 }
 
-// Returns inline style object for a burning tile based on effect skin
+// Returns inline style object for a burning tile (mini-preview in profile skin tabs).
+// Themes use CSS image assets — no gradient needed here.
 function getBurningStyle(fxSkinId) {
+  const theme = (typeof gameState !== 'undefined' && gameState.activeTheme) ? gameState.activeTheme : 'default';
+  // For active themes, mini-preview shows the fx-1 frame image (first burning frame)
+  const THEME_IMG = {
+    pimple: '../img/themes/pimple/fx-1.png',
+    eye:    '../img/themes/eye/fx-1.png',
+    bug:    '../img/themes/bug/fx-1.png',
+    cosmic: '../img/themes/cosmic/fx-1.png',
+    fruit:  '../img/themes/fruit/fx-1.png',
+  };
+  if (theme !== 'default' && THEME_IMG[theme]) {
+    return { backgroundImage: `url('${THEME_IMG[theme]}')`, backgroundSize:'100% 100%', borderColor:'transparent', boxShadow:'none', icon:'' };
+  }
   const styles = {
     fx_fire:     { background: 'linear-gradient(135deg,#ff2200,#ff6600,#ffaa00)', borderColor: '#ff4500', boxShadow: '0 0 8px rgba(255,69,0,0.9)', icon: '🔥' },
     fx_neonblue: { background: 'linear-gradient(135deg,#001aff,#00aaff,#00ffee)', borderColor: '#00aaff', boxShadow: '0 0 8px rgba(0,170,255,0.9)', icon: '💙' },
@@ -310,6 +323,8 @@ function getBurningStyle(fxSkinId) {
     fx_solar:    { background: 'linear-gradient(135deg,#553300,#ffaa00,#ffffff)', borderColor: '#ffdd00', boxShadow: '0 0 10px rgba(255,220,0,1)', icon: '☀️' },
     fx_void:     { background: 'radial-gradient(circle,#220033 0%,#000000 100%)', borderColor: '#440066', boxShadow: '0 0 8px rgba(60,0,80,0.9)', icon: '🌑' },
     fx_rainbow:  { background: 'linear-gradient(135deg,#ff0000,#ffff00,#00ff00,#0000ff)', borderColor: '#ff00ff', boxShadow: '0 0 8px rgba(255,100,255,0.9)', icon: '🌈' },
+    // Solo exclusive
+    fx_bomb:     { background: 'radial-gradient(circle,#2a0a0a 0%,#0d0000 100%)', borderColor: '#ff0000', boxShadow: '0 0 10px rgba(255,0,0,0.8)', icon: '💣' },
     // Whale exclusive
     fx_godray:   { background: 'radial-gradient(circle,#ffffff 0%,#ffee88 40%,#ffaa00 100%)', borderColor: '#ffffff', boxShadow: '0 0 14px rgba(255,255,200,1)', icon: '✨' },
     fx_blackhole:{ background: 'radial-gradient(circle,#000000 0%,#1a0030 60%,#330066 100%)', borderColor: '#6600aa', boxShadow: '0 0 12px rgba(100,0,150,0.9)', icon: '🌀' },
@@ -583,6 +598,9 @@ function applySkins() {
 }
 
 function getTapEffectClass() {
+  const theme = (typeof gameState !== 'undefined' && gameState.activeTheme) ? gameState.activeTheme : 'default';
+  const THEME_TAP = { pimple:'tap-theme-pimple', eye:'tap-theme-eye', bug:'tap-theme-bug', cosmic:'tap-theme-cosmic', fruit:'tap-theme-fruit' };
+  if (theme !== 'default' && THEME_TAP[theme]) return THEME_TAP[theme];
   return TAP_CLASS_MAP[activeSkins.tapeffect] || 'tap-ripple';
 }
 
