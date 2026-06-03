@@ -143,8 +143,8 @@ function updateProfileUI() {
   if (whaleBadgeEl) whaleBadgeEl.style.display = gameState.whaleBadge ? 'inline-flex' : 'none';
   const renames = gameState.renames || 0;
   const costEl = document.getElementById('profileRenameCost');
-  if (renames < 3) {
-    costEl.textContent = `${3 - renames} free rename${3 - renames !== 1 ? 's' : ''} remaining`;
+  if (renames < 4) {
+    costEl.textContent = `${4 - renames} free rename${4 - renames !== 1 ? 's' : ''} remaining`;
     costEl.style.color = 'var(--green)';
   } else {
     costEl.textContent = 'Next rename costs 💎 500';
@@ -171,7 +171,7 @@ function savePlayerName() {
     return;
   }
   const renames = gameState.renames || 0;
-  if (renames >= 3) {
+  if (renames >= 4) {
     // Costs 500 diamonds
     if (gameState.diamonds < 500) {
       showToast('Not enough diamonds! Need 💎 500', 'var(--red)');
