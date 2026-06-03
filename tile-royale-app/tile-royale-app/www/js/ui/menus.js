@@ -389,12 +389,78 @@ function _renderStanding(playerStats, globalStats, percentiles) {
   section.style.display = 'block';
 }
 
+// ─── Solo leaderboard renderer ────────────────────────────────────────────────
+
+async function _renderSoloLeaderboard() {
+  const myStatsEl = document.getElementById('lbSoloMyStats');
+  const lbListEl  = document.getElementById('lbSoloList');
+
+  // Show player's own solo progress
+  const totalStars = typeof soloGetTotalStars === 'function' ? soloGetTotalStars() : 0;
+  const progress   = typeof soloGetProgress  === 'function' ? soloGetProgress()  : {};
+  const unlockedLv = progress.unlockedLevel || 1;
+  const levels     = progress.levels || {};
+  const completed  = Object.values(levels).filter(l => l.completed).length;
+  const threeStars = Object.values(levels).filter(l => (l.stars || 0) >= 3).length;
+
+  if (myStatsEl) {
+    const stat = (val, lbl) =>
+      `<div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:var(--text);">${val}</div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;">${lbl}</div>
+      </div>`;
+    myStatsEl.innerHTML =
+      stat(`${totalStars} / 300`, '⭐ TOTAL STARS') +
+      stat(`${unlockedLv - 1} / 100`, '✅ LEVELS DONE') +
+      stat(threeStars, '⭐⭐⭐ PERFECT') +
+      stat(`${Math.round(totalStars / 300 * 100)}%`, '🏆 COMPLETION');
+  }
+
+  // Try to fetch global solo rankings from server
+  if (lbListEl) {
+    lbListEl.innerHTML = '<div class="lb-loading">⏳ Loading...</div>';
+    const data = PLAYER_ID ? await _lbFetch(`/solo-rankings`) : null;
+    if (data && data.rankings && data.rankings.length > 0) {
+      _renderRankingRows(data.rankings);
+      if (lbListEl) lbListEl.innerHTML = document.getElementById('lbList').innerHTML;
+    } else {
+      lbListEl.innerHTML =
+        '<div class="lb-loading" style="text-align:center;padding:20px;">' +
+          '🎯 Solo rankings coming soon!<br>' +
+          '<span style="font-size:11px;color:var(--muted);">Complete levels to submit your score.</span>' +
+        '</div>';
+    }
+  }
+}
+
 // ─── Main leaderboard renderer ─────────────────────────────────────────────────
 
 async function renderLeaderboard() {
   const list = document.getElementById('lbList');
   if (!list) return;
   list.innerHTML = '<div class="lb-loading">⏳ Loading rankings...</div>';
+
+  // Show/hide solo section
+  const soloSection = document.getElementById('lbSoloSection');
+  const hallOfFame  = document.getElementById('lbHallOfFame');
+
+  // ── Solo tab ─────────────────────────────────────────────────────────────────
+  if (lbPeriod === 'solo') {
+    list.innerHTML = '';
+    if (soloSection) soloSection.style.display = 'block';
+    if (hallOfFame)  hallOfFame.style.display  = 'none';
+    ['lbVsSection','lbWorldRecords','lbStanding','lbProfileCard'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    _renderSoloLeaderboard();
+    return;
+  }
+
+  // Restore sections hidden by solo tab
+  if (soloSection) soloSection.style.display = 'none';
+  if (hallOfFame)  hallOfFame.style.display  = '';
+  const profileCard = document.getElementById('lbProfileCard');
+  if (profileCard) profileCard.style.display = '';
 
   // ── Friends tab ─────────────────────────────────────────────────────────────
   if (lbPeriod === 'friends') {
