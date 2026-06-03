@@ -99,30 +99,117 @@ const SOLO_MILESTONES = [
   { stars: 300, gems: 920, bonus:{ type:'skin',   id:'vic_solo_legend',  icon:'👑', name:'Solo Legend Trophy'  } },
 ];
 
-function soloCheckMilestones(oldStars, newStars, progress) {
-  const claimed = progress.claimedMilestones || [];
+// Returns newly-reached milestones (not yet claimable by the user).
+// Rewards are NOT auto-given here — the player must press CLAIM in Solo Hub.
+function soloCheckMilestones(oldStars, newStars) {
   const triggered = [];
   for (const m of SOLO_MILESTONES) {
-    if (newStars >= m.stars && !claimed.includes(m.stars)) {
-      claimed.push(m.stars);
+    if (newStars >= m.stars && oldStars < m.stars) {
       triggered.push(m);
-      gameState.diamonds = (gameState.diamonds || 0) + m.gems;
-      if (m.bonus) {
-        if (!gameState.ownedSkins) gameState.ownedSkins = {};
-        if (!gameState.ownedAvatars) gameState.ownedAvatars = [];
-        if (m.bonus.type === 'avatar') {
-          if (!gameState.ownedAvatars.includes(m.bonus.id)) gameState.ownedAvatars.push(m.bonus.id);
-        } else {
-          gameState.ownedSkins[m.bonus.id] = true;
-          // Unlock companion skin if specified
-          if (m.bonus.also) gameState.ownedSkins[m.bonus.also] = true;
-        }
-      }
-      saveState();
     }
   }
-  progress.claimedMilestones = claimed;
   return triggered;
+}
+
+// Manually claim a milestone reward (called from the milestone track UI).
+function claimSoloMilestone(stars) {
+  const p = soloGetProgress();
+  const total = soloGetTotalStars();
+  if (total < stars) return;
+  const claimed = p.claimedMilestones || [];
+  if (claimed.includes(stars)) return;
+  const m = SOLO_MILESTONES.find(ms => ms.stars === stars);
+  if (!m) return;
+
+  claimed.push(stars);
+  p.claimedMilestones = claimed;
+  soloSaveProgress(p);
+
+  gameState.diamonds = (gameState.diamonds || 0) + m.gems;
+  if (m.bonus) {
+    if (!gameState.ownedSkins)   gameState.ownedSkins   = {};
+    if (!gameState.ownedAvatars) gameState.ownedAvatars = [];
+    if (m.bonus.type === 'avatar') {
+      if (!gameState.ownedAvatars.includes(m.bonus.id)) gameState.ownedAvatars.push(m.bonus.id);
+    } else {
+      gameState.ownedSkins[m.bonus.id] = true;
+      if (m.bonus.also) gameState.ownedSkins[m.bonus.also] = true;
+    }
+  }
+  saveState();
+  if (typeof updateMenuStats === 'function') updateMenuStats();
+
+  let rewardText = `+${m.gems}💎`;
+  if (m.bonus) rewardText += `  +${m.bonus.icon} ${m.bonus.name}`;
+  if (typeof showToast === 'function') showToast(`⭐ ${stars} Stars! ${rewardText}`, '#c39bd3');
+  if (typeof playSound === 'function') playSound('achieve');
+  if (typeof vibrate === 'function') vibrate([50, 50, 200]);
+
+  renderSoloMilestoneTrack();
+}
+
+// Render horizontal milestone reward track in Solo Hub.
+function renderSoloMilestoneTrack() {
+  const container = document.getElementById('soloMilestoneTrack');
+  if (!container) return;
+  const p = soloGetProgress();
+  const totalStars = soloGetTotalStars();
+  const claimed = p.claimedMilestones || [];
+
+  container.innerHTML = '';
+  for (const m of SOLO_MILESTONES) {
+    const reached    = totalStars >= m.stars;
+    const isClaimed  = claimed.includes(m.stars);
+    const claimable  = reached && !isClaimed;
+
+    const card = document.createElement('div');
+    card.style.cssText = [
+      'display:flex;flex-direction:column;align-items:center;gap:4px;',
+      'min-width:68px;padding:8px 6px;border-radius:10px;border:1px solid;',
+      'font-family:"Bebas Neue",sans-serif;font-size:11px;letter-spacing:1px;text-align:center;',
+      isClaimed  ? 'border-color:var(--green);background:rgba(0,255,136,0.06);color:var(--text);'
+      : claimable ? 'border-color:#f0c040;background:rgba(240,192,64,0.10);color:var(--text);'
+                  : 'border-color:var(--border);background:rgba(255,255,255,0.02);color:var(--muted);',
+    ].join('');
+
+    const starsSpan = document.createElement('div');
+    starsSpan.textContent = `${m.stars} ⭐`;
+
+    const gemSpan = document.createElement('div');
+    gemSpan.style.cssText = 'font-size:10px;color:var(--diamond);';
+    gemSpan.textContent = `+${m.gems}💎`;
+
+    card.appendChild(starsSpan);
+    card.appendChild(gemSpan);
+
+    if (m.bonus) {
+      const bonusSpan = document.createElement('div');
+      bonusSpan.style.fontSize = '16px';
+      bonusSpan.textContent = m.bonus.icon;
+      card.appendChild(bonusSpan);
+    }
+
+    if (claimable) {
+      const btn = document.createElement('button');
+      btn.textContent = 'CLAIM';
+      btn.style.cssText = 'margin-top:2px;padding:3px 8px;background:#f0c040;color:#000;border:none;border-radius:6px;font-family:"Bebas Neue",sans-serif;font-size:11px;letter-spacing:1px;cursor:pointer;';
+      const s = m.stars;
+      btn.onclick = () => claimSoloMilestone(s);
+      card.appendChild(btn);
+    } else if (isClaimed) {
+      const doneEl = document.createElement('div');
+      doneEl.style.cssText = 'margin-top:2px;font-size:14px;color:var(--green);';
+      doneEl.textContent = '✓';
+      card.appendChild(doneEl);
+    } else {
+      const lockEl = document.createElement('div');
+      lockEl.style.cssText = 'margin-top:2px;font-size:13px;';
+      lockEl.textContent = '🔒';
+      card.appendChild(lockEl);
+    }
+
+    container.appendChild(card);
+  }
 }
 
 // ── Randomisation ──
@@ -206,6 +293,7 @@ function openSoloHub() {
   document.getElementById('soloHubLevelLabel').textContent  = `Level ${unlocked} of 100`;
   document.getElementById('soloContinueLevelNum').textContent = unlocked;
   updateSoloMenuLives();
+  renderSoloMilestoneTrack();
   showScreen('soloScreen');
 }
 
@@ -539,8 +627,18 @@ function soloLevelComplete() {
   saveState();
 
   const newTotal   = soloGetTotalStars();
-  const milestones = soloCheckMilestones(oldTotal, newTotal, p);
-  soloSaveProgress(p); // save milestone claims
+  const milestones = soloCheckMilestones(oldTotal, newTotal);
+
+  // Update solo achievement stats
+  if (typeof initAchStats === 'function') {
+    initAchStats();
+    const s = gameState.achStats;
+    s.soloLevels  = Object.values(p.levels).filter(l => l.completed).length;
+    s.soloStars   = newTotal;
+    s.solo3Stars  = Object.values(p.levels).filter(l => (l.stars || 0) >= 3).length;
+    if (typeof checkAchievements === 'function') checkAchievements();
+    saveState();
+  }
 
   // Show overlay
   const finalStars = p.levels[levelNum].stars || stars;
@@ -552,9 +650,9 @@ function soloLevelComplete() {
   if (milestones.length > 0) {
     const m = milestones[0];
     mBox.style.display = 'block';
-    document.getElementById('soloMilestoneTitle').textContent = `🎉 ${m.stars} STARS MILESTONE!`;
-    let desc = `+${m.gems}💎`;
-    if (m.bonus) desc += `   ·   ${m.bonus.icon} ${m.bonus.name} unlocked!`;
+    document.getElementById('soloMilestoneTitle').textContent = `⭐ ${m.stars} STARS MILESTONE REACHED!`;
+    let desc = `Go to Solo Hub to claim +${m.gems}💎`;
+    if (m.bonus) desc += `  +${m.bonus.icon} ${m.bonus.name}`;
     document.getElementById('soloMilestoneDesc').textContent = desc;
   } else {
     mBox.style.display = 'none';

@@ -39,6 +39,17 @@ const ACHIEVEMENTS = [
   { id:'back_door',       tier:'secret', icon:'🚪', name:'Back Door',          desc:'??????', secret:true, goal:1, stat:'_secret' },
   { id:'lucky_seven',     tier:'secret', icon:'🍀', name:'Lucky Seven',        desc:'??????', secret:true, goal:1, stat:'_secret' },
   { id:'phantom',         tier:'secret', icon:'🌀', name:'Phantom',            desc:'??????', secret:true, goal:1, stat:'_secret' },
+  // SOLO
+  { id:'solo_first',    tier:'bronze',  icon:'🎯', name:'First Solo',        desc:'Complete your first Solo level',             goal:1,   stat:'soloLevels' },
+  { id:'solo_rookie',   tier:'bronze',  icon:'🏃', name:'Solo Rookie',        desc:'Complete 10 Solo levels',                   goal:10,  stat:'soloLevels' },
+  { id:'solo_warrior',  tier:'silver',  icon:'⚔️', name:'Solo Warrior',       desc:'Complete 25 Solo levels',                   goal:25,  stat:'soloLevels' },
+  { id:'solo_veteran',  tier:'silver',  icon:'🎖️', name:'Solo Veteran',       desc:'Complete 50 Solo levels',                   goal:50,  stat:'soloLevels' },
+  { id:'solo_master',   tier:'gold',    icon:'🏆', name:'Solo Master',         desc:'Complete all 100 Solo levels',              goal:100, stat:'soloLevels' },
+  { id:'solo_stars30',  tier:'bronze',  icon:'⭐', name:'Star Seeker',         desc:'Collect 30 Solo stars',                     goal:30,  stat:'soloStars'  },
+  { id:'solo_stars100', tier:'silver',  icon:'🌟', name:'Star Hunter',         desc:'Collect 100 Solo stars',                    goal:100, stat:'soloStars'  },
+  { id:'solo_stars200', tier:'silver',  icon:'💫', name:'Star Collector',      desc:'Collect 200 Solo stars',                    goal:200, stat:'soloStars'  },
+  { id:'solo_perfect',  tier:'diamond', icon:'💎', name:'Perfectionist',       desc:'Collect all 300 Solo stars',                goal:300, stat:'soloStars'  },
+  { id:'solo_flawless', tier:'silver',  icon:'✨', name:'Flawless',             desc:'Complete 10 levels with 3 stars each',      goal:10,  stat:'solo3Stars' },
   // WHALE — only for big spenders
   { id:'whale_1',    tier:'whale', icon:'🐋', name:'First Splash',      desc:'Purchase any diamond package',             goal:1,   stat:'diamondsPurchased' },
   { id:'whale_2',    tier:'whale', icon:'💸', name:'High Roller',       desc:'Spend 9.99€ or more in a single purchase', goal:999, stat:'singlePurchaseMax' },
@@ -59,7 +70,8 @@ function initAchStats() {
   const s = gameState.achStats;
   ['games','wins','totalTaps','top5','top3','rushWins','buckshotGames','buckshotWins',
    'wildGames','wildWins','totalDiamonds','skinsBought','winStreak','bestWinStreak',
-   'diamondsPurchased','totalSpentCents'].forEach(k => {
+   'diamondsPurchased','totalSpentCents',
+   'soloLevels','soloStars','solo3Stars'].forEach(k => {
     if (s[k] === undefined) s[k] = 0;
   });
 }
@@ -223,6 +235,8 @@ const ACH_CATEGORIES = {
   back_door:'special',    lucky_seven:'special', phantom:'special',
   whale_1:'special', whale_2:'special', whale_3:'special', whale_4:'special', whale_5:'special',
   whale_6:'special', whale_7:'special', whale_8:'special', whale_song:'special', moby_dick:'special',
+  solo_first:'solo', solo_rookie:'solo', solo_warrior:'solo', solo_veteran:'solo', solo_master:'solo',
+  solo_stars30:'solo', solo_stars100:'solo', solo_stars200:'solo', solo_perfect:'solo', solo_flawless:'solo',
 };
 
 const TROPHY_POINTS_PER_TIER = { bronze:10, silver:25, gold:50, diamond:100, secret:25, whale:150 };

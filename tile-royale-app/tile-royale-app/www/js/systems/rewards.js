@@ -423,14 +423,60 @@ function _refreshModeTimers() {
   if (we) we.textContent = `results in ${_modeWeeklyTimeLeft()}`;
 }
 
+function modePopupPlay() {
+  closeModeRewardPopup();
+  if (typeof tryFindMatch === 'function') tryFindMatch();
+}
+
 function openModeRewardPopup(mode) {
   _modePopupMode = mode;
   const popup = document.getElementById('modeRewardPopup');
   if (!popup) return;
 
-  const labels = { rush: '⚡ Rush', buckshot: '💥 Buckshot', wild: '🌀 Wild' };
+  const labels = { rush: '⚡ Rush', buckshot: '💥 Buckshot', wild: '🌀 Wild', koth: '👑 King of the Hill', practice: '🎯 Practice', custom: '🏟️ Custom Lobby' };
   const titleEl = document.getElementById('modeRewardPopupTitle');
-  if (titleEl) titleEl.textContent = `${labels[mode] || mode} Rewards 🎟️`;
+  if (titleEl) titleEl.textContent = labels[mode] || mode;
+
+  // Update play button ticket/cost display
+  const modeCounter = document.getElementById('modePopupTicketCounter');
+  if (modeCounter) {
+    if (mode === 'practice') {
+      modeCounter.textContent = 'FREE';
+      modeCounter.className = 'ticket-counter';
+    } else if (mode === 'koth') {
+      modeCounter.textContent = '💎 50';
+      modeCounter.className = 'ticket-counter';
+    } else {
+      const t = typeof getTickets === 'function' ? getTickets() : (gameState.tickets || 0);
+      modeCounter.textContent = `🎟️ ${t}`;
+      modeCounter.className = 'ticket-counter' + (t <= 2 ? ' low' : '');
+    }
+  }
+
+  // Mode description for non-reward modes
+  const descEl = document.getElementById('modePopupDesc');
+  const rewardSection = document.getElementById('modeRewardsSection');
+  const isRewardMode = ['rush','buckshot','wild'].includes(mode);
+  if (descEl) {
+    if (mode === 'koth') {
+      descEl.textContent = '💎 50 diamond entry fee · compete for top 3 position';
+      descEl.style.display = 'block';
+    } else if (mode === 'practice') {
+      descEl.textContent = 'No tickets required · speed training · solo play';
+      descEl.style.display = 'block';
+    } else if (mode === 'custom') {
+      descEl.textContent = 'Create or join a private lobby with friends';
+      descEl.style.display = 'block';
+    } else {
+      descEl.style.display = 'none';
+    }
+  }
+  if (rewardSection) rewardSection.style.display = isRewardMode ? '' : 'none';
+
+  if (!isRewardMode) {
+    popup.style.display = 'flex';
+    return;
+  }
 
   const data = _getModeRewardsData(mode);
 

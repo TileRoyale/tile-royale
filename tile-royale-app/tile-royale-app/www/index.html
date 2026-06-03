@@ -215,22 +215,19 @@
   <div class="section-label">Select Mode</div>
   <div class="mode-grid" style="grid-template-columns: repeat(2,1fr);">
     <div class="mode-card selected" data-mode="rush" onclick="selectMode('rush', this)">
-      <button class="mode-reward-btn" onclick="event.stopPropagation(); openModeRewardPopup('rush')" title="Rewards">🏆</button>
       <div class="mode-icon">⚡</div>
       <div class="mode-name">Rush</div>
-      <div class="mode-time">Last tap standing</div>
+      <div class="mode-time">Single tile mode</div>
     </div>
     <div class="mode-card" data-mode="buckshot" onclick="selectMode('buckshot', this)">
-      <button class="mode-reward-btn" onclick="event.stopPropagation(); openModeRewardPopup('buckshot')" title="Rewards">🏆</button>
       <div class="mode-icon">💥</div>
       <div class="mode-name">Buckshot</div>
-      <div class="mode-time">Last tap standing</div>
+      <div class="mode-time">Multi tile mode</div>
     </div>
     <div class="mode-card" data-mode="wild" onclick="selectMode('wild', this)">
-      <button class="mode-reward-btn" onclick="event.stopPropagation(); openModeRewardPopup('wild')" title="Rewards">🏆</button>
       <div class="mode-icon">🌀</div>
       <div class="mode-name">Wild</div>
-      <div class="mode-time">Last tap standing</div>
+      <div class="mode-time">Special items mode</div>
     </div>
     <div class="mode-card koth-card" data-mode="koth" onclick="selectMode('koth', this)">
       <div class="mode-icon">👑</div>
@@ -261,7 +258,8 @@
     <div class="solo-menu-btn-lives" id="soloMenuLives">❤️ 5</div>
   </button>
 
-  <button class="btn-play" onclick="tryFindMatch()" style="margin-bottom:10px;" id="btnFindMatch">
+  <!-- Play button moved into mode popup — kept hidden for JS ticket counter compatibility -->
+  <button class="btn-play" onclick="tryFindMatch()" style="display:none;" id="btnFindMatch">
     ⚡ FIND MATCH &nbsp;<span class="ticket-counter" id="menuTicketCounter">🎟️ 10</span>
   </button>
 
@@ -1275,6 +1273,7 @@
     <button class="lb-period-btn active" id="lbPeriodWeekly" onclick="switchLbPeriod('weekly', this)">🗓️ WEEKLY</button>
     <button class="lb-period-btn" id="lbPeriodAlltime" onclick="switchLbPeriod('alltime', this)">👑 ALL-TIME</button>
     <button class="lb-period-btn" id="lbPeriodFriends" onclick="switchLbPeriod('friends', this)">👥 FRIENDS</button>
+    <button class="lb-period-btn" id="lbPeriodSolo" onclick="switchLbPeriod('solo', this)">🎯 SOLO</button>
   </div>
 
   <!-- Rankings list -->
@@ -1307,6 +1306,18 @@
       <div class="lb-hof-trophy">🏆</div>
       <div class="lb-hof-msg">No completed seasons yet.</div>
       <div class="lb-hof-sub">Season champions will be enshrined here when the first season ends.</div>
+    </div>
+  </div>
+
+  <!-- Solo leaderboard content (shown only on SOLO tab) -->
+  <div id="lbSoloSection" style="display:none;width:100%;">
+    <div class="lb-section">
+      <div class="lb-section-title">🎯 YOUR SOLO PROGRESS</div>
+      <div id="lbSoloMyStats" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;"></div>
+    </div>
+    <div class="lb-section">
+      <div class="lb-section-title">🏆 SOLO RANKINGS</div>
+      <div id="lbSoloList"><div class="lb-loading">⏳ Loading solo rankings...</div></div>
     </div>
   </div>
 
@@ -1367,6 +1378,7 @@
       <div class="ach-filter" onclick="filterAch('speed', this)">⚡ Speed</div>
       <div class="ach-filter" onclick="filterAch('collection', this)">💰 Collect</div>
       <div class="ach-filter" onclick="filterAch('special', this)">🔐 Special</div>
+      <div class="ach-filter" onclick="filterAch('solo', this)">🎯 Solo</div>
       <div class="ach-filter" onclick="filterAch('rings', this)">💍 Rings</div>
       <div class="ach-filter" onclick="filterAch('unlocked', this)">✓ Done</div>
     </div>
@@ -1561,6 +1573,9 @@
     <div style="width:80px;"></div>
   </div>
 
+  <button class="btn-play" id="kothPlayBtn" onclick="startKoth()" style="margin-bottom:6px;">👑 ENTER — 💎 50</button>
+  <div id="kothInsufficientMsg" style="display:none; color:var(--red); font-size:12px; letter-spacing:2px; text-align:center; margin-bottom:10px;">Not enough diamonds! Need 💎 50</div>
+
   <!-- Prize pool box -->
   <div class="koth-pool-box">
     <div class="koth-pool-label">🏆 WEEKLY PRIZE POOL</div>
@@ -1684,8 +1699,6 @@
     <div class="koth-balance">Your balance: 💎 <span id="kothBalance">0</span></div>
   </div>
 
-  <button class="btn-play" id="kothPlayBtn" onclick="startKoth()" style="margin-bottom:10px;">👑 ENTER — 💎 50</button>
-  <div id="kothInsufficientMsg" style="display:none; color:var(--red); font-size:12px; letter-spacing:2px; text-align:center;">Not enough diamonds! Need 💎 50</div>
 
 </div>
 
@@ -1696,6 +1709,8 @@
     <div class="secret-tile" style="bottom:-10px; left:50%; transform:translateX(-50%);" onclick="triggerSecretTile('phantom')"></div>
   </div>
   <div class="tagline" style="margin-bottom:24px;">Choose your items before the battle</div>
+
+  <button class="btn-play" onclick="confirmWildItems()" style="margin-bottom:14px;">⚡ FIND MATCH</button>
 
   <div class="section-label">SELECT UP TO 2 ITEMS</div>
   <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:32px;" id="wildItemList">
@@ -1809,7 +1824,6 @@
     <div style="margin-top:8px;color:var(--fire2);font-size:12px;letter-spacing:1px;">🔒 Items unlock as you level up — earn XP by playing!</div>
   </div>
 
-  <button class="btn-play" onclick="confirmWildItems()" style="margin-bottom:10px;">⚡ FIND MATCH</button>
   <button class="btn-secondary" onclick="showScreen('menuScreen')">← BACK</button>
 </div>
 
@@ -2228,6 +2242,12 @@
     ⚡ PLAY — Level <span id="soloContinueLevelNum">1</span>
   </button>
   <button class="btn-secondary" onclick="openSoloLevelSelect()" style="width:100%;margin-bottom:10px;">☰ LEVEL SELECT</button>
+
+  <!-- Star milestone reward track -->
+  <div style="width:100%;margin-top:8px;">
+    <div class="section-label" style="margin-bottom:8px;">⭐ Star Rewards</div>
+    <div id="soloMilestoneTrack" style="display:flex;flex-wrap:wrap;gap:8px;width:100%;padding:4px 0;"></div>
+  </div>
 </div>
 
 <!-- ===== SOLO LEVEL SELECT SCREEN ===== -->
@@ -2322,11 +2342,21 @@
 <div id="modeRewardPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9100;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeModeRewardPopup()">
   <div style="background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:340px;max-height:80vh;overflow-y:auto;">
 
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <div id="modeRewardPopupTitle" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:var(--gold);">⚡ Rush Rewards</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div id="modeRewardPopupTitle" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:var(--gold);">⚡ Rush</div>
       <button onclick="closeModeRewardPopup()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:0;line-height:1;">✕</button>
     </div>
 
+    <!-- Play button — always shown at top of popup -->
+    <button class="btn-play" id="modePopupPlayBtn" onclick="modePopupPlay()" style="margin-bottom:14px;">
+      ▶ PLAY &nbsp;<span id="modePopupTicketCounter" class="ticket-counter">🎟️ 10</span>
+    </button>
+
+    <!-- Non-ticket mode description (hidden for rush/buckshot/wild) -->
+    <div id="modePopupDesc" style="display:none;font-size:12px;color:var(--muted);letter-spacing:1px;text-align:center;margin-bottom:12px;line-height:1.6;"></div>
+
+    <!-- Rewards section — visible only for rush/buckshot/wild -->
+    <div id="modeRewardsSection">
     <div style="font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
       <span>DAILY</span>
       <span id="modeDailyTimer" style="color:var(--fire2);font-size:10px;">—</span>
@@ -2355,6 +2385,7 @@
     <div id="modeWeeklyClaimWrap" style="display:none;margin-bottom:6px;">
       <button class="btn-play" id="modeWeeklyClaimBtn" onclick="claimModeWeeklyReward()" style="background:linear-gradient(135deg,var(--gold),var(--fire2));">🎟️ CLAIM WEEKLY REWARD</button>
     </div>
+    </div><!-- end modeRewardsSection -->
 
     <button class="btn-secondary" style="width:100%;margin-top:4px;" onclick="closeModeRewardPopup()">CLOSE</button>
   </div>

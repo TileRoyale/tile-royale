@@ -56,15 +56,21 @@ function updateTicketUI() {
     counter.textContent = `🎟️ ${tickets}`;
     counter.className = 'ticket-counter' + (tickets <= 2 ? ' low' : '');
   }
-  if (noBox && playBtn) {
+  // btnFindMatch is now always hidden (play button lives in mode popup)
+  if (playBtn) playBtn.style.display = 'none';
+  if (noBox) {
     if (tickets <= 0) {
       noBox.style.display = 'block';
-      playBtn.style.display = 'none';
       updateNoTicketsTimer();
     } else {
       noBox.style.display = 'none';
-      playBtn.style.display = 'block';
     }
+  }
+  // Keep mode popup ticket counter in sync
+  const modeCounter = document.getElementById('modePopupTicketCounter');
+  if (modeCounter && gameState && gameState.mode !== 'practice') {
+    modeCounter.textContent = `🎟️ ${tickets}`;
+    modeCounter.className = 'ticket-counter' + (tickets <= 2 ? ' low' : '');
   }
 }
 

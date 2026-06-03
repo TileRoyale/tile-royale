@@ -18,6 +18,135 @@ const MIN_CLIENT_VERSION = "v0.4.5";
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// Privacy Policy page
+app.get("/privacy", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tile Royale – Privacy Policy</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.7; }
+  h1 { font-size: 28px; } h2 { font-size: 18px; margin-top: 32px; }
+  p, li { font-size: 15px; } ul { padding-left: 20px; }
+  footer { margin-top: 48px; font-size: 13px; color: #888; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy — Tile Royale</h1>
+<p><strong>Last updated: June 2, 2026</strong></p>
+<p>Tile Royale ("the Game") is developed and operated by Timo Jakimainen. This Privacy Policy explains what data we collect, why we collect it, and how we use it.</p>
+
+<h2>1. Data We Collect</h2>
+<ul>
+  <li><strong>Player ID</strong> – A randomly generated anonymous identifier (UUID) created on first launch. No account registration or login is required.</li>
+  <li><strong>Player name and avatar</strong> – The display name and emoji avatar you choose in-game.</li>
+  <li><strong>Game statistics</strong> – Match results, placements, tiles tapped, reaction times, wins, and similar gameplay data.</li>
+  <li><strong>Game save data</strong> – Your progress, currency, owned items, skins, and settings.</li>
+  <li><strong>Purchase records</strong> – A record of in-app purchases made through Google Play Billing, including product ID and purchase token. We do not store payment card details.</li>
+  <li><strong>Device and ad data</strong> – Google AdMob may collect advertising identifiers and usage data to serve ads. See the <a href="https://policies.google.com/privacy">Google Privacy Policy</a> for details.</li>
+  <li><strong>Push notification token</strong> – If you grant notification permission, an FCM token is stored to deliver game notifications.</li>
+</ul>
+
+<h2>2. How We Use Your Data</h2>
+<ul>
+  <li>To run the multiplayer game and display leaderboards and player profiles.</li>
+  <li>To save and restore your game progress across devices.</li>
+  <li>To verify in-app purchases and prevent fraud.</li>
+  <li>To send optional push notifications about game events.</li>
+  <li>To display advertisements via Google AdMob.</li>
+</ul>
+
+<h2>3. Data Storage</h2>
+<p>Game data is stored on a secure server hosted on Railway (railway.app) in the European Union. Data is retained for as long as your account is active. You may request deletion by contacting us.</p>
+
+<h2>4. Data Sharing</h2>
+<p>We do not sell your data. We share data only with the following service providers necessary to operate the Game:</p>
+<ul>
+  <li><strong>Google Play Billing</strong> – for processing in-app purchases.</li>
+  <li><strong>Google AdMob</strong> – for displaying advertisements.</li>
+  <li><strong>Firebase Cloud Messaging</strong> – for push notifications.</li>
+  <li><strong>Railway</strong> – for server hosting and database storage.</li>
+</ul>
+
+<h2>5. Children's Privacy</h2>
+<p>Tile Royale is not directed at children under 13. We do not knowingly collect personal data from children under 13. If you believe a child has provided us data, please contact us and we will delete it.</p>
+
+<h2>6. Your Rights</h2>
+<p>You may request access to, correction of, or deletion of your data at any time by contacting us. Because the Game uses an anonymous Player ID, please include the Player ID shown in your in-game profile when making a request.</p>
+
+<h2>7. Contact</h2>
+<p>Email: <a href="mailto:tileroyalegame@gmail.com">tileroyalegame@gmail.com</a></p>
+
+<h2>8. Changes to This Policy</h2>
+<p>We may update this policy from time to time. The latest version is always available at this URL.</p>
+
+<footer>© 2026 Henly Games · Tile Royale</footer>
+</body>
+</html>`);
+});
+
+// Data deletion request page
+app.get("/delete-data", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tile Royale – Data Deletion Request</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.7; }
+  h1 { font-size: 26px; } h2 { font-size: 18px; margin-top: 28px; }
+  p, li { font-size: 15px; } ul { padding-left: 20px; }
+  .step { background: #f5f5f5; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+  .step strong { display: block; margin-bottom: 4px; }
+  a { color: #1a73e8; }
+  footer { margin-top: 48px; font-size: 13px; color: #888; }
+</style>
+</head>
+<body>
+<h1>Tile Royale — Data Deletion Request</h1>
+<p>You can request deletion of all your Tile Royale data at any time. We will process your request within 30 days.</p>
+
+<h2>How to request deletion</h2>
+
+<div class="step">
+  <strong>Step 1 — Find your Player ID</strong>
+  Open Tile Royale → tap your profile icon → your Player ID is shown at the bottom of the profile screen (a long code starting with letters and numbers).
+</div>
+
+<div class="step">
+  <strong>Step 2 — Send an email</strong>
+  Email us at <a href="mailto:tileroyalegame@gmail.com">tileroyalegame@gmail.com</a> with:<br>
+  Subject: <em>Data Deletion Request</em><br>
+  Body: your Player ID
+</div>
+
+<h2>What data is deleted</h2>
+<ul>
+  <li>Player profile (name, avatar, Player ID)</li>
+  <li>Game statistics and match history</li>
+  <li>Game save data (progress, currencies, items, skins)</li>
+  <li>Purchase records</li>
+  <li>Push notification token</li>
+  <li>Friend connections and trade history</li>
+</ul>
+
+<h2>What data is retained</h2>
+<ul>
+  <li>Anonymised aggregate statistics (no personal identifiers) may be retained for up to 90 days for service improvement purposes.</li>
+</ul>
+
+<p>For questions, contact us at <a href="mailto:tileroyalegame@gmail.com">tileroyalegame@gmail.com</a>.</p>
+
+<footer>© 2026 Henly Games · Tile Royale</footer>
+</body>
+</html>`);
+});
+
 // Health check + region info (clients ping this to measure latency)
 app.get("/", (_req, res) => {
   const db = getDbStatus();

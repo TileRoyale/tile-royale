@@ -277,7 +277,7 @@ function renderAchievements() {
   hdr.textContent = '🏅 GAME ACHIEVEMENTS';
   list.appendChild(hdr);
 
-  const _CAT_SET = new Set(['general','multiplayer','speed','collection','special']);
+  const _CAT_SET = new Set(['general','multiplayer','speed','collection','special','solo']);
   const filtered = ACHIEVEMENTS.filter(a => {
     if (achCurrentFilter === 'all') return true;
     if (achCurrentFilter === 'unlocked') return unlocked.includes(a.id);
@@ -338,6 +338,11 @@ function selectMode(mode, el) {
   document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
   gameState.mode = mode;
+  // KOTH has its own dedicated screen with play button and rewards
+  if (mode === 'koth') { if (typeof openKothScreen === 'function') openKothScreen(); return; }
+  // Custom has its own lobby screen
+  if (mode === 'custom') { if (typeof openCustomLobby === 'function') openCustomLobby(); return; }
+  if (typeof openModeRewardPopup === 'function') openModeRewardPopup(mode);
 }
 
 function selectSize(size, el) {}
