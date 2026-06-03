@@ -1069,6 +1069,25 @@
     </div>
 
     <!-- ABOUT -->
+    <!-- ACCOUNT & CLOUD SAVE -->
+    <div class="settings-section-label">☁️ Account & Cloud Save</div>
+    <div class="settings-row">
+      <div class="settings-row-info">
+        <div class="settings-row-name" id="googleAuthName" style="color:var(--muted);">Not signed in</div>
+        <div class="settings-row-desc" id="googleAuthDesc">Sign in to save progress across reinstalls</div>
+      </div>
+      <button class="btn-secondary" id="googleAuthBtn" onclick="googleSignIn()"
+              style="font-size:11px;padding:6px 10px;white-space:nowrap;flex-shrink:0;">
+        Sign in with Google
+      </button>
+    </div>
+    <div class="settings-row" style="cursor:default;">
+      <div class="settings-row-info">
+        <div class="settings-row-name">Cloud Save</div>
+      </div>
+      <div id="cloudSaveStatus" style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:11px;"></div>
+    </div>
+
     <div class="settings-section-label">📖 About</div>
 
     <div class="settings-row" style="cursor:pointer;" onclick="openAbout()">
@@ -2212,6 +2231,7 @@
 
   <!-- Cloud Save (loaded last — needs getActiveServer from colyseus.js) -->
   <script src="js/systems/cloudSave.js"></script>
+  <script src="js/systems/googleAuth.js"></script>
 
   <!-- Push token registration (loaded after cloudSave — needs getActiveServer) -->
   <script src="js/systems/push.js"></script>
