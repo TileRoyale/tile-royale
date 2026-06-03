@@ -1,7 +1,9 @@
 // ===== AD REWARD SYSTEM =====
 const AD_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
-const ADMOB_REWARDED_ID = 'ca-app-pub-1687381057809117/7980217936';
+// TEST: Google's official test rewarded ad unit — always fills, never charges
+// TODO: switch back to 'ca-app-pub-1687381057809117/7980217936' before production release
+const ADMOB_REWARDED_ID = 'ca-app-pub-3940256099942544/5224354917';
 
 // ─── AdMob Bridge ─────────────────────────────────────────────────────────────
 
