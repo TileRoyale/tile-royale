@@ -383,7 +383,14 @@ function setupRoomListeners(room) {
     isMultiplayer = false;
     currentRoom = null;
     if (gameWasActive && !document.getElementById('resultScreen')?.classList.contains('active')) {
-      setTimeout(() => endGame(!playerEliminated), 300);
+      // Re-check inside the timeout: endGameFromServer may have shown the result screen
+      // in these 300ms (buffered game_over message processed after onLeave fires).
+      // Without this guard, updateAchStats is called twice and winStreak double-counts.
+      setTimeout(() => {
+        if (!document.getElementById('resultScreen')?.classList.contains('active')) {
+          endGame(!playerEliminated);
+        }
+      }, 300);
     }
   });
 }

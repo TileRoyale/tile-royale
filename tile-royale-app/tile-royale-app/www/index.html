@@ -239,24 +239,17 @@
       <div class="mode-name">Practice</div>
       <div class="mode-time" style="color:var(--green);">Solo · Speed training</div>
     </div>
-    <div class="mode-card custom-lobby-card" data-mode="custom" onclick="selectMode('custom', this)" id="customLobbyModeCard">
+    <div class="mode-card solo-card" onclick="openSoloHub()">
+      <div class="mode-icon">🏅</div>
+      <div class="mode-name">Solo Mode</div>
+      <div class="mode-time">Offline · <span id="soloMenuLives">❤️ 5</span></div>
+    </div>
+    <div class="mode-card custom-lobby-card" data-mode="custom" onclick="selectMode('custom', this)" id="customLobbyModeCard" style="grid-column: 1 / -1;">
       <div class="mode-icon" id="customLobbyIcon">🏟️</div>
       <div class="mode-name">Custom Lobby</div>
       <div class="mode-time" id="customLobbySubtext" style="color:var(--muted);">🔒 KOTH Top 3 required</div>
     </div>
   </div>
-
-  <!-- Solo Mode button -->
-  <button class="solo-menu-btn" onclick="openSoloHub()">
-    <div class="solo-menu-btn-left">
-      <div class="solo-menu-btn-icon">🎯</div>
-      <div class="solo-menu-btn-text">
-        <div class="solo-menu-btn-title">SOLO MODE</div>
-        <div class="solo-menu-btn-sub">100 levels · offline · no tickets</div>
-      </div>
-    </div>
-    <div class="solo-menu-btn-lives" id="soloMenuLives">❤️ 5</div>
-  </button>
 
   <!-- Play button moved into mode popup — kept hidden for JS ticket counter compatibility -->
   <button class="btn-play" onclick="tryFindMatch()" style="display:none;" id="btnFindMatch">
@@ -2151,6 +2144,9 @@
   </div>
 </div>
 
+<!-- Floating back button — fixed right edge, hidden during gameplay -->
+<button id="floatBackBtn" onclick="showScreen('menuScreen')" aria-label="Back to menu">‹</button>
+
   <!-- ===== JavaScript — load order matters (global scope, no bundler) ===== -->
 
   <!-- Foundation: state, save/load, avatars, XP, gameState -->
@@ -2332,10 +2328,12 @@
       <div class="solo-milestone-title" id="soloMilestoneTitle">MILESTONE!</div>
       <div style="font-size:13px;color:var(--text);margin-top:4px;" id="soloMilestoneDesc"></div>
     </div>
-    <button class="btn-play" id="soloNextLevelBtn" onclick="soloNextLevel()" style="margin-bottom:10px;background:linear-gradient(135deg,#6c2fa3,#9b59b6);">
-      NEXT LEVEL ▶
-    </button>
-    <button class="btn-secondary" style="width:100%;" onclick="soloReplayLevel()">↩ REPLAY</button>
+    <div style="margin-top:auto;width:100%;padding-top:24px;">
+      <button class="btn-play" id="soloNextLevelBtn" onclick="soloNextLevel()" style="margin-bottom:10px;background:linear-gradient(135deg,#6c2fa3,#9b59b6);">
+        NEXT LEVEL ▶
+      </button>
+      <button class="btn-secondary" style="width:100%;" onclick="soloReplayLevel()">↩ REPLAY</button>
+    </div>
   </div>
 </div>
 

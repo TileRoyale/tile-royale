@@ -1,4 +1,8 @@
 // ===== UI HELPERS =====
+const FLOAT_BACK_HIDDEN = new Set([
+  'gameScreen', 'lobbyScreen', 'menuScreen', 'onboardingScreen', 'appLoadScreen',
+]);
+
 function showScreen(id) {
   try { playSound('menu'); } catch(e) {}
   if (id === 'menuScreen') {
@@ -26,6 +30,8 @@ function showScreen(id) {
       window.scrollTo(0, 0);
     } catch(e2) {}
   }
+  const fab = document.getElementById('floatBackBtn');
+  if (fab) fab.classList.toggle('visible', !FLOAT_BACK_HIDDEN.has(id));
 }
 
 // Safe navigation wrapper — prevents black screen on any crash

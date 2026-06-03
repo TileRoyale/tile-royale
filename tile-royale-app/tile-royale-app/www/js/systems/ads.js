@@ -1,11 +1,17 @@
 // ===== AD REWARD SYSTEM =====
 const AD_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
-const ADMOB_REWARDED_ID = 'ca-app-pub-2005005437331878/4414084422';
+const ADMOB_REWARDED_ID = 'ca-app-pub-1687381057809117/7980217936';
 
 // ─── AdMob Bridge ─────────────────────────────────────────────────────────────
 
 function _adMob() {
+  // Auto-register the native AdMob plugin if the plugin bundle wasn't loaded separately.
+  // registerPlugin creates a proxy that routes calls to the native Android implementation
+  // via Capacitor.nativePromise when PluginHeaders includes 'AdMob'.
+  if (!window.Capacitor?.Plugins?.AdMob && window.Capacitor?.registerPlugin) {
+    try { window.Capacitor.registerPlugin('AdMob', {}); } catch(e) {}
+  }
   return window.Capacitor?.Plugins?.AdMob ?? null;
 }
 

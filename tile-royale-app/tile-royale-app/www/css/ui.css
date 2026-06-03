@@ -3438,36 +3438,9 @@
 }
 
 /* Solo menu button */
-.solo-menu-btn {
-  width: 100%;
-  padding: 14px;
-  background: linear-gradient(135deg, #1a0a2e, #0d0018);
-  border: 1px solid rgba(155,89,182,0.4);
-  border-radius: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  transition: all 0.2s;
-}
-.solo-menu-btn:active { transform: scale(0.98); }
-.solo-menu-btn-left { display: flex; align-items: center; gap: 10px; }
-.solo-menu-btn-icon { font-size: 22px; }
-.solo-menu-btn-text { text-align: left; }
-.solo-menu-btn-title {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 18px;
-  letter-spacing: 3px;
-  color: #c39bd3;
-}
-.solo-menu-btn-sub { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
-.solo-menu-btn-lives {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 16px;
-  letter-spacing: 1px;
-  color: #ff6b6b;
-}
+.solo-card { border-color: rgba(155,89,182,0.3) !important; }
+.solo-card .mode-name { color: #c39bd3; }
+.solo-card:active { border-color: rgba(155,89,182,0.7) !important; background: rgba(155,89,182,0.06) !important; }
 
 /* Solo screens — do NOT set display here; .screen/.screen.active handles show/hide */
 #soloScreen, #soloLevelSelectScreen, #soloPreLevelScreen {
@@ -3704,9 +3677,10 @@
   display: none;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   text-align: center;
   padding: 24px;
+  padding-top: 15vh;
 }
 #soloLevelCompleteOverlay.show { display: flex; }
 .solo-complete-title {
@@ -3743,5 +3717,36 @@
   letter-spacing: 3px;
   color: var(--gold);
   margin-bottom: 4px;
+}
+
+/* ===== FLOATING BACK BUTTON ===== */
+#floatBackBtn {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 56px;
+  background: rgba(20, 20, 30, 0.88);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  color: rgba(255,255,255,0.7);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#floatBackBtn.visible { display: flex; }
+#floatBackBtn:active {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
 }
 
