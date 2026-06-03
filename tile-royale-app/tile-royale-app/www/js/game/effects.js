@@ -279,23 +279,7 @@ const _existingLevelUpCheck = window._levelUpNotified;
 // ── AD TICKET (LEVEL 5) ─────────────────────────────────────────────
 function watchAdForTicketLevel5() {
   if ((gameState.level||1) < 3) { showToast('🔒 Unlocks at level 3!', 'var(--muted)'); return; }
-  const overlay = document.getElementById('adLoadingOverlay');
-  overlay.classList.add('show');
-  let count = 3;
-  document.getElementById('adCountdown').textContent = count;
-  const tick = setInterval(() => {
-    count--;
-    document.getElementById('adCountdown').textContent = count;
-    if (count <= 0) {
-      clearInterval(tick);
-      overlay.classList.remove('show');
-      const maxT = _origGetTicketsMax();
-      gameState.tickets = Math.min(maxT, (gameState.tickets||0) + 1);
-      saveState();
-      updateTicketUI();
-      showToast('🎟️ +1 Ticket from ad!', 'var(--green)');
-    }
-  }, 1000);
+  watchAdsForTickets(1);
 }
 
 // ── SPIN WHEEL ──────────────────────────────────────────────────────

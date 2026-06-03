@@ -807,37 +807,24 @@ function getAdSpinsUsedToday() {
   return gameState.adSpinsUsed || 0;
 }
 
-function watchAdForSpin() {
+async function watchAdForSpin() {
   const adUsed = getAdSpinsUsedToday();
   if (adUsed >= AD_SPINS_MAX) {
     showToast('📺 No more ad spins today (3/3 used)', 'var(--muted)');
     return;
   }
-
-  const overlay = document.getElementById('adLoadingOverlay');
-  overlay.classList.add('show');
-  let count = 3;
-  document.getElementById('adCountdown').textContent = count;
   document.getElementById('adSpinBtn').disabled = true;
-
-  const tick = setInterval(() => {
-    count--;
-    document.getElementById('adCountdown').textContent = count;
-    if (count <= 0) {
-      clearInterval(tick);
-      overlay.classList.remove('show');
-      document.getElementById('adSpinBtn').disabled = false;
-
-      // Grant and immediately execute spin
-      gameState.adSpinsUsed = (gameState.adSpinsUsed||0) + 1;
-      gameState.dailyAdSpins = gameState.adSpinsUsed; // alias for spec compliance
-      gameState.spinsToday  = (gameState.spinsToday||0) + 1;
-      saveState();
-      showToast('📺 Ad watched — spinning! 🎡', 'var(--gold)');
-      updateGauntletSpinUI();
-      _executeSpin();
-    }
-  }, 1000);
+  showToast('📺 Loading ad...', 'var(--muted)');
+  const rewarded = await _watchRewardedAd();
+  document.getElementById('adSpinBtn').disabled = false;
+  if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
+  gameState.adSpinsUsed = (gameState.adSpinsUsed||0) + 1;
+  gameState.dailyAdSpins = gameState.adSpinsUsed;
+  gameState.spinsToday  = (gameState.spinsToday||0) + 1;
+  saveState();
+  showToast('📺 Ad watched — spinning! 🎡', 'var(--gold)');
+  updateGauntletSpinUI();
+  _executeSpin();
 }
 
 let _freeSpinCdInterval = null;
