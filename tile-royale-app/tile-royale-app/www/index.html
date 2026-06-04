@@ -2220,7 +2220,7 @@
 </div>
 
 <!-- Floating back button — fixed right edge, hidden during gameplay -->
-<button id="floatBackBtn" onclick="showScreen('menuScreen')" aria-label="Back to menu">‹</button>
+<button id="floatBackBtn" onclick="handleFloatBack()" aria-label="Back to menu">‹</button>
 
   <!-- ===== JavaScript — load order matters (global scope, no bundler) ===== -->
 
@@ -2419,14 +2419,94 @@
   <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:12px;">
     <button class="btn-secondary screen-back-btn" onclick="showScreen('gauntletScreen')">← BACK</button>
     <div class="screen-title" style="color:#9b00ff;font-size:20px;">⚔️ GAUNTLET</div>
-    <div style="width:80px;"></div>
+    <button onclick="document.getElementById('gmHelpPopup').style.display='flex'" style="width:34px;height:34px;border-radius:50%;background:rgba(155,0,255,0.2);border:1px solid rgba(155,0,255,0.5);color:#fff;font-size:16px;font-weight:bold;cursor:pointer;line-height:1;flex-shrink:0;">?</button>
   </div>
 
-  <div class="gh-mmr-card">
+  <div class="gh-mmr-card" style="position:relative;">
+    <button onclick="document.getElementById('ghRewardsPopup').style.display='flex'" style="position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(255,215,0,0.12);border:1px solid rgba(255,215,0,0.35);color:#ffd700;font-size:16px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">🏆</button>
     <div class="gh-mmr-value" id="ghMmrValue">0</div>
     <div class="gh-mmr-label">MMR</div>
     <div class="gh-mmr-rank" id="ghMmrRank">Unranked</div>
+    <div id="ghPlacementBadge" style="margin-top:10px;"></div>
+    <div id="ghRewardPreview" style="margin-top:6px;font-size:11px;color:rgba(255,255,255,0.4);letter-spacing:1px;"></div>
     <div class="gh-season-timer" id="ghSeasonTimer" style="margin-top:8px;">Season ends in — days</div>
+  </div>
+
+  <!-- Rewards popup -->
+  <div id="ghRewardsPopup" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:10000;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+    <div style="background:linear-gradient(180deg,#0d0020,#070010);border:1px solid rgba(155,0,255,0.4);border-radius:18px;padding:20px 18px;max-width:360px;width:100%;max-height:85vh;overflow-y:auto;position:relative;">
+      <button onclick="document.getElementById('ghRewardsPopup').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:rgba(255,255,255,0.4);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:#ffd700;margin-bottom:4px;">🏆 WEEKLY REWARDS</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);letter-spacing:1px;margin-bottom:16px;">Distributed every Monday based on your ranking</div>
+
+      <!-- Weekly rewards table -->
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.3);">
+          <div style="font-size:18px;">👑</div>
+          <div style="flex:1;">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1.5px;color:#ffd700;">#1 PLACE</div>
+          </div>
+          <div style="text-align:right;font-size:12px;color:#ffd700;letter-spacing:1px;">40 spins + 400💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(255,200,0,0.06);border:1px solid rgba(255,200,0,0.2);">
+          <div style="font-size:16px;">🥇</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#ffcc00;">TOP 2%</div></div>
+          <div style="text-align:right;font-size:12px;color:#ffcc00;letter-spacing:1px;">25 spins + 250💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(255,136,0,0.06);border:1px solid rgba(255,136,0,0.2);">
+          <div style="font-size:16px;">🥈</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#ff8800;">TOP 3%</div></div>
+          <div style="text-align:right;font-size:12px;color:#ff8800;letter-spacing:1px;">20 spins + 200💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(255,100,0,0.06);border:1px solid rgba(255,100,0,0.2);">
+          <div style="font-size:16px;">🥉</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#ff6600;">TOP 5%</div></div>
+          <div style="text-align:right;font-size:12px;color:#ff6600;letter-spacing:1px;">15 spins + 150💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(155,0,255,0.06);border:1px solid rgba(155,0,255,0.2);">
+          <div style="font-size:16px;">⚔️</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#9b00ff;">TOP 10%</div></div>
+          <div style="text-align:right;font-size:12px;color:#9b00ff;letter-spacing:1px;">10 spins + 100💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(100,0,200,0.06);border:1px solid rgba(100,0,200,0.18);">
+          <div style="font-size:16px;">⚔️</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#6400c8;">TOP 25%</div></div>
+          <div style="text-align:right;font-size:12px;color:#6400c8;letter-spacing:1px;">7 spins + 70💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.15);">
+          <div style="font-size:16px;">🎯</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#00e5ff;">TOP 50%</div></div>
+          <div style="text-align:right;font-size:12px;color:#00e5ff;letter-spacing:1px;">5 spins + 50💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);">
+          <div style="font-size:16px;">🎯</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:rgba(255,255,255,0.55);">TOP 75%</div></div>
+          <div style="text-align:right;font-size:12px;color:rgba(255,255,255,0.55);letter-spacing:1px;">3 spins + 30💎</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);">
+          <div style="font-size:16px;">🎯</div>
+          <div style="flex:1;"><div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:rgba(255,255,255,0.35);">TOP 100%</div></div>
+          <div style="text-align:right;font-size:12px;color:rgba(255,255,255,0.35);letter-spacing:1px;">1 spin + 10💎</div>
+        </div>
+      </div>
+
+      <!-- Season end rewards -->
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:3px;color:#9b00ff;margin-bottom:10px;">⭐ SEASON END REWARDS</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">
+        <div style="padding:9px 12px;border-radius:10px;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.25);font-size:12px;color:var(--text);line-height:1.6;">
+          <span style="color:#ffd700;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;">TOP 1%</span> — 👑 Avatar "Void Conqueror" + 🎨 Table "Season of the Void" + 💣 Void Bomb Effect
+        </div>
+        <div style="padding:9px 12px;border-radius:10px;background:rgba(155,0,255,0.05);border:1px solid rgba(155,0,255,0.2);font-size:12px;color:var(--text);line-height:1.6;">
+          <span style="color:#9b00ff;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;">TOP 2–5%</span> — 🎨 Table Skin "Season of the Void"
+        </div>
+        <div style="padding:9px 12px;border-radius:10px;background:rgba(155,0,255,0.04);border:1px solid rgba(155,0,255,0.15);font-size:12px;color:var(--text);line-height:1.6;">
+          <span style="color:#7b00cc;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;">TOP 6–10%</span> — 💣 Void Bomb tile/tap effect
+        </div>
+      </div>
+
+      <button onclick="document.getElementById('ghRewardsPopup').style.display='none'" style="width:100%;padding:11px;background:linear-gradient(135deg,#4a00aa,#9b00ff);border:none;border-radius:10px;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:3px;cursor:pointer;">CLOSE</button>
+    </div>
   </div>
 
   <div class="gh-leaderboard">
@@ -2434,8 +2514,17 @@
     <div id="ghLeaderboard"></div>
   </div>
 
-  <button class="btn-play" style="width:100%;background:linear-gradient(135deg,#4a00aa,#9b00ff);box-shadow:0 0 20px rgba(155,0,255,0.4);" onclick="startGauntletLobby()">
-    ⚔ PLAY
+  <!-- Key display -->
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 14px;background:rgba(0,0,0,0.3);border:1px solid rgba(155,0,255,0.2);border-radius:12px;margin-bottom:2px;">
+    <div>
+      <div id="ghKeyCount" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:#fff;">🔑 10 / 10</div>
+      <div id="ghKeyTimer" style="font-size:10px;color:rgba(155,0,255,0.7);letter-spacing:1.5px;margin-top:1px;">Full</div>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.3);letter-spacing:1px;text-align:right;">+1 per hour<br>max 10</div>
+  </div>
+
+  <button id="ghPlayBtn" class="btn-play" style="width:100%;background:linear-gradient(135deg,#4a00aa,#9b00ff);box-shadow:0 0 20px rgba(155,0,255,0.4);" onclick="gmStartOrNoKey()">
+    ⚔ PLAY &nbsp;<span style="font-size:14px;opacity:0.8;">🔑</span>
   </button>
 
   <!-- Gauntlet Mode ring effects panel -->
@@ -2461,6 +2550,10 @@
 
     <div class="gl-players-found" id="glPlayersFound">0 players found</div>
     <div class="gl-search-range" id="glSearchRange">Searching ±100 MMR</div>
+
+    <div style="margin-top:14px;padding:8px 14px;background:rgba(255,180,0,0.07);border:1px solid rgba(255,180,0,0.25);border-radius:10px;max-width:280px;text-align:center;">
+      <div style="font-size:11px;color:rgba(255,180,0,0.85);line-height:1.5;">During test period, bots are enabled. Upon official release bots will be disabled in Gauntlet!</div>
+    </div>
 
     <div style="margin-top:16px;padding:10px 16px;background:var(--panel);border:1px solid var(--border);border-radius:10px;">
       <div style="font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:2px;">YOUR MMR</div>
@@ -2489,7 +2582,8 @@
       <div style="font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:2px;">TIME</div>
       <div class="gm-timer-display" id="gmTimer">35</div>
     </div>
-    <div style="text-align:right;">
+    <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+      <button onclick="_gmConfirmLeave()" style="font-size:9px;letter-spacing:1.5px;color:rgba(255,255,255,0.45);background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:2px 7px;cursor:pointer;font-family:'Bebas Neue',sans-serif;">LEAVE</button>
       <div style="font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:2px;">ALIVE</div>
       <div class="gm-alive-count" id="gmAlive">—</div>
     </div>
@@ -2504,6 +2598,7 @@
 
   <!-- 5x5 grid -->
   <div class="gm-grid" id="gmGrid"></div>
+
 </div>
 
 <!-- ===== GAUNTLET RESULTS ===== -->
@@ -2541,6 +2636,50 @@
   <div style="width:100%;display:flex;flex-direction:column;gap:8px;padding-bottom:8px;">
     <button class="btn-play" style="background:linear-gradient(135deg,#4a00aa,#9b00ff);" onclick="startGauntletLobby()">⚔ PLAY AGAIN</button>
     <button class="btn-secondary" style="width:100%;" onclick="showScreen('gauntletHubScreen');renderGauntletHub()">← BACK TO GAUNTLET</button>
+  </div>
+</div>
+
+<!-- ===== GAUNTLET HELP POPUP ===== -->
+<div id="gmHelpPopup" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+  <div style="background:linear-gradient(180deg,#0d0020,#070010);border:1px solid rgba(155,0,255,0.4);border-radius:18px;padding:22px 18px;max-width:360px;width:100%;max-height:80vh;overflow-y:auto;position:relative;">
+    <button onclick="document.getElementById('gmHelpPopup').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:rgba(255,255,255,0.5);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:#9b00ff;margin-bottom:16px;">⚔ HOW TO PLAY</div>
+
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:2px;margin-bottom:6px;font-family:'Bebas Neue',sans-serif;">GOAL</div>
+    <div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:14px;">Tap tiles that match the colour shown in the <b style="color:#9b00ff;">TARGET indicator</b>. Each correct tap scores +10 points. Each wrong tap costs −10 points.</div>
+
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:2px;margin-bottom:6px;font-family:'Bebas Neue',sans-serif;">COLOURS</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;background:#4a4a4a;border:1px solid #888;color:#fff;">GREY — Common</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;background:#1a4a1a;border:1px solid #00cc00;color:#fff;">GREEN — Uncommon</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;background:#0a1a4a;border:1px solid #0066ff;color:#fff;">BLUE — Rare</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;background:#2a0a4a;border:1px solid #9b00ff;color:#fff;">PURPLE — Epic</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;background:#4a2a00;border:1px solid #ff8800;color:#fff;">ORANGE — Legendary</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;background:#4a0000;border:1px solid #ff0000;color:#fff;">RED — Secret</span>
+    </div>
+
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:2px;margin-bottom:6px;font-family:'Bebas Neue',sans-serif;">VOID BOMBS</div>
+    <div style="background:rgba(155,0,255,0.08);border:1px solid rgba(155,0,255,0.3);border-radius:10px;padding:12px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <img src="img/void-bomb.svg" style="width:36px;height:36px;flex-shrink:0;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:#9b00ff;">VOID BOMB</div>
+      </div>
+      <div style="font-size:13px;color:var(--text);line-height:1.6;">
+        Appear on the grid with a <b style="color:#ff4444;">countdown timer</b>. If it reaches 0.0 you are <b style="color:#ff4444;">ELIMINATED</b> and score resets to 0.<br><br>
+        Tap a void bomb to <b style="color:#00ff88;">defuse it for +20 points</b>. Rings' Survival Bonus can save you from an explosion.
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:2px;margin-bottom:6px;font-family:'Bebas Neue',sans-serif;">SCORING</div>
+    <div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:14px;">Round lasts <b>35 seconds</b>. Highest score wins. Rings boost score, reduce penalties and extend void bomb timers.</div>
+
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:2px;margin-bottom:6px;font-family:'Bebas Neue',sans-serif;">FAIR PLAY</div>
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:13px;color:var(--text);line-height:1.6;">
+      All players receive the <b style="color:#9b00ff;">same tile sequence</b> (server seed) — the same colours appear at the same positions for everyone. Only your <b>speed and accuracy</b> determine the winner.
+    </div>
+
+    <button onclick="document.getElementById('gmHelpPopup').style.display='none'" style="width:100%;padding:12px;background:linear-gradient(135deg,#4a00aa,#9b00ff);border:none;border-radius:10px;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:3px;cursor:pointer;">GOT IT</button>
   </div>
 </div>
 

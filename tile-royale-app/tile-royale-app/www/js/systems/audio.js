@@ -19,7 +19,8 @@ const _SFX_DEF = {
   achieve:   { file: 'audio/reward.wav',       vol: 0.70, pool: 2 },
   menu:      { file: 'audio/menu_click.wav',   vol: 0.65, pool: 3 },
   tick:      { file: 'audio/menu_click.wav',   vol: 0.50, pool: 3 },
-  wheelspin: { file: 'audio/wheel_spin.wav',  vol: 0.85, pool: 1 },
+  wheelspin:  { file: 'audio/wheel_spin.wav',         vol: 0.85, pool: 1 },
+  void_bomb:  { file: 'audio/void-bomb-explosion.wav', vol: 1.00, pool: 3 },
 };
 
 const _MUSIC_SRC = {

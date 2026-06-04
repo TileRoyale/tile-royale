@@ -4,12 +4,18 @@
 const GM_GRID_SIZE      = 25;       // 5×5
 const GM_ROUND_SECS     = 35;
 const GM_BASE_SPAWN_MS  = 600;
-const GM_TILE_LIFE_MS   = 3200;     // regular tiles vanish after this
-const GM_VOID_DURATION  = 1.0;      // seconds
+const GM_TILE_LIFE_MS   = 4000;     // regular tiles vanish after this
+const GM_VOID_DURATION  = 1.2;      // seconds
 const GM_MAX_VOID_BOMBS = 2;
 const GM_SCORE_CORRECT  = 10;
 const GM_SCORE_WRONG    = -10;
 const GM_BOT_COUNT      = 29;       // simulated opponents (total lobby = 30)
+
+// ── Key system ──
+const GM_KEYS_MAX       = 10;
+const GM_KEY_REFILL_MS  = 60 * 60 * 1000;   // 1 key per 60 min
+const GM_KEY_GEM_COST   = 100;
+let _gmKeyTimerInterval = null;
 
 const GM_COLOURS = ['common','uncommon','rare','epic','legendary','secret'];
 const GM_COLOUR_LABELS = {
@@ -49,6 +55,147 @@ function gmSaveData(d) {
   localStorage.setItem('gauntletData', JSON.stringify(d));
 }
 
+// ── Key system ──
+function gmGetKeys() {
+  const gd = gmLoadData();
+  return Math.max(0, Math.min(GM_KEYS_MAX, gd.keys ?? GM_KEYS_MAX));
+}
+
+function gmCheckKeyRefill() {
+  const gd = gmLoadData();
+  if ((gd.keys ?? GM_KEYS_MAX) >= GM_KEYS_MAX) {
+    gd.keyLastUse = null;
+    gmSaveData(gd);
+    return;
+  }
+  const last = gd.keyLastUse;
+  if (!last) return;
+  const refills = Math.floor((Date.now() - last) / GM_KEY_REFILL_MS);
+  if (refills > 0) {
+    const newKeys = Math.min(GM_KEYS_MAX, (gd.keys ?? 0) + refills);
+    gd.keys       = newKeys;
+    gd.keyLastUse = newKeys >= GM_KEYS_MAX ? null : last + refills * GM_KEY_REFILL_MS;
+    gmSaveData(gd);
+  }
+}
+
+function gmKeyRefillTime() {
+  const gd = gmLoadData();
+  if ((gd.keys ?? GM_KEYS_MAX) >= GM_KEYS_MAX) return null;
+  const last = gd.keyLastUse || Date.now();
+  const diff  = Math.max(0, (last + GM_KEY_REFILL_MS) - Date.now());
+  const m = Math.floor(diff / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function gmUseKey() {
+  gmCheckKeyRefill();
+  const gd = gmLoadData();
+  const cur = gd.keys ?? GM_KEYS_MAX;
+  if (cur <= 0) return false;
+  gd.keys = cur - 1;
+  if (!gd.keyLastUse) gd.keyLastUse = Date.now();
+  gmSaveData(gd);
+  gmUpdateKeyUI();
+  return true;
+}
+
+function gmAddKey(n = 1) {
+  const gd  = gmLoadData();
+  const cur = gd.keys ?? GM_KEYS_MAX;
+  gd.keys   = Math.min(GM_KEYS_MAX, cur + n);  // hard cap at 10
+  if (!gd.keyLastUse && gd.keys < GM_KEYS_MAX) gd.keyLastUse = Date.now();
+  gmSaveData(gd);
+  gmUpdateKeyUI();
+}
+
+function gmUpdateKeyUI() {
+  gmCheckKeyRefill();
+  const keys   = gmGetKeys();
+  const timer  = gmKeyRefillTime();
+  const keyEl  = document.getElementById('ghKeyCount');
+  const timerEl= document.getElementById('ghKeyTimer');
+  const playBtn= document.getElementById('ghPlayBtn');
+
+  if (keyEl) {
+    keyEl.textContent = `🔑 ${keys} / ${GM_KEYS_MAX}`;
+    keyEl.style.color = keys === 0 ? '#ff4444' : keys <= 2 ? '#ff8800' : '#fff';
+  }
+  if (timerEl) {
+    timerEl.textContent = keys >= GM_KEYS_MAX ? 'Full' : timer ? `+1 in ${timer}` : '';
+  }
+  if (playBtn) {
+    playBtn.disabled = false;
+    playBtn.style.opacity = '1';
+  }
+
+  // Restart countdown timer
+  clearInterval(_gmKeyTimerInterval);
+  if (keys < GM_KEYS_MAX) {
+    _gmKeyTimerInterval = setInterval(() => {
+      gmCheckKeyRefill();
+      const k  = gmGetKeys();
+      const t  = gmKeyRefillTime();
+      const kEl = document.getElementById('ghKeyCount');
+      const tEl = document.getElementById('ghKeyTimer');
+      if (kEl) { kEl.textContent = `🔑 ${k} / ${GM_KEYS_MAX}`; kEl.style.color = k === 0 ? '#ff4444' : k <= 2 ? '#ff8800' : '#fff'; }
+      if (tEl) tEl.textContent = k >= GM_KEYS_MAX ? 'Full' : t ? `+1 in ${t}` : '';
+      if (k >= GM_KEYS_MAX) clearInterval(_gmKeyTimerInterval);
+    }, 1000);
+  }
+}
+
+async function gmWatchAdForKey() {
+  const btn = document.getElementById('ghAdKeyBtn');
+  if (btn) btn.disabled = true;
+  showToast('📺 Loading ad...', 'var(--muted)');
+  const rewarded = await _watchRewardedAd();
+  if (btn) btn.disabled = false;
+  if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
+  gmAddKey(1);
+  document.getElementById('ghNoKeyPopup')?.remove();
+  showToast('🔑 Key earned! Let\'s go!', '#ffd700');
+  playSound('achieve');
+}
+
+function gmBuyKeyWithGems() {
+  if ((gameState.diamonds || 0) < GM_KEY_GEM_COST) {
+    showToast(`Need 💎 ${GM_KEY_GEM_COST}!`, 'var(--red)'); return;
+  }
+  gameState.diamonds -= GM_KEY_GEM_COST;
+  saveState();
+  gmAddKey(1);
+  document.getElementById('ghNoKeyPopup')?.remove();
+  showToast('🔑 Key purchased!', '#ffd700');
+  playSound('achieve');
+}
+
+function gmShowNoKeyPopup() {
+  const existing = document.getElementById('ghNoKeyPopup');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ghNoKeyPopup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  const timer = gmKeyRefillTime();
+  overlay.innerHTML = `
+    <div style="background:linear-gradient(180deg,#0d0020,#070010);border:1px solid rgba(155,0,255,0.4);border-radius:18px;padding:24px 20px;max-width:320px;width:100%;text-align:center;">
+      <div style="font-size:40px;margin-bottom:10px;">🔑</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:#fff;margin-bottom:6px;">NO KEYS LEFT</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.45);letter-spacing:1px;margin-bottom:${timer ? '4px' : '18px'};">Keys regenerate 1 per hour (max ${GM_KEYS_MAX})</div>
+      ${timer ? `<div style="font-size:13px;color:#9b00ff;letter-spacing:1px;margin-bottom:18px;">Next key in <b>${timer}</b></div>` : ''}
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+        <button id="ghAdKeyBtn" style="padding:13px;border-radius:12px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.35);color:#ffd700;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;cursor:pointer;" onclick="gmWatchAdForKey()">📺 WATCH AD — FREE KEY</button>
+        <button style="padding:13px;border-radius:12px;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.3);color:var(--diamond);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;cursor:pointer;" onclick="gmBuyKeyWithGems()">💎 ${GM_KEY_GEM_COST} GEMS — GET KEY</button>
+      </div>
+      <button style="width:100%;padding:10px;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:rgba(255,255,255,0.4);font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;cursor:pointer;" onclick="document.getElementById('ghNoKeyPopup').remove()">CLOSE</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
 // ── Ring effects ──
 function gmGetRingEffects() {
   const equipped = gameState.gauntlet || {};
@@ -85,7 +232,8 @@ function gmRollSurvival() {
 }
 
 // ── Game state ──
-let _gm = null;
+let _gm     = null;
+let _gmRoom = null;   // active Colyseus gauntlet room (null = bot fallback)
 
 function _gmReset() {
   _gm = {
@@ -140,9 +288,20 @@ function gmSeasonDaysLeft() {
 function openGauntletHub() {
   const gd = gmLoadData();
   if (gameState.gauntletUnlocked) gd.gauntletUnlocked = true;
+  gmCheckKeyRefill();
   renderGauntletHub(gd);
+  gmUpdateKeyUI();
   try { renderGauntletModeEffects(); } catch(e) {}
   showScreen('gauntletHubScreen');
+}
+
+function gmStartOrNoKey() {
+  gmCheckKeyRefill();
+  if (gmGetKeys() <= 0) {
+    gmShowNoKeyPopup();
+    return;
+  }
+  startGauntletLobby();
 }
 
 function renderGauntletHub(gd) {
@@ -154,6 +313,17 @@ function renderGauntletHub(gd) {
   if (el('ghMmrValue'))  el('ghMmrValue').textContent  = mmr.toLocaleString();
   if (el('ghMmrRank'))   el('ghMmrRank').textContent   = gmRankLabel(mmr);
   if (el('ghSeasonTimer')) el('ghSeasonTimer').textContent = `Season ends in ${gmSeasonDaysLeft()} days`;
+
+  // Placement % and reward tier
+  const place = _gmPlacementInfo(mmr);
+  const badgeEl = el('ghPlacementBadge');
+  const rewardEl = el('ghRewardPreview');
+  if (badgeEl) {
+    badgeEl.innerHTML = `<span style="display:inline-block;padding:3px 12px;border-radius:14px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;background:${place.bg};color:${place.color};border:1px solid ${place.color}44;">${place.label}</span>`;
+  }
+  if (rewardEl) {
+    rewardEl.textContent = `Weekly reward: ${place.reward}`;
+  }
 
   // Weekly leaderboard (simulated — shows own entry + placeholders)
   const lb = el('ghLeaderboard');
@@ -169,6 +339,24 @@ function renderGauntletHub(gd) {
   }
 }
 
+// Maps player rank in leaderboard → placement % tier → weekly reward info
+function _gmPlacementInfo(myMmr) {
+  const rows  = _gmDefaultLeaderboard(myMmr);
+  const total = rows.length;
+  const rank  = rows.findIndex(r => r.name === (gameState.playerName || 'You')) + 1 || total;
+  const pct   = rank / total * 100;
+
+  if (rank === 1)   return { label:'#1 THIS WEEK', color:'#ffd700', bg:'rgba(255,215,0,0.08)',    reward:'40 spins + 400💎' };
+  if (pct <= 2)     return { label:'TOP 2%',        color:'#ffd700', bg:'rgba(255,215,0,0.08)',    reward:'25 spins + 250💎' };
+  if (pct <= 3)     return { label:'TOP 3%',        color:'#ff8800', bg:'rgba(255,136,0,0.08)',    reward:'20 spins + 200💎' };
+  if (pct <= 5)     return { label:'TOP 5%',        color:'#ff8800', bg:'rgba(255,136,0,0.08)',    reward:'15 spins + 150💎' };
+  if (pct <= 10)    return { label:'TOP 10%',       color:'#9b00ff', bg:'rgba(155,0,255,0.08)',    reward:'10 spins + 100💎' };
+  if (pct <= 25)    return { label:'TOP 25%',       color:'#9b00ff', bg:'rgba(155,0,255,0.08)',    reward:'7 spins + 70💎' };
+  if (pct <= 50)    return { label:'TOP 50%',       color:'#00e5ff', bg:'rgba(0,229,255,0.06)',    reward:'5 spins + 50💎' };
+  if (pct <= 75)    return { label:'TOP 75%',       color:'rgba(255,255,255,0.5)', bg:'rgba(255,255,255,0.04)', reward:'3 spins + 30💎' };
+  return               { label:'TOP 100%',      color:'rgba(255,255,255,0.35)', bg:'rgba(255,255,255,0.03)', reward:'1 spin + 10💎' };
+}
+
 function _gmDefaultLeaderboard(myMmr) {
   const names = ['VoidSlayer','CrimsonAce','PhantomX','DarkMatter','NeonRift'];
   return names.map((name, i) => ({
@@ -181,38 +369,119 @@ function _gmDefaultLeaderboard(myMmr) {
 let _gmLobbyId   = null;
 let _gmLobbyTick = 0;
 
-function startGauntletLobby() {
+async function startGauntletLobby() {
   try { _gmRestoreResultButtons(); } catch(e) {}
-  const gd = gmLoadData();
+  if (!gmUseKey()) { gmShowNoKeyPopup(); return; }
+
+  const gd    = gmLoadData();
   const myMmr = gd.mmr || 0;
 
   const glMmr = document.getElementById('glYourMmr');
   if (glMmr) glMmr.textContent = myMmr;
 
   _gmLobbyTick = 0;
-  _gmUpdateLobbyUI(0, 0);
-
+  _gmUpdateLobbyUI(15, 0);
   showScreen('gauntletLobbyScreen');
   playSound('menu');
 
+  // Try to join a real Colyseus gauntlet room
+  const client = (typeof getColyseusClient === 'function') ? getColyseusClient() : null;
+  if (!client) { _gmStartBotFallback(); return; }
+
+  try {
+    const effects  = gmGetRingEffects();
+    const av       = (typeof getActiveAvatar === 'function') ? getActiveAvatar().icon : '🔥';
+    _gmRoom = await client.joinOrCreate('gauntlet', {
+      playerId: PLAYER_ID,
+      name:     (gameState.playerName || 'Player').substring(0, 16),
+      avatar:   av,
+      mmr:      myMmr,
+      effects,
+    });
+    console.log('[Gauntlet] Joined room:', _gmRoom.id);
+    _gmSetupRoomListeners();
+
+    // Local lobby timer for UI (server controls actual start)
+    let lobbySecsLeft = 15;
+    clearInterval(_gmLobbyId);
+    _gmLobbyId = setInterval(() => {
+      lobbySecsLeft--;
+      const n = (_gmRoom?.state?.playerCount || 1) - 1;
+      _gmUpdateLobbyUI(lobbySecsLeft, n);
+      if (lobbySecsLeft <= 0) clearInterval(_gmLobbyId);
+    }, 1000);
+  } catch (err) {
+    console.warn('[Gauntlet] Server join failed, bot fallback:', err?.message || err);
+    _gmRoom = null;
+    _gmStartBotFallback();
+  }
+}
+
+function _gmSetupRoomListeners() {
+  if (!_gmRoom) return;
+
+  // Live player count during lobby
+  _gmRoom.state.players.onAdd(() => {
+    if (_gmRoom.state.phase !== 'lobby') return;
+    const n = _gmRoom.state.playerCount || 1;
+    _gmUpdateLobbyUI(_gmRoom.state.countdownValue ?? 15, n - 1);
+  });
+
+  _gmRoom.onMessage('ping', data => {
+    try { _gmRoom.send('pong', { id: data.id }); } catch(e) {}
+  });
+
+  _gmRoom.onMessage('game_start', data => {
+    clearInterval(_gmLobbyId);
+    _gmStartGame(30, data.targetColour);
+  });
+
+  _gmRoom.onMessage('score_update', data => {
+    // Sync server score — find our sessionId entry
+    const sid = _gmRoom.sessionId;
+    if (data.scores && data.scores[sid] !== undefined && _gm) {
+      _gm.score = data.scores[sid];
+      _gmUpdateHud();
+    }
+    if (data.timeLeft !== undefined && _gm) {
+      _gm.timeLeft = data.timeLeft;
+      _gmUpdateHud();
+    }
+  });
+
+  _gmRoom.onMessage('results', data => {
+    _gmHandleServerResults(data);
+  });
+
+  _gmRoom.onLeave(code => {
+    console.log('[Gauntlet] Left room, code:', code);
+    _gmRoom = null;
+  });
+
+  _gmRoom.onError((code, msg) => {
+    console.error('[Gauntlet] Room error:', code, msg);
+  });
+}
+
+// Old bot-only path — used when server is unreachable
+function _gmStartBotFallback() {
+  _gmLobbyTick = 0;
   clearInterval(_gmLobbyId);
   _gmLobbyId = setInterval(() => {
     _gmLobbyTick++;
-    const totalSecs = 15; // TEST: restore to 90 after test period
+    const totalSecs = 15;
     const secsLeft  = totalSecs - _gmLobbyTick;
 
-    // Simulated players accumulating
     let playersFound;
-    if (_gmLobbyTick <= 30)      playersFound = Math.min(GM_BOT_COUNT, Math.round((_gmLobbyTick / 30) * 12));
-    else if (_gmLobbyTick <= 60) playersFound = Math.min(GM_BOT_COUNT, 12 + Math.round(((_gmLobbyTick-30)/30) * 12));
-    else                         playersFound = Math.min(GM_BOT_COUNT, 24 + Math.round(((_gmLobbyTick-60)/30) * 5));
+    if (_gmLobbyTick <= 5)       playersFound = Math.min(GM_BOT_COUNT, Math.round((_gmLobbyTick / 5) * 15));
+    else if (_gmLobbyTick <= 10) playersFound = Math.min(GM_BOT_COUNT, 15 + Math.round(((_gmLobbyTick-5)/5) * 12));
+    else                         playersFound = Math.min(GM_BOT_COUNT, 27 + Math.round(((_gmLobbyTick-10)/5) * 2));
 
     _gmUpdateLobbyUI(secsLeft, playersFound);
 
-    // Start when lobby fills or timer hits 0 (min 2 players total)
     if (secsLeft <= 0 || playersFound >= GM_BOT_COUNT) {
       clearInterval(_gmLobbyId);
-      _gmStartGame(playersFound + 1); // +1 = human player
+      _gmStartGame(playersFound + 1);
     }
   }, 1000);
 }
@@ -232,36 +501,53 @@ function _gmUpdateLobbyUI(secsLeft, playersFound) {
 function cancelGauntletLobby() {
   clearInterval(_gmLobbyId);
   _gmLobbyId = null;
+  if (_gmRoom) {
+    try { _gmRoom.leave(); } catch(e) {}
+    _gmRoom = null;
+  }
+  // Refund the key — game never started
+  gmAddKey(1);
+  showToast('🔑 Key refunded', 'var(--muted)');
   showScreen('gauntletHubScreen');
   renderGauntletHub();
+  gmUpdateKeyUI();
 }
 
 // ── Game start ──
-function _gmStartGame(totalPlayers) {
+function _gmStartGame(totalPlayers, serverTargetColour) {
   _gmReset();
-  _gm.active   = true;
-  _gm.effects  = gmGetRingEffects();
-  _gm.timeLeft = GM_ROUND_SECS;
+  _gm.active      = true;
+  _gm.effects     = gmGetRingEffects();
+  _gm.timeLeft    = GM_ROUND_SECS;
+  _gm.totalPlayers = totalPlayers || 30;
 
-  // Seeded random target colour
-  _gm.targetColour = GM_COLOURS[Math.floor(Math.random() * GM_COLOURS.length)];
+  // Use server-provided target colour if in multiplayer, else random
+  _gm.targetColour = serverTargetColour || GM_COLOURS[Math.floor(Math.random() * GM_COLOURS.length)];
 
-  // Pre-roll bot scores (they "play" in the background)
-  const botCount = totalPlayers - 1;
-  _gm.botScores = Array.from({length: botCount}, () => {
-    const taps = Math.floor(Math.random() * 30 + 10);
-    const acc  = 0.5 + Math.random() * 0.45; // 50–95% accuracy
-    return Math.round(taps * acc * GM_SCORE_CORRECT - taps * (1-acc) * GM_SCORE_CORRECT);
-  });
+  // Pre-roll bot scores only in fallback (bot) mode
+  if (!_gmRoom) {
+    const botCount = totalPlayers - 1;
+    _gm.botScores = Array.from({length: botCount}, () => {
+      const taps = Math.floor(Math.random() * 30 + 10);
+      const acc  = 0.5 + Math.random() * 0.45;
+      return Math.round(taps * acc * GM_SCORE_CORRECT - taps * (1-acc) * GM_SCORE_CORRECT);
+    });
+  } else {
+    _gm.botScores = []; // server handles all scoring
+  }
 
   showScreen('gauntletGameScreen');
   _gmBuildGrid();
   _gmUpdateHud();
   _gmUpdateTarget();
 
-  // Hide eliminated overlay
+  // Hide eliminated overlay and restore leave button for this game
   const ov = document.getElementById('gmEliminatedOverlay');
-  if (ov) ov.style.display = 'none';
+  if (ov) {
+    ov.style.display = 'none';
+    const btn = ov.querySelector('button');
+    if (btn) btn.style.display = '';
+  }
 
   // Spawn interval (adjusted by ring tile-spawn effect)
   const spawnMs = Math.round(GM_BASE_SPAWN_MS * (1 - (_gm.effects.tileSpawn || 0)));
@@ -342,7 +628,7 @@ function _gmPlaceVoidBomb(pos) {
   let countdown = parseFloat(voidDur.toFixed(1));
 
   el.className = 'gm-tile gm-void';
-  el.innerHTML = `<span>💣</span><span class="gm-void-countdown">${countdown.toFixed(1)}</span>`;
+  el.innerHTML = `<img src="img/void-bomb.svg" class="gm-void-bomb-icon"><span class="gm-void-countdown">${countdown.toFixed(1)}</span>`;
 
   _gm.tiles[pos] = {colour:'void', isVoid:true, countdown, lifeId:null, tickId:null};
 
@@ -382,20 +668,21 @@ function _gmClearTile(pos) {
 
 // ── Click handler ──
 function _gmClickTile(pos) {
-  if (!_gm || !_gm.active) return;
+  if (!_gm || !_gm.active || _gm.eliminated) return;
   const t = _gm.tiles[pos];
   if (!t) return; // empty tile
 
   if (t.isVoid) {
-    // Clicking void bomb = wrong colour (-10), does NOT explode
-    _gmApplyScore(GM_SCORE_WRONG * (1 - (_gm.effects.minusPenalty || 0)));
-    _gm.wrongTaps++;
+    // Clicking void bomb = defuse bonus +20
+    if (!_gmRoom) _gmApplyScore(20);
+    _gm.correctTaps++;
     _gmClearTile(pos);
-    _gmFlashScore('WRONG! -10', '#ff4444');
+    _gmFlashScore('+20', '#9b00ff');
+    if (_gmRoom) try { _gmRoom.send('tap', { pos, correct: false, isVoid: true }); } catch(e) {}
   } else if (t.colour === _gm.targetColour) {
     // Correct!
     const pts = GM_SCORE_CORRECT * (1 + (_gm.effects.plusPoints || 0));
-    _gmApplyScore(pts);
+    if (!_gmRoom) _gmApplyScore(pts);
     _gm.correctTaps++;
     _gmClearTile(pos);
     // Change target colour
@@ -403,11 +690,14 @@ function _gmClickTile(pos) {
     _gmUpdateTarget();
     _gmFlashScore(`+${Math.round(pts)}`, '#00ff88');
     vibrate(20);
+    if (_gmRoom) try { _gmRoom.send('tap', { pos, correct: true, isVoid: false }); } catch(e) {}
   } else {
     // Wrong colour
-    _gmApplyScore(GM_SCORE_WRONG * (1 - (_gm.effects.minusPenalty || 0)));
+    const penalty = GM_SCORE_WRONG * (1 - (_gm.effects.minusPenalty || 0));
+    if (!_gmRoom) _gmApplyScore(penalty);
     _gm.wrongTaps++;
     _gmFlashScore('WRONG! -10', '#ff4444');
+    if (_gmRoom) try { _gmRoom.send('tap', { pos, correct: false, isVoid: false }); } catch(e) {}
   }
 }
 
@@ -431,6 +721,9 @@ function _gmVoidExplode(pos) {
 
   if (_gm.eliminated) return; // already out
 
+  // Void bomb always makes a sound on explosion
+  playSound('void_bomb');
+
   // Check survival bonus
   if (gmRollSurvival()) {
     _gm.survivalUses++;
@@ -444,7 +737,6 @@ function _gmVoidExplode(pos) {
   _gm.score = 0;
   _gmUpdateHud();
   vibrate([100, 50, 100]);
-  playSound('miss');
 
   const ov = document.getElementById('gmEliminatedOverlay');
   if (ov) ov.style.display = 'flex';
@@ -468,7 +760,7 @@ function _gmUpdateHud() {
     timerEl.className   = `gm-timer-display${_gm.timeLeft <= 5 ? ' gm-timer-low' : ''}`;
   }
   if (aliveEl) {
-    const total = _gm.botScores.length + 1;
+    const total = _gm.totalPlayers || (_gm.botScores.length + 1);
     aliveEl.textContent = `${total}/${total}`;
   }
 }
@@ -498,31 +790,86 @@ function _gmEndGame() {
     if (_gm.tiles[i]) _gmClearTile(i);
   }
 
-  // Calculate place among all scores
+  if (_gmRoom) {
+    // Server-authoritative mode: show "Calculating..." and wait for results message
+    _gmShowWaitingForResults();
+    // Results arrive via _gmRoom.onMessage('results', ...) → _gmHandleServerResults()
+    // Safety fallback: if server doesn't respond in 10s, leave gracefully
+    setTimeout(() => {
+      if (_gm && _gm.ending && !_gm.resultsReceived) {
+        console.warn('[Gauntlet] Results timeout — disconnecting');
+        try { _gmRoom?.leave(); } catch(e) {}
+        _gmRoom = null;
+        showScreen('gauntletHubScreen');
+        renderGauntletHub();
+      }
+    }, 10000);
+    return;
+  }
+
+  // Bot fallback: calculate locally
   const allScores = [..._gm.botScores, _gm.score].sort((a,b) => b - a);
   const place = allScores.indexOf(_gm.score) + 1;
   _gm.finalPlace = Math.max(1, place);
 
-  // MMR changes
   const baseDelta = gmMmrDelta(_gm.finalPlace);
   const bonusMult = 1 + (_gm.effects.bonusMmr || 0);
   _gm.mmrDelta = Math.round(baseDelta * bonusMult);
 
-  // Save
   const gd = gmLoadData();
   gd.mmr         = Math.max(0, (gd.mmr || 0) + _gm.mmrDelta);
   gd.totalGames  = (gd.totalGames || 0) + 1;
   if (_gm.finalPlace === 1) gd.totalWins = (gd.totalWins || 0) + 1;
   gmSaveData(gd);
-  // Keep gameState in sync
   gameState.gauntletMmr = gd.mmr;
   saveState();
 
   setTimeout(() => _gmShowResults(), 800);
 }
 
+function _gmShowWaitingForResults() {
+  const overlay = document.getElementById('gmEliminatedOverlay');
+  if (overlay) {
+    overlay.style.display = 'flex';
+    overlay.innerHTML = '<div style="color:#fff;font-size:18px;text-align:center">⚔ Calculating results…</div>';
+  }
+}
+
+function _gmHandleServerResults(data) {
+  if (!_gm) return;
+  _gm.resultsReceived = true;
+
+  _gm.finalPlace  = data.placement  || 1;
+  _gm.score       = data.score      ?? _gm.score;
+  _gm.correctTaps = data.taps       ?? _gm.correctTaps;
+  _gm.mmrDelta    = data.mmrDelta   ?? 0;
+  _gm._serverLeaderboard = data.leaderboard || null;
+
+  // Sync local MMR with server
+  const gd = gmLoadData();
+  gd.mmr        = data.newMmr ?? Math.max(0, (gd.mmr || 0) + _gm.mmrDelta);
+  gd.totalGames = (gd.totalGames || 0) + 1;
+  if (_gm.finalPlace === 1) gd.totalWins = (gd.totalWins || 0) + 1;
+  gmSaveData(gd);
+  gameState.gauntletMmr = gd.mmr;
+  saveState();
+
+  setTimeout(() => _gmShowResults(), 500);
+}
+
 // ── Build sorted leaderboard data ──
 function _gmBuildLeaderboard() {
+  // Use server leaderboard if available (multiplayer mode)
+  if (_gm._serverLeaderboard && _gm._serverLeaderboard.length > 0) {
+    return _gm._serverLeaderboard.map(e => ({
+      name:  e.name,
+      score: e.score,
+      place: e.placement,
+      isYou: e.isYou,
+    }));
+  }
+
+  // Bot fallback
   const BOT_POOL = (typeof BOT_NAMES !== 'undefined' ? BOT_NAMES : [])
     .concat(['VoidSlayer','CrimsonAce','PhantomX','DarkMatter','NeonRift',
              'Spectral','AbyssWalker','VoidHunter','NullByte','GhostAce',
@@ -716,6 +1063,27 @@ function renderGauntletModeEffects() {
     </div>`;
 }
 
+// ── Mid-game leave confirmation ──
+function _gmConfirmLeave() {
+  if (!_gm || !_gm.active || _gm.ending) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9997;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  overlay.innerHTML = `
+    <div style="background:linear-gradient(180deg,#0d0020,#070010);border:1px solid rgba(155,0,255,0.4);border-radius:18px;padding:24px 20px;max-width:300px;width:100%;text-align:center;">
+      <div style="font-size:32px;margin-bottom:10px;">⚔️</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:#9b00ff;margin-bottom:8px;">LEAVE GAME?</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5);letter-spacing:1px;margin-bottom:20px;">Your score will count and MMR will be calculated based on your current position.</div>
+      <div style="display:flex;gap:10px;">
+        <button id="_gmLeaveCancel" style="flex:1;padding:12px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;">STAY</button>
+        <button id="_gmLeaveConfirm" style="flex:1;padding:12px;border-radius:10px;background:rgba(155,0,255,0.15);border:1px solid rgba(155,0,255,0.4);color:#fff;cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;">LEAVE</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#_gmLeaveCancel').onclick  = () => document.body.removeChild(overlay);
+  overlay.querySelector('#_gmLeaveConfirm').onclick = () => { document.body.removeChild(overlay); _gmEndGame(); };
+  overlay.onclick = e => { if (e.target === overlay) document.body.removeChild(overlay); };
+}
+
 // ── Single ring effect lookup (used by inventory, equip picker, spin popup) ──
 function gmGetSingleRingEffect(ringId) {
   const ring = getRingDef(ringId);
@@ -738,13 +1106,3 @@ function gmGetSingleRingEffect(ringId) {
   return { key, label: LABELS[key] || key, pct };
 }
 
-// ── Startup sync ──
-// Sync gauntletData unlock → gameState on page load (handles edge cases)
-(function _gmStartupSync() {
-  try {
-    const gd = JSON.parse(localStorage.getItem('gauntletData') || '{}');
-    if (gd.gauntletUnlocked && typeof gameState !== 'undefined') {
-      gameState.gauntletUnlocked = true;
-    }
-  } catch(e) {}
-})();

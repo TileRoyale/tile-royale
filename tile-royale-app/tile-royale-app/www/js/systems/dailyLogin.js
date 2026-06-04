@@ -59,9 +59,8 @@ function claimDailyReward() {
     if (reward.type === 'diamonds') {
       gameState.diamonds = (gameState.diamonds || 0) + reward.amount;
     } else if (reward.type === 'tickets') {
-      const cap = typeof TICKETS_MAX !== 'undefined' ? TICKETS_MAX : 10;
       const cur = typeof getTickets === 'function' ? getTickets() : (gameState.tickets || 0);
-      gameState.tickets = Math.min(cap, cur + reward.amount);
+      gameState.tickets = cur + reward.amount; // overflow allowed — rewards can exceed TICKETS_MAX
     } else if (reward.type === 'spins') {
       gameState.freeSpins = (gameState.freeSpins || 0) + reward.amount;
     }

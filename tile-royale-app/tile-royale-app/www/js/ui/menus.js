@@ -2,6 +2,7 @@
 const FLOAT_BACK_HIDDEN = new Set([
   'gameScreen', 'lobbyScreen', 'menuScreen', 'onboardingScreen', 'appLoadScreen',
   'gauntletGameScreen', 'gauntletLobbyScreen',
+  'gauntletHubScreen', // has own ← BACK button
 ]);
 
 // Screens where Android back gesture does nothing (game in progress)
@@ -85,6 +86,10 @@ window.addEventListener('load', () => {
         try { cancelLobby(); } catch(e) { showScreen('menuScreen'); }
         return;
       }
+
+      // Gauntlet screens
+      if (_gauntletBackNav(screen)) return;
+
       showScreen('menuScreen');                         // kõigil teistel: tagasi menüüsse
     });
     console.log('[BackGesture] Android back handler registered');
@@ -92,6 +97,30 @@ window.addEventListener('load', () => {
     console.warn('[BackGesture] setup failed:', e);
   }
 });
+
+// ===== SMART FLOAT BACK BUTTON =====
+function handleFloatBack() {
+  const screen = window.currentScreen || 'menuScreen';
+  _gauntletBackNav(screen) || showScreen('menuScreen');
+}
+
+// Returns true if Gauntlet-specific navigation was handled
+function _gauntletBackNav(screen) {
+  switch (screen) {
+    case 'gauntletResultsScreen':
+      showScreen('gauntletHubScreen');
+      if (typeof renderGauntletHub === 'function') renderGauntletHub();
+      return true;
+    case 'gauntletHubScreen':
+      showScreen('gauntletScreen');
+      return true;
+    case 'gauntletLobbyScreen':
+      if (typeof cancelGauntletLobby === 'function') cancelGauntletLobby();
+      return true;
+    default:
+      return false;
+  }
+}
 
 // Safe navigation wrapper — prevents black screen on any crash
 function safeNav(fn, fallbackScreen) {
@@ -228,8 +257,8 @@ function _renderProfileCard(stats) {
   document.getElementById('lbProfileAvatar').textContent = avatar;
   set('lbProfileName',       name);
   set('lbProfileTag',        stats?.player_tag ? `#${stats.player_tag}` : '');
-  set('lbProfileWeeklyRank', stats ? `#${stats.weekly_rank || '—'}` : '#—');
-  set('lbProfileAlltimeRank',stats ? `#${stats.rank || '—'}` : '#—');
+  set('lbProfileWeeklyRank', stats ? ((stats.weekly_rank && stats.weekly_rank < 9999) ? `#${stats.weekly_rank}` : '—') : '—');
+  set('lbProfileAlltimeRank',stats ? ((stats.rank       && stats.rank       < 9999) ? `#${stats.rank}`        : '—') : '—');
   set('lbPsGames',           stats ? (stats.games || 0) : (gameState.games || 0));
   set('lbPsWins',            stats ? (stats.wins  || 0) : (gameState.wins  || 0));
   set('lbPsWinRate',         stats && stats.win_rate != null ? `${stats.win_rate}%` : (gameState.games ? Math.round((gameState.wins||0)/(gameState.games)*100) + '%' : '0%'));
@@ -454,6 +483,96 @@ function _renderStanding(playerStats, globalStats, percentiles) {
   section.style.display = 'block';
 }
 
+// ─── Solo ranking renderer (real server data) ────────────────────────────────
+function _renderSoloRankingRows(rankings) {
+  const placeColors = { 1:'var(--gold)', 2:'#c0c0c0', 3:'#cd7f32' };
+  const myEntry = rankings.find(r => r.is_me);
+
+  const badge = myEntry
+    ? `<div style="text-align:center;padding:8px 0 4px;font-size:11px;color:var(--muted);letter-spacing:1px;">
+        You are ranked <b style="color:var(--gold);">#${myEntry.rank}</b> of ${rankings.length}+ players
+       </div>`
+    : '';
+
+  const rows = rankings.slice(0, 50).map(r => {
+    const isYou = !!r.is_me;
+    const pc    = placeColors[r.rank] || 'var(--muted)';
+    return `<div class="lb-row${isYou ? ' you-row' : ''}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;margin-bottom:2px;${isYou ? 'background:rgba(0,229,255,0.07);border:1px solid rgba(0,229,255,0.2);' : ''}">
+      <div class="lb-place" style="color:${pc};min-width:26px;font-family:'Bebas Neue',sans-serif;font-size:15px;">${r.rank}</div>
+      <div class="lb-avatar">${r.avatar || '🔥'}</div>
+      <div style="flex:1;font-size:13px;color:var(--text);">${r.player_name}${isYou ? ' <span style="color:var(--diamond);font-size:10px;">(YOU)</span>' : ''}</div>
+      <div style="text-align:right;">
+        <div style="font-size:12px;color:var(--gold);font-family:\'Bebas Neue\',sans-serif;letter-spacing:1px;">⭐ ${r.total_stars}</div>
+        <div style="font-size:9px;color:var(--muted);letter-spacing:1px;">${r.levels_completed} levels</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return badge + rows;
+}
+
+// ─── Solo ranking builder (kept for reference, no longer used) ───────────────
+function _buildSoloRankingRows(myScore, myStars, myLevels) {
+  // Deterministic seeded random for consistent leaderboard
+  const seed = (PLAYER_ID || 'default').split('').reduce((h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0, 0);
+  let rng = Math.abs(seed);
+  const rand = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return (rng >>> 0) / 0xffffffff; };
+
+  const BOT_NAMES = ['SoloAce','StarHunter','VoidMaster','NightTapper','CrystalRun',
+    'SwiftFinger','ApexSolo','GhostTap','IronWill','LightSpeed','ShadowPlay',
+    'TileKing','FlashPoint','ZenTapper','QuickStar','NeonSolo','DarkEdge',
+    'StormSolo','BladeRun','PhantomAce'];
+
+  // Generate 19 simulated players with realistic scores
+  const bots = Array.from({length: 19}, (_, i) => {
+    const lvls  = Math.floor(rand() * 80 + 10);         // 10–90 levels
+    const stars  = Math.floor(lvls * (rand() * 2 + 0.5) * 3); // avg stars per level
+    const perf   = Math.floor(lvls * rand() * 0.6);
+    const score  = Math.min(stars * 10 + perf * 50 + lvls * 5, 38500); // cap at max
+    return { name: BOT_NAMES[i % BOT_NAMES.length], score, stars: Math.min(stars, 300), levels: Math.min(lvls, 100) };
+  });
+
+  // Add player entry
+  const myName = (gameState && gameState.playerName) ? gameState.playerName : 'You';
+  const allEntries = [...bots, { name: myName, score: myScore, stars: myStars, levels: myLevels, isYou: true }];
+  allEntries.sort((a, b) => b.score - a.score || b.stars - a.stars);
+  allEntries.forEach((e, i) => { e.place = i + 1; });
+
+  const myEntry = allEntries.find(e => e.isYou);
+  const myPlace = myEntry ? myEntry.place : allEntries.length;
+  const placeColors = { 1:'var(--gold)', 2:'#c0c0c0', 3:'#cd7f32' };
+
+  // Show top 10; if player outside top 10 add separator + player row
+  const topRows = allEntries.slice(0, 10).map(e => _soloRankRow(e, placeColors)).join('');
+  const playerOutside = myEntry && myEntry.place > 10;
+  const playerRow = playerOutside
+    ? `<div style="border-top:1px dashed var(--border);margin:6px 0;opacity:0.4;"></div>` + _soloRankRow(myEntry, placeColors)
+    : '';
+
+  // Player rank summary
+  const pctile = Math.round((1 - myPlace / allEntries.length) * 100);
+  const rankBadge = myScore === 0
+    ? '<div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-align:center;padding:8px 0;">Play Solo mode to earn your ranking!</div>'
+    : `<div style="text-align:center;padding:8px 0 4px;font-size:11px;color:var(--muted);letter-spacing:1px;">
+        You are in the <b style="color:var(--gold);">top ${Math.max(1, 100 - pctile)}%</b> — rank <b style="color:var(--text);">#${myPlace}</b> of ${allEntries.length}
+       </div>`;
+
+  return rankBadge + topRows + playerRow;
+}
+
+function _soloRankRow(e, placeColors) {
+  const isYou = !!e.isYou;
+  const pc    = placeColors[e.place] || 'var(--muted)';
+  return `<div class="lb-row${isYou ? ' you-row' : ''}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;margin-bottom:2px;${isYou ? 'background:rgba(0,229,255,0.07);border:1px solid rgba(0,229,255,0.2);' : ''}">
+    <div class="lb-place" style="color:${pc};min-width:26px;font-family:'Bebas Neue',sans-serif;font-size:15px;">${e.place}</div>
+    <div style="flex:1;font-size:13px;color:var(--text);">${e.name}${isYou ? ' <span style="color:var(--diamond);font-size:10px;">(YOU)</span>' : ''}</div>
+    <div style="text-align:right;">
+      <div style="font-size:12px;color:var(--gold);font-family:\'Bebas Neue\',sans-serif;letter-spacing:1px;">⭐ ${e.stars}</div>
+      <div style="font-size:9px;color:var(--muted);letter-spacing:1px;">${e.levels} levels</div>
+    </div>
+  </div>`;
+}
+
 // ─── Solo leaderboard renderer ────────────────────────────────────────────────
 
 async function _renderSoloLeaderboard() {
@@ -481,20 +600,49 @@ async function _renderSoloLeaderboard() {
       stat(`${Math.round(totalStars / 300 * 100)}%`, '🏆 COMPLETION');
   }
 
-  // Try to fetch global solo rankings from server
+  // Submit player's score to server, then fetch real rankings
   if (lbListEl) {
-    lbListEl.innerHTML = '<div class="lb-loading">⏳ Loading...</div>';
-    const data = PLAYER_ID ? await _lbFetch(`/solo-rankings`) : null;
-    if (data && data.rankings && data.rankings.length > 0) {
-      _renderRankingRows(data.rankings);
-      if (lbListEl) lbListEl.innerHTML = document.getElementById('lbList').innerHTML;
-    } else {
-      lbListEl.innerHTML =
-        '<div class="lb-loading" style="text-align:center;padding:20px;">' +
-          '🎯 Solo rankings coming soon!<br>' +
-          '<span style="font-size:11px;color:var(--muted);">Complete levels to submit your score.</span>' +
-        '</div>';
-    }
+    lbListEl.innerHTML = '<div class="lb-loading">⏳ Loading rankings...</div>';
+    try {
+      const av     = typeof getActiveAvatar === 'function' ? getActiveAvatar() : { icon: '🔥' };
+      const name   = (gameState && gameState.playerName) || 'Player';
+      // Always use the raw UUID (tr_player_id) — Google auth IDs are not valid UUIDs for the server
+      const rawId  = localStorage.getItem('tr_player_id') || '';
+      if (rawId && typeof getActiveServer === 'function') {
+        fetch(`${getActiveServer().http}/solo/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            playerId:        rawId,
+            playerName:      name,
+            avatar:          av.icon || '🔥',
+            totalStars,
+            levelsCompleted: completed,
+            perfectLevels:   threeStars,
+          }),
+          signal: AbortSignal.timeout(5000),
+        }).catch(() => {});
+      }
+    } catch(e) {}
+
+    // Fetch leaderboard
+    try {
+      const rawId2 = localStorage.getItem('tr_player_id') || '';
+      const url    = `${getActiveServer().http}/solo/rankings?playerId=${encodeURIComponent(rawId2)}`;
+      const resp   = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const data   = resp.ok ? await resp.json() : null;
+      if (data && data.dbAvailable && data.rankings && data.rankings.length > 0) {
+        lbListEl.innerHTML = _renderSoloRankingRows(data.rankings);
+        return;
+      }
+    } catch(e) {}
+
+    // Fallback: no server data yet
+    lbListEl.innerHTML =
+      '<div class="lb-loading" style="text-align:center;padding:20px;">' +
+        '🎯 No rankings yet — be the first!<br>' +
+        '<span style="font-size:11px;color:var(--muted);">Complete Solo levels to appear here.</span>' +
+      '</div>';
   }
 }
 

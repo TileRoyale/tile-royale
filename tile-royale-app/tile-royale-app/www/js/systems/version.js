@@ -1,7 +1,7 @@
 // ===== VERSION — SINGLE SOURCE OF TRUTH =====
 // When bumping: update GAME_VERSION + BUILD_NUMBER here AND build.gradle versionName/versionCode
-const GAME_VERSION = 'v0.7.0';
-const BUILD_NUMBER  = 80;
+const GAME_VERSION = 'v0.7.2';
+const BUILD_NUMBER  = 82;
 
 document.addEventListener('DOMContentLoaded', () => {
   const v = GAME_VERSION;
