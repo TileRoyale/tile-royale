@@ -5,7 +5,8 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard } from "./db";
+import { GauntletRoom } from "./rooms/GauntletRoom";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard } from "./db";
 import { google } from "googleapis";
 
 const port   = Number(process.env.PORT   || 3000);
@@ -968,6 +969,27 @@ app.get("/solo/rankings", async (req, res) => {
   res.json({ dbAvailable: true, rankings });
 });
 
+// ─── Gauntlet MMR ────────────────────────────────────────────────────────────
+
+// GET /gauntlet/mmr/:playerId
+app.get("/gauntlet/mmr/:playerId", async (req, res) => {
+  const { playerId } = req.params;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: true, mmr: null });
+  const data = await getGauntletMMR(playerId);
+  res.json({ ok: true, data });
+});
+
+// GET /gauntlet/leaderboard?playerId=xxx
+app.get("/gauntlet/leaderboard", async (req, res) => {
+  const playerId = (req.query.playerId as string) || '';
+  if (!getDbStatus().available) return res.json({ dbAvailable: false, rankings: [] });
+  const rankings = await getGauntletLeaderboard(playerId);
+  if (!rankings) return res.json({ dbAvailable: false, rankings: [] });
+  res.json({ dbAvailable: true, rankings });
+});
+
 // ─── Practice Mode Leaderboard ───────────────────────────────────────────────
 
 // POST /practice/score  { playerId, playerName, avatar, taps30s, reactionMs }
@@ -1203,6 +1225,9 @@ const gameServer = new Server({
 
 gameServer.define("tile_royale", TileRoyaleRoom)
   .filterBy(["mode"])
+  .sortBy({ clients: -1 });
+
+gameServer.define("gauntlet", GauntletRoom)
   .sortBy({ clients: -1 });
 
 initDb().then(() => {

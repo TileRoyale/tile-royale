@@ -316,9 +316,7 @@ if ((gameState.diamonds || 0) > 10000 && !gameState._corrected) {
   gameState.diamonds = 500;
   gameState._corrected = true;
 }
-if ((gameState.tickets || 0) > 10) {
-  gameState.tickets = 10;
-}
+// Ticket overflow allowed — rewards can push above TICKETS_MAX
 
 let gameLoop = null;
 let timerInterval = null;

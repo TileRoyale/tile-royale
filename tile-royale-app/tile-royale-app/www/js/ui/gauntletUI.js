@@ -1,9 +1,5 @@
 function onPlayGauntletBtn() {
-  if (gameState.gauntletUnlocked) {
-    openGauntletHub();
-  } else {
-    showGauntletModeTeaser();
-  }
+  openGauntletHub();
 }
 
 function openRingInventory() {

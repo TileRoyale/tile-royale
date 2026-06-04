@@ -59,7 +59,7 @@ const SKINS = {
     { id: 'fx_supernova',  name: 'Supernova',     icon: '💥', price: 1500, owned: false, tier:'prestige', prestige:true },
     { id: 'fx_godray',     name: 'God Ray',       icon: '✨', price: 0,    owned: false, whale: true },
     { id: 'fx_blackhole',  name: 'Black Hole',    icon: '🌀', price: 0,    owned: false, whale: true },
-    { id: 'fx_bomb',       name: 'Bomb Effect',   icon: '💣', price: 0,    owned: false, solo: true, unlockDesc:'200 Solo ⭐' },
+    { id: 'fx_bomb',       name: 'Bomb Effect',   icon: '<img src="img/void-bomb.svg" style="width:24px;height:24px;vertical-align:middle;">', price: 0,    owned: false, solo: true, unlockDesc:'200 Solo ⭐' },
   ],
   victory: [
     { id:'vic_classic',   name:'Classic',             icon:'🏆', price:0,    owned:true,  tier:'default',   preview:'gold',      art:'assets/victory-art/vic-classic.webp',   tagline:'Victory never goes out of style.' },
@@ -99,7 +99,7 @@ const SKINS = {
     { id: 'tap_meteor',    name: 'Meteor',        icon: '☄️', price: 1500, owned: false, tier:'prestige', prestige:true },
     { id: 'tap_shockwave',       name: 'Shockwave',       icon: '💫', price: 0, owned: false, whale: true },
     { id: 'tap_goldcrack',       name: 'Gold Crack',       icon: '🥇', price: 0, owned: false, whale: true },
-    { id: 'tap_bomb_explosion',  name: 'Bomb Explosion',   icon: '💣', price: 0, owned: false, solo: true, unlockDesc:'200 Solo ⭐' },
+    { id: 'tap_bomb_explosion',  name: 'Bomb Explosion',   icon: '<img src="img/void-bomb.svg" style="width:24px;height:24px;vertical-align:middle;">', price: 0, owned: false, solo: true, unlockDesc:'200 Solo ⭐' },
   ]
 };
 
@@ -324,7 +324,7 @@ function getBurningStyle(fxSkinId) {
     fx_void:     { background: 'radial-gradient(circle,#220033 0%,#000000 100%)', borderColor: '#440066', boxShadow: '0 0 8px rgba(60,0,80,0.9)', icon: '🌑' },
     fx_rainbow:  { background: 'linear-gradient(135deg,#ff0000,#ffff00,#00ff00,#0000ff)', borderColor: '#ff00ff', boxShadow: '0 0 8px rgba(255,100,255,0.9)', icon: '🌈' },
     // Solo exclusive
-    fx_bomb:     { background: 'radial-gradient(circle,#2a0a0a 0%,#0d0000 100%)', borderColor: '#ff0000', boxShadow: '0 0 10px rgba(255,0,0,0.8)', icon: '💣' },
+    fx_bomb:     { background: 'radial-gradient(circle,#2a0a0a 0%,#0d0000 100%)', borderColor: '#ff0000', boxShadow: '0 0 10px rgba(255,0,0,0.8)', icon: '<img src="img/void-bomb.svg" style="width:10px;height:10px;">' },
     // Whale exclusive
     fx_godray:   { background: 'radial-gradient(circle,#ffffff 0%,#ffee88 40%,#ffaa00 100%)', borderColor: '#ffffff', boxShadow: '0 0 14px rgba(255,255,200,1)', icon: '✨' },
     fx_blackhole:{ background: 'radial-gradient(circle,#000000 0%,#1a0030 60%,#330066 100%)', borderColor: '#6600aa', boxShadow: '0 0 12px rgba(100,0,150,0.9)', icon: '🌀' },

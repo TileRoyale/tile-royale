@@ -126,12 +126,14 @@ function renderMenuGauntletWidget() {
       const ring   = ringId ? getRingDef(ringId) : null;
       const rar    = ring  ? getRarityDef(ring.rarityId) : null;
       const empty  = !ring;
+      const eff    = (ring && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(ringId) : null;
       return `<div class="menu-finger-slot ${empty ? 'slot-empty' : ''}"
                    style="${rar ? `border-color:${rar.color}44;` : ''}"
                    onclick="event.stopPropagation();openGauntletToSlot(${i})">
         <div class="mfs-emoji">${ring ? (ringImgHtml(ring.rarityId, 28) || ring.emoji) : '⭕'}</div>
         <div class="mfs-label">${fname}</div>
         <div class="mfs-rarity ${rar?.cls || ''}">${rar ? rar.label : '—'}</div>
+        ${eff ? `<div style="font-size:8px;letter-spacing:0.5px;color:${rar.color};margin-top:1px;opacity:0.9;">${eff.label} ${eff.pct}</div>` : ''}
       </div>`;
     }).join('');
   }
@@ -171,16 +173,19 @@ function renderGauntletHand() {
     const ringId = equipped[i];
     const ring   = ringId ? getRingDef(ringId) : null;
     const rar    = ring ? getRarityDef(ring.rarityId) : null;
+    const eff    = (ring && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(ringId) : null;
     const stateClass = ring ? 'hs-equipped' : 'hs-empty';
     const colorStyle  = rar ? `style="--hs-clr:${rar.color};"` : '';
-    const iconHtml    = ring
-      ? ringImgHtml(ring.rarityId, 36)
+    const iconHtml    = ring ? ringImgHtml(ring.rarityId, 36) : '';
+    const effLabel    = eff
+      ? `<div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:8px;letter-spacing:0.5px;color:${rar.color};background:rgba(0,0,0,0.75);padding:1px 4px;border-radius:4px;">${eff.label} ${eff.pct}</div>`
       : '';
     return `<div class="gv2-hs gv2-hs-${i} ${stateClass}" ${colorStyle}
                  id="gv2-slot-${i}"
                  onclick="equipRingToFinger(${i})"
-                 title="${fname}${ring ? ': ' + ring.name : ' — tap to equip'}">
-              ${iconHtml}
+                 title="${fname}${ring ? ': ' + ring.name + (eff ? ' — ' + eff.label + ' ' + eff.pct : '') : ' — tap to equip'}"
+                 style="position:relative;${rar ? '--hs-clr:' + rar.color + ';' : ''}">
+              ${iconHtml}${effLabel}
             </div>`;
   }).join('');
 

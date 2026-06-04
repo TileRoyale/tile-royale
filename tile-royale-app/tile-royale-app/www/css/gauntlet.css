@@ -2711,6 +2711,23 @@
 #gauntletLobbyScreen {
   min-height: 100vh;
   justify-content: flex-start;
+  background: url('../img/season-void.png') center center / contain no-repeat, #000;
+  position: relative;
+}
+#gauntletLobbyScreen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  z-index: 0;
+}
+#gauntletLobbyScreen > * {
+  position: relative;
+  z-index: 1;
+}
+#gauntletLobbyScreen > div:last-child {
+  padding-bottom: 20vh;
 }
 
 /* ── Gauntlet Hub — Season of the Void background ── */
@@ -2736,7 +2753,7 @@
   background: url('../img/season-void.png') center center / contain no-repeat, #000;
   position: relative;
   min-height: 100vh;
-  justify-content: flex-start;
+  justify-content: center;
   padding: 16px;
   box-sizing: border-box;
 }
@@ -2782,9 +2799,15 @@
   background: radial-gradient(circle, #1a0030 0%, #0a0015 100%);
   border: 2px solid #9b00ff;
   animation: voidPulse 0.3s ease-in-out infinite alternate;
-  font-size: 24px;
   flex-direction: column;
   gap: 1px;
+}
+.gm-void-bomb-icon {
+  width: 62%;
+  height: 62%;
+  display: block;
+  pointer-events: none;
+  flex-shrink: 0;
 }
 .gm-tile.gm-void .gm-void-countdown {
   font-size: 11px;
@@ -2881,16 +2904,16 @@
   background: rgba(0,0,0,0.3);
 }
 
-/* ── Elimination overlay ── */
-.gm-eliminated-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.82);
+/* ── Elimination overlay — fixed so #gauntletGameScreen > * doesn't override position ── */
+#gmEliminatedOverlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0,0,0,0.88);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  z-index: 9999 !important;
   gap: 8px;
 }
 .gm-elim-icon { font-size: 48px; }

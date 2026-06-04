@@ -1,0 +1,69 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Void Bomb">
+  <defs>
+    <radialGradient id="vbGlow" cx="50%" cy="57%" r="52%">
+      <stop offset="0%" stop-color="#a566ff" stop-opacity="0.55"></stop>
+      <stop offset="45%" stop-color="#6a30c8" stop-opacity="0.26"></stop>
+      <stop offset="100%" stop-color="#6a30c8" stop-opacity="0"></stop>
+    </radialGradient>
+    <radialGradient id="vbBody" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#070214"></stop>
+      <stop offset="46%" stop-color="#0a041e"></stop>
+      <stop offset="68%" stop-color="#1b0940"></stop>
+      <stop offset="84%" stop-color="#3d1a86"></stop>
+      <stop offset="93%" stop-color="#7d44df"></stop>
+      <stop offset="98%" stop-color="#bb90ff"></stop>
+      <stop offset="100%" stop-color="#e3d2ff"></stop>
+    </radialGradient>
+    <linearGradient id="vbRing" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7d44df" stop-opacity="0"></stop>
+      <stop offset="22%" stop-color="#9a5cff" stop-opacity="0.85"></stop>
+      <stop offset="50%" stop-color="#f1e6ff" stop-opacity="1"></stop>
+      <stop offset="78%" stop-color="#9a5cff" stop-opacity="0.85"></stop>
+      <stop offset="100%" stop-color="#7d44df" stop-opacity="0"></stop>
+    </linearGradient>
+    <radialGradient id="vbSpark" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"></stop>
+      <stop offset="35%" stop-color="#e7d6ff" stop-opacity="0.9"></stop>
+      <stop offset="70%" stop-color="#a566ff" stop-opacity="0.45"></stop>
+      <stop offset="100%" stop-color="#a566ff" stop-opacity="0"></stop>
+    </radialGradient>
+    
+  </defs>
+
+  
+  <ellipse cx="50" cy="56" rx="48" ry="48" fill="url(#vbGlow)"></ellipse>
+
+  
+  <g class="vb-spin">
+    <ellipse cx="50" cy="55" rx="39" ry="12.5" fill="none" stroke="url(#vbRing)" stroke-width="2.6" transform="rotate(-20 50 55)"></ellipse>
+    <ellipse cx="50" cy="55" rx="41" ry="9" fill="none" stroke="url(#vbRing)" stroke-width="1.6" opacity="0.5" transform="rotate(16 50 55)"></ellipse>
+  </g>
+
+  
+  <circle cx="50" cy="55" r="30" fill="url(#vbBody)"></circle>
+
+  
+  <g class="vb-spin2" opacity="0.75">
+    <path d="M50 33 C66 36 72 52 60 64 C51 73 36 70 35 57 C34 47 42 42 50 45" fill="none" stroke="#cda8ff" stroke-width="1.7" stroke-linecap="round"></path>
+    <path d="M50 41 C58 43 61 51 55 58 C50 63 43 61 43 54" fill="none" stroke="#f1e6ff" stroke-width="1.3" stroke-linecap="round" opacity="0.85"></path>
+  </g>
+
+  
+  <ellipse cx="40" cy="43" rx="8.5" ry="5.2" fill="#ffffff" opacity="0.16" transform="rotate(-32 40 43)"></ellipse>
+
+  
+  <path d="M59 31 C68 22 64 15 71 11" fill="none" stroke="#2a1440" stroke-width="4" stroke-linecap="round"></path>
+  <path d="M59 31 C68 22 64 15 71 11" fill="none" stroke="#6a45b0" stroke-width="1.6" stroke-linecap="round" opacity="0.85"></path>
+
+  
+  <g class="vb-spark">
+    <circle cx="71" cy="11" r="10" fill="url(#vbSpark)"></circle>
+    <path d="M71,-1 Q72.3,9.7 83,11 Q72.3,12.3 71,23 Q69.7,12.3 59,11 Q69.7,9.7 71,-1 Z" fill="#f3e9ff"></path>
+    <path d="M71,4 Q71.8,10.2 78,11 Q71.8,11.8 71,18 Q70.2,11.8 64,11 Q70.2,10.2 71,4 Z" fill="#ffffff" transform="rotate(45 71 11)"></path>
+    <circle cx="71" cy="11" r="2.1" fill="#ffffff"></circle>
+  </g>
+
+  
+  <circle class="vb-p1" cx="22" cy="50" r="1.1" fill="#cda8ff"></circle>
+  <circle class="vb-p2" cx="80" cy="64" r="1" fill="#e7d6ff"></circle>
+</svg>

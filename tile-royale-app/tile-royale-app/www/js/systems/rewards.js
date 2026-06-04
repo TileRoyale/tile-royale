@@ -225,25 +225,7 @@ async function redeemCode() {
 
   if (!code) { showRedeemMsg('Enter a code first', 'error'); return; }
 
-  // DEV-GAUNTLET: client-side unlock (no server needed)
-  if (code === 'DEV-GAUNTLET') {
-    input.value = '';
-    if (gameState.gauntletUnlocked) {
-      showRedeemMsg('✓ Gauntlet Mode already unlocked!', 'info'); return;
-    }
-    gameState.gauntletUnlocked = true;
-    const gd = JSON.parse(localStorage.getItem('gauntletData') || '{}');
-    gd.gauntletUnlocked = true;
-    localStorage.setItem('gauntletData', JSON.stringify(gd));
-    saveState();
-    showRedeemMsg('✅ GAUNTLET MODE UNLOCKED! — Season of the Void begins', 'success');
-    playSound('achieve');
-    vibrate(200);
-    setTimeout(() => openGauntletHub(), 600);
-    return;
-  }
-
-  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) {
+if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) {
     showRedeemMsg('❌ Account required — restart the app', 'error'); return;
   }
 

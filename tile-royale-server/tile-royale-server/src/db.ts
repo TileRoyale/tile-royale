@@ -260,6 +260,31 @@ async function createTables(): Promise<void> {
       score            INTEGER      NOT NULL DEFAULT 0,
       updated_at       TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Gauntlet MMR: one row per player, updated after each match
+    CREATE TABLE IF NOT EXISTS gauntlet_mmr (
+      player_id   UUID         PRIMARY KEY REFERENCES players(player_id),
+      player_name TEXT         NOT NULL DEFAULT '',
+      avatar      TEXT         NOT NULL DEFAULT '🔥',
+      mmr         INTEGER      NOT NULL DEFAULT 0,
+      peak_mmr    INTEGER      NOT NULL DEFAULT 0,
+      total_games INTEGER      NOT NULL DEFAULT 0,
+      total_wins  INTEGER      NOT NULL DEFAULT 0,
+      updated_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Gauntlet results: one row per player per session
+    CREATE TABLE IF NOT EXISTS gauntlet_results (
+      id          BIGSERIAL    PRIMARY KEY,
+      session_id  TEXT         NOT NULL,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      placement   INTEGER      NOT NULL,
+      score       INTEGER      NOT NULL DEFAULT 0,
+      taps        INTEGER      NOT NULL DEFAULT 0,
+      mmr_before  INTEGER      NOT NULL DEFAULT 0,
+      mmr_delta   INTEGER      NOT NULL DEFAULT 0,
+      played_at   TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -279,6 +304,9 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_daily_claims       ON koth_daily_claims(player_id, claim_date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_prize_claims       ON koth_prize_claims(player_id, week_start);
     CREATE        INDEX IF NOT EXISTS idx_solo_scores_score       ON solo_scores(score DESC);
+    CREATE        INDEX IF NOT EXISTS idx_gauntlet_mmr_mmr        ON gauntlet_mmr(mmr DESC);
+    CREATE        INDEX IF NOT EXISTS idx_gauntlet_results_player ON gauntlet_results(player_id, played_at DESC);
+    CREATE        INDEX IF NOT EXISTS idx_gauntlet_results_sess   ON gauntlet_results(session_id);
   `);
   console.log("[DB] Tables ready");
 }
@@ -1598,4 +1626,76 @@ export async function getPracticeLeaderboard(): Promise<{
   ]);
   if (taps === null && reaction === null) return null;
   return { taps: taps || [], reaction: reaction || [] };
+}
+
+// ─── Gauntlet MMR ─────────────────────────────────────────────────────────────
+
+export async function upsertGauntletMMR(
+  playerId: string, newMmr: number, isWin: boolean
+): Promise<void> {
+  if (!pool) return;
+  try {
+    // Fetch current name/avatar from players table for the leaderboard
+    const pRows = await pool.query(
+      `SELECT player_name, avatar FROM players WHERE player_id = $1`, [playerId]
+    );
+    const name   = pRows.rows[0]?.player_name || '';
+    const avatar = pRows.rows[0]?.avatar || '🔥';
+
+    await pool.query(`
+      INSERT INTO gauntlet_mmr (player_id, player_name, avatar, mmr, peak_mmr, total_games, total_wins, updated_at)
+      VALUES ($1, $2, $3, $4, $4, 1, $5, now())
+      ON CONFLICT (player_id) DO UPDATE SET
+        player_name = EXCLUDED.player_name,
+        avatar      = EXCLUDED.avatar,
+        mmr         = EXCLUDED.mmr,
+        peak_mmr    = GREATEST(gauntlet_mmr.peak_mmr, EXCLUDED.mmr),
+        total_games = gauntlet_mmr.total_games + 1,
+        total_wins  = gauntlet_mmr.total_wins + $5,
+        updated_at  = now()
+    `, [playerId, name, avatar, newMmr, isWin ? 1 : 0]);
+  } catch (e: any) {
+    console.error('[DB] upsertGauntletMMR error:', e?.message);
+  }
+}
+
+export async function recordGauntletResult(
+  sessionId: string, playerId: string,
+  placement: number, score: number, taps: number,
+  mmrBefore: number, mmrDelta: number
+): Promise<void> {
+  await query(`
+    INSERT INTO gauntlet_results (session_id, player_id, placement, score, taps, mmr_before, mmr_delta)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+  `, [sessionId, playerId, placement, score, taps, mmrBefore, mmrDelta]);
+}
+
+export async function getGauntletMMR(playerId: string): Promise<{
+  mmr: number; peak_mmr: number; total_games: number; total_wins: number;
+} | null> {
+  const rows = await query(
+    `SELECT mmr, peak_mmr, total_games, total_wins FROM gauntlet_mmr WHERE player_id = $1`,
+    [playerId]
+  );
+  if (!rows || rows.length === 0) return null;
+  return rows[0];
+}
+
+export async function getGauntletLeaderboard(playerId?: string): Promise<any[] | null> {
+  if (!pool) return null;
+  try {
+    const rows = await pool.query(`
+      SELECT
+        player_name, avatar, mmr, peak_mmr, total_games, total_wins,
+        RANK() OVER (ORDER BY mmr DESC) AS rank,
+        player_id = $1 AS is_me
+      FROM gauntlet_mmr
+      ORDER BY mmr DESC
+      LIMIT 50
+    `, [playerId || '']);
+    return rows.rows;
+  } catch (e: any) {
+    console.error('[DB] getGauntletLeaderboard error:', e?.message);
+    return null;
+  }
 }
