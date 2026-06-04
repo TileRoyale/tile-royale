@@ -5,7 +5,7 @@ import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard } from "./db";
 import { google } from "googleapis";
 
 const port   = Number(process.env.PORT   || 3000);
@@ -938,6 +938,34 @@ app.post("/ring/trade/cancel", async (req, res) => {
 
   const ok = await cancelRingTrade(String(playerId), String(tradeCode).toUpperCase());
   res.json({ ok });
+});
+
+// ─── Solo Mode Leaderboard ───────────────────────────────────────────────────
+
+// POST /solo/submit  { playerId, playerName, avatar, totalStars, levelsCompleted, perfectLevels }
+app.post("/solo/submit", async (req, res) => {
+  const { playerId, playerName, avatar, totalStars, levelsCompleted, perfectLevels } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: false, error: 'db_unavailable' });
+
+  const stars  = Math.max(0, Math.min(Number(totalStars)      || 0, 300));
+  const levels = Math.max(0, Math.min(Number(levelsCompleted) || 0, 100));
+  const perf   = Math.max(0, Math.min(Number(perfectLevels)   || 0, 100));
+  const name   = String(playerName || 'Player').substring(0, 16);
+  const av     = String(avatar     || '🔥').substring(0, 10);
+
+  const ok = await upsertSoloScore(playerId, name, av, stars, levels, perf);
+  res.json({ ok });
+});
+
+// GET /solo/rankings?playerId=xxx — top 50 players by score
+app.get("/solo/rankings", async (req, res) => {
+  const playerId = (req.query.playerId as string) || '';
+  if (!getDbStatus().available) return res.json({ dbAvailable: false, rankings: [] });
+  const rankings = await getSoloLeaderboard(playerId);
+  if (!rankings) return res.json({ dbAvailable: false, rankings: [] });
+  res.json({ dbAvailable: true, rankings });
 });
 
 // ─── Practice Mode Leaderboard ───────────────────────────────────────────────

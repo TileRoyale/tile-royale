@@ -248,6 +248,18 @@ async function createTables(): Promise<void> {
       granted_json   TEXT,
       verified_at    TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Solo mode scores: personal best, one row per player (UPSERT on submit)
+    CREATE TABLE IF NOT EXISTS solo_scores (
+      player_id        UUID         PRIMARY KEY REFERENCES players(player_id),
+      player_name      TEXT         NOT NULL,
+      avatar           TEXT         NOT NULL DEFAULT '🔥',
+      total_stars      INTEGER      NOT NULL DEFAULT 0,
+      levels_completed INTEGER      NOT NULL DEFAULT 0,
+      perfect_levels   INTEGER      NOT NULL DEFAULT 0,
+      score            INTEGER      NOT NULL DEFAULT 0,
+      updated_at       TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -266,8 +278,56 @@ async function createTables(): Promise<void> {
     CREATE        INDEX IF NOT EXISTS idx_promo_redemptions_code  ON promo_redemptions(code);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_daily_claims       ON koth_daily_claims(player_id, claim_date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_prize_claims       ON koth_prize_claims(player_id, week_start);
+    CREATE        INDEX IF NOT EXISTS idx_solo_scores_score       ON solo_scores(score DESC);
   `);
   console.log("[DB] Tables ready");
+}
+
+// ─── Solo Scores ──────────────────────────────────────────────────────────────
+
+export async function upsertSoloScore(
+  playerId: string, playerName: string, avatar: string,
+  totalStars: number, levelsCompleted: number, perfectLevels: number
+): Promise<boolean> {
+  if (!pool) return false;
+  try {
+    const score = totalStars * 10 + perfectLevels * 50 + levelsCompleted * 5;
+    await pool.query(`
+      INSERT INTO solo_scores (player_id, player_name, avatar, total_stars, levels_completed, perfect_levels, score, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+      ON CONFLICT (player_id) DO UPDATE SET
+        player_name      = EXCLUDED.player_name,
+        avatar           = EXCLUDED.avatar,
+        total_stars      = GREATEST(solo_scores.total_stars, EXCLUDED.total_stars),
+        levels_completed = GREATEST(solo_scores.levels_completed, EXCLUDED.levels_completed),
+        perfect_levels   = GREATEST(solo_scores.perfect_levels, EXCLUDED.perfect_levels),
+        score            = GREATEST(solo_scores.score, EXCLUDED.score),
+        updated_at       = now()
+    `, [playerId, playerName, avatar, totalStars, levelsCompleted, perfectLevels, score]);
+    return true;
+  } catch (e: any) {
+    console.error('[DB] upsertSoloScore error:', e?.message);
+    return false;
+  }
+}
+
+export async function getSoloLeaderboard(playerId?: string): Promise<any[] | null> {
+  if (!pool) return null;
+  try {
+    const rows = await pool.query(`
+      SELECT
+        player_name, avatar, total_stars, levels_completed, perfect_levels, score,
+        RANK() OVER (ORDER BY score DESC, total_stars DESC) AS rank,
+        player_id = $1 AS is_me
+      FROM solo_scores
+      ORDER BY score DESC, total_stars DESC
+      LIMIT 50
+    `, [playerId || '']);
+    return rows.rows;
+  } catch (e: any) {
+    console.error('[DB] getSoloLeaderboard error:', e?.message);
+    return null;
+  }
 }
 
 // Backfill tags for any existing players that joined before this feature shipped.
