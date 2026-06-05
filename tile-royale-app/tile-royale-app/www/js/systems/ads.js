@@ -73,7 +73,8 @@ async function _showRewardedAd() {
   }
 }
 
-// Browser / dev fallback — 5-second fake countdown so the UI stays testable
+// Dev-only fallback — only active when window.TILE_ROYALE_DEV === true.
+// Never set in production builds. Lets UI be tested without a device.
 function _simulateFallback() {
   return new Promise(resolve => {
     let t = 5;
@@ -92,18 +93,12 @@ function _simulateFallback() {
   });
 }
 
-// Public: real ad on device, simulation in browser
+// Public: real ad on device, dev sim only if TILE_ROYALE_DEV flag is set
 async function _watchRewardedAd() {
-  const native = _isNative();
-  console.log('[AdMob] check —', {
-    native,
-    hasCapacitor: !!window.Capacitor,
-    hasNativePromise: typeof window.Capacitor?.nativePromise,
-    hasPlugin: !!window.Capacitor?.Plugins?.AdMob,
-    hasRegister: typeof window.Capacitor?.registerPlugin,
-  });
-  if (native) return await _showRewardedAd();
-  return await _simulateFallback();
+  if (_isNative()) return await _showRewardedAd();
+  if (window.TILE_ROYALE_DEV === true) return await _simulateFallback();
+  // Non-native without dev flag — ad not available (production web context)
+  return false;
 }
 
 // ─── Reward helpers ───────────────────────────────────────────────────────────

@@ -430,6 +430,8 @@ function salvageRing(rid) {
     // Award diamonds
     gameState.diamonds = (gameState.diamonds || 0) + DIAMONDS;
     saveState();
+    // Raise server trusted-diamond ceiling so cloud-save integrity check doesn't clamp this
+    _addTrustedDiamondsServer(DIAMONDS);
 
     // Refresh UIs
     try { renderRingInventory(); }       catch(e) {}
@@ -489,6 +491,7 @@ function checkRingAchievements() {
     if (cur >= ach.goal) {
       ra[ach.id] = true;
       gameState.diamonds = (gameState.diamonds||0) + ach.reward;
+      _addTrustedDiamondsServer(ach.reward, 'achievement');
       showToast(`🏅 ${ach.label} — +${ach.reward} 💎!`, 'var(--gold)');
       playSound('achieve');
       earned = true;
@@ -1032,5 +1035,19 @@ function startLobbyCountdown() {
     document.getElementById('lobbyTimer').textContent = count;
     if (count <= 0) { clearInterval(lobbyInterval); lobbyInterval = null; startGame(); }
   }, 1000);
+}
+
+function _addTrustedDiamondsServer(amount, rewardType) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    if (!amount || amount <= 0) return;
+    fetch(`${getActiveServer().http}/ring/reward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, amount, rewardType: rewardType || 'salvage' }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => {});
+  } catch(e) {}
 }
 

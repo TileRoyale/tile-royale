@@ -670,8 +670,7 @@ async function claimModeDailyReward() {
       if (resp && !resp.ok) {
         if (resp.error === 'already_claimed') { pending.claimed = true; saveState(); openModeRewardPopup(mode); return; }
         if (resp.error === 'no_reward') { showToast('Not enough wins for a reward!', 'var(--muted)'); return; }
-        if (resp.error !== 'db_unavailable') { showToast('Claim failed — try again', 'var(--red)'); return; }
-        // db_unavailable → fall through to local claim
+        showToast('Claim failed — try again when online', 'var(--red)'); return;
       } else if (resp?.ok) {
         // Server granted — use server-authoritative tier
         pending.claimed = true;
@@ -683,18 +682,13 @@ async function claimModeDailyReward() {
         playSound('achieve'); vibrate([50, 50, 200]);
         return;
       }
-    } catch(e) { /* offline fallback */ }
+    } catch(e) {
+      showToast('Connection required to claim rewards', 'var(--red)');
+      return;
+    }
   }
 
-  // Offline fallback: trust client win count
-  const tier = MODE_DAILY_TIERS.find(t => pending.wins >= t.minWins);
-  if (!tier) { showToast('No daily reward to claim!', 'var(--muted)'); return; }
-  pending.claimed = true;
-  gameState.tickets = Math.min((gameState.tickets || 0) + tier.tickets, 99);
-  saveState(); updateMenuStats(); updateTicketUI();
-  openModeRewardPopup(mode);
-  showToast(`🎟️ ${tier.tier} Daily! +${tier.tickets} Tickets`, tier.color);
-  playSound('achieve'); vibrate([50, 50, 200]);
+  showToast('Sign in to claim your reward', 'var(--muted)');
 }
 
 async function claimModeWeeklyReward() {
@@ -722,7 +716,7 @@ async function claimModeWeeklyReward() {
       if (resp && !resp.ok) {
         if (resp.error === 'already_claimed') { pending.claimed = true; saveState(); openModeRewardPopup(mode); return; }
         if (resp.error === 'no_reward') { showToast('Not enough wins for a reward!', 'var(--muted)'); return; }
-        if (resp.error !== 'db_unavailable') { showToast('Claim failed — try again', 'var(--red)'); return; }
+        showToast('Claim failed — try again when online', 'var(--red)'); return;
       } else if (resp?.ok) {
         pending.claimed = true;
         const tickets = resp.tickets;
@@ -733,18 +727,13 @@ async function claimModeWeeklyReward() {
         playSound('achieve'); vibrate([50, 50, 200]);
         return;
       }
-    } catch(e) { /* offline fallback */ }
+    } catch(e) {
+      showToast('Connection required to claim rewards', 'var(--red)');
+      return;
+    }
   }
 
-  // Offline fallback
-  const tier = MODE_WEEKLY_TIERS.find(t => pending.wins >= t.minWins);
-  if (!tier) { showToast('No weekly reward to claim!', 'var(--muted)'); return; }
-  pending.claimed = true;
-  gameState.tickets = Math.min((gameState.tickets || 0) + tier.tickets, 99);
-  saveState(); updateMenuStats(); updateTicketUI();
-  openModeRewardPopup(mode);
-  showToast(`🎟️ ${tier.tier} Weekly! +${tier.tickets} Tickets`, tier.color);
-  playSound('achieve'); vibrate([50, 50, 200]);
+  showToast('Sign in to claim your reward', 'var(--muted)');
 }
 
 function toggleCaltropsPrimed() {

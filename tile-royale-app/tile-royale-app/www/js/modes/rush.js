@@ -235,50 +235,70 @@ function endPractice() {
   playSound(grade === 'S' || grade === 'A' ? 'victory' : 'tap');
 }
 
-function renderPracticeLeaderboard() {
-  // Tap count leaderboard + reaction leaderboard
-  const tapLbEl  = document.getElementById('practiceLbTaps');
+async function renderPracticeLeaderboard() {
+  const tapLbEl   = document.getElementById('practiceLbTaps');
   const reactLbEl = document.getElementById('practiceLbReaction');
   if (!tapLbEl && !reactLbEl) return;
 
-  const stats = gameState.achStats || {};
+  const stats      = gameState.achStats || {};
   const playerName = gameState.playerName || 'You';
+  const myTaps     = stats.bestPracticeTaps30s || practiceTaps;
+  const myReact    = stats.bestPracticeReaction || (practiceTapTimes.length > 0 ? Math.min(...practiceTapTimes) : 0);
 
-  // Bot mock data for context
-  const botTapScores = [
-    {name:'TapMaster_99', taps:32},{name:'QuickFingers', taps:29},{name:'SpeedDemon', taps:27},
-    {name:'TapBot_X', taps:24},{name:'NitroNails', taps:21},
-  ];
-  const botReactScores = [
-    {name:'TapMaster_99', ms:188},{name:'QuickFingers', ms:210},{name:'SpeedDemon', ms:235},
-    {name:'TapBot_X', ms:258},{name:'NitroNails', ms:274},
-  ];
+  const loading = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">Loading...</div>';
+  if (tapLbEl)   tapLbEl.innerHTML   = loading;
+  if (reactLbEl) reactLbEl.innerHTML = loading;
 
-  const myTaps = stats.bestPracticeTaps30s || practiceTaps;
-  const myReact = stats.bestPracticeReaction || (practiceTapTimes.length>0?Math.min(...practiceTapTimes):0);
-
-  function buildLb(entries, myEntry, suffix, betterIsFn) {
-    const all = [...entries, myEntry].sort((a,b)=>betterIsFn(a,b)?-1:1);
-    return all.map((e,i) => {
-      const isMe = e.isMe;
-      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':''+(i+1)+'.';
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);${isMe?'background:rgba(0,229,255,0.06);border-radius:6px;padding:6px 8px;':''}">
+  function buildLb(serverRows, myEntry, suffix, betterIsFn, nameKey, valKey) {
+    const entries = (serverRows || []).map(r => ({ name: r[nameKey] || 'Player', val: Number(r[valKey]) || 0 }));
+    const all = [...entries, myEntry].sort((a, b) => betterIsFn(a, b) ? -1 : 1);
+    // Deduplicate — server may already include the player's own personal best
+    const seen = new Set();
+    const deduped = [];
+    for (const e of all) {
+      const key = e.isMe ? '__me__' : e.name;
+      if (!seen.has(key)) { seen.add(key); deduped.push(e); }
+    }
+    return deduped.slice(0, 6).map((e, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);${e.isMe?'background:rgba(0,229,255,0.06);border-radius:6px;padding:6px 8px;':''}">
         <span style="font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--muted);min-width:28px;">${medal}</span>
-        <span style="flex:1;font-size:13px;${isMe?'color:var(--diamond);font-weight:bold;':''}">${e.name}</span>
-        <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${isMe?'var(--diamond)':'var(--text)'};">${e.val}${suffix}</span>
+        <span style="flex:1;font-size:13px;${e.isMe?'color:var(--diamond);font-weight:bold;':''}">${e.name}</span>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${e.isMe?'var(--diamond)':'var(--text)'};">${e.val}${suffix}</span>
       </div>`;
     }).join('');
   }
 
-  if (tapLbEl) {
-    const myEntry = {name:playerName, val:myTaps, isMe:true};
-    const entries = botTapScores.map(b=>({...b,val:b.taps}));
-    tapLbEl.innerHTML = buildLb(entries, myEntry, ' taps', (a,b)=>a.val>b.val);
-  }
-  if (reactLbEl && myReact > 0) {
-    const myEntry = {name:playerName, val:myReact, isMe:true};
-    const entries = botReactScores.map(b=>({...b,val:b.ms}));
-    reactLbEl.innerHTML = buildLb(entries, myEntry, 'ms', (a,b)=>a.val<b.val);
+  try {
+    const srv = typeof getActiveServer === 'function' ? getActiveServer() : null;
+    const url = srv ? `${srv.http}/practice/leaderboard` : null;
+    if (!url) throw new Error('no_server');
+
+    const resp = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const data = await resp.json();
+
+    if (tapLbEl) {
+      const myEntry = { name: playerName, val: myTaps, isMe: true };
+      tapLbEl.innerHTML = buildLb(data.taps, myEntry, ' taps', (a, b) => a.val > b.val, 'player_name', 'best_taps_30s');
+    }
+    if (reactLbEl && myReact > 0) {
+      const myEntry = { name: playerName, val: myReact, isMe: true };
+      reactLbEl.innerHTML = buildLb(data.reaction, myEntry, 'ms', (a, b) => a.val < b.val, 'player_name', 'best_reaction_ms');
+    } else if (reactLbEl) {
+      reactLbEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">Play to set a reaction time</div>';
+    }
+  } catch (_e) {
+    // Server unreachable — show only the player's own score
+    if (tapLbEl && myTaps > 0) {
+      tapLbEl.innerHTML = buildLb([], { name: playerName, val: myTaps, isMe: true }, ' taps', (a, b) => a.val > b.val, 'player_name', 'best_taps_30s');
+    } else if (tapLbEl) {
+      tapLbEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">No scores yet</div>';
+    }
+    if (reactLbEl && myReact > 0) {
+      reactLbEl.innerHTML = buildLb([], { name: playerName, val: myReact, isMe: true }, 'ms', (a, b) => a.val < b.val, 'player_name', 'best_reaction_ms');
+    } else if (reactLbEl) {
+      reactLbEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">No scores yet</div>';
+    }
   }
 }
 

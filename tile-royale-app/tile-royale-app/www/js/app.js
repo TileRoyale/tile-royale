@@ -251,7 +251,21 @@ function awardLevelUp() {
     Object.keys(ITEM_TYPES).forEach(id => addItemToInventory(id, 1));
     onLevelUp(newLevel);
     playSound('levelup');
+    _recordLevelUpServer(newLevel);
   }
+}
+
+function _recordLevelUpServer(level) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    fetch(`${getActiveServer().http}/xp/levelup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, level }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => {});
+  } catch(e) {}
 }
 
 function updateInventoryUI() {
@@ -311,11 +325,6 @@ let gameState = savedState || {
 gameState.mode = 'rush';
 gameState.gridSize = 25;
 gameState.players = 10;
-// Correct stale values from old saves
-if ((gameState.diamonds || 0) > 10000 && !gameState._corrected) {
-  gameState.diamonds = 500;
-  gameState._corrected = true;
-}
 // Ticket overflow allowed — rewards can push above TICKETS_MAX
 
 let gameLoop = null;

@@ -625,6 +625,7 @@ function soloLevelComplete() {
   const gemReward = cfg.difficulty * 10;
   gameState.diamonds = (gameState.diamonds || 0) + gemReward;
   saveState();
+  _recordSoloCompleteServer(levelNum, gemReward);
 
   const newTotal   = soloGetTotalStars();
   const milestones = soloCheckMilestones(oldTotal, newTotal);
@@ -716,4 +717,17 @@ async function soloWatchAdForLife() {
   updateSoloMenuLives();
   showToast('+1 ❤️ Life earned!', '#ff6b6b');
   openSoloPreLevel(soloCurrentLevelNum);
+}
+
+function _recordSoloCompleteServer(levelNum, gemReward) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    fetch(`${getActiveServer().http}/solo/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, levelNum, gemReward }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => {});
+  } catch(e) {}
 }

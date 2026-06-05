@@ -399,6 +399,23 @@ async function createTables(): Promise<void> {
       grant_date   DATE         NOT NULL,
       granted_at   TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Level-up reward claims: one per player per level (prevents re-claiming after save wipe)
+    CREATE TABLE IF NOT EXISTS level_up_claims (
+      id         BIGSERIAL    PRIMARY KEY,
+      player_id  UUID         NOT NULL REFERENCES players(player_id),
+      level      INTEGER      NOT NULL,
+      claimed_at TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Solo level completion rewards: one per player per level number
+    CREATE TABLE IF NOT EXISTS solo_level_claims (
+      id         BIGSERIAL    PRIMARY KEY,
+      player_id  UUID         NOT NULL REFERENCES players(player_id),
+      level_num  INTEGER      NOT NULL,
+      gem_reward INTEGER      NOT NULL DEFAULT 0,
+      claimed_at TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -432,6 +449,8 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_claims                ON dc_claims(player_id, challenge_date);
     CREATE        INDEX IF NOT EXISTS idx_diamond_spends_player    ON diamond_spends(player_id, spent_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_grants           ON surprise_grants(player_id, grant_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_level_up_claims           ON level_up_claims(player_id, level);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_level_claims         ON solo_level_claims(player_id, level_num);
   `);
   console.log("[DB] Tables ready");
 }
@@ -2292,4 +2311,77 @@ export async function getMissionServerCount(
   }
   const rows = await query(sql, [playerId, periodStart, periodEnd]);
   return rows && rows.length > 0 ? (rows[0].cnt ?? 0) : 0;
+}
+
+// ─── Level-up Claims ──────────────────────────────────────────────────────────
+
+export async function recordLevelUpClaim(
+  playerId: string, level: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO level_up_claims (player_id, level) VALUES ($1, $2)`,
+      [playerId, level]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordLevelUpClaim error:', err);
+    return 'error';
+  }
+}
+
+// ─── Solo Level Claims ────────────────────────────────────────────────────────
+
+export async function recordSoloLevelClaim(
+  playerId: string, levelNum: number, gemReward: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO solo_level_claims (player_id, level_num, gem_reward) VALUES ($1, $2, $3)`,
+      [playerId, levelNum, gemReward]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordSoloLevelClaim error:', err);
+    return 'error';
+  }
+}
+
+// ─── Player Game Stats (for achievement precondition validation) ──────────────
+
+export async function getPlayerGameStats(playerId: string): Promise<{
+  games: number; wins: number; top3: number; top5: number;
+  buckshotWins: number; buckshotGames: number;
+  rushWins: number; wildWins: number; wildGames: number;
+} | null> {
+  if (!pool) return null;
+  try {
+    const rows = await pool.query(`
+      SELECT
+        COUNT(*)::int                                                    AS games,
+        COUNT(*) FILTER (WHERE placement = 1)::int                      AS wins,
+        COUNT(*) FILTER (WHERE placement <= 3)::int                     AS top3,
+        COUNT(*) FILTER (WHERE placement <= 5)::int                     AS top5,
+        COUNT(*) FILTER (WHERE mode = 'buckshot' AND placement = 1)::int AS buckshot_wins,
+        COUNT(*) FILTER (WHERE mode = 'buckshot')::int                  AS buckshot_games,
+        COUNT(*) FILTER (WHERE mode = 'rush'     AND placement = 1)::int AS rush_wins,
+        COUNT(*) FILTER (WHERE mode = 'wild'     AND placement = 1)::int AS wild_wins,
+        COUNT(*) FILTER (WHERE mode = 'wild')::int                      AS wild_games
+      FROM game_results
+      WHERE player_id = $1
+    `, [playerId]);
+    const r = rows.rows[0];
+    return {
+      games: r.games, wins: r.wins, top3: r.top3, top5: r.top5,
+      buckshotWins: r.buckshot_wins, buckshotGames: r.buckshot_games,
+      rushWins: r.rush_wins, wildWins: r.wild_wins, wildGames: r.wild_games,
+    };
+  } catch (err) {
+    console.error('[DB] getPlayerGameStats error:', err);
+    return null;
+  }
 }

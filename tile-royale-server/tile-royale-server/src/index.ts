@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -635,15 +635,90 @@ app.post("/trophyroad/claim", async (req, res) => {
 
 // POST /achievements/unlock  { playerId, achievementId }
 // Server-side idempotency for achievement rewards — blocks re-unlock after save wipe.
+// For game-stat-based achievements the server re-validates from game_results before recording.
 app.post("/achievements/unlock", async (req, res) => {
   const { playerId, achievementId } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   if (!achievementId) return res.status(400).json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  // Precondition map: achievementId → { stat, goal } for stats we can verify from game_results.
+  // Stats not in this map (totalTaps, totalDiamonds, solo, winStreak, etc.) pass through — they
+  // are harder to validate server-side and grant low-value rewards.
+  const ACH_PRECONDITIONS: Record<string, { stat: 'wins'|'games'|'top3'|'top5'|'rushWins'|'buckshotWins'|'buckshotGames'|'wildWins'|'wildGames', goal: number }> = {
+    first_blood:     { stat: 'games',        goal: 1   },
+    on_fire:         { stat: 'wins',          goal: 10  },
+    centurion:       { stat: 'wins',          goal: 100 },
+    grand_master:    { stat: 'wins',          goal: 500 },
+    survivor:        { stat: 'top5',          goal: 1   },
+    last_standing:   { stat: 'top3',          goal: 100 },
+    true_champion:   { stat: 'top3',          goal: 1000 },
+    speed_demon:     { stat: 'rushWins',      goal: 1   },
+    buckshot_rookie: { stat: 'buckshotGames', goal: 5   },
+    buckshot_king:   { stat: 'buckshotWins',  goal: 50  },
+    wild_card:       { stat: 'wildGames',     goal: 1   },
+    wild_master:     { stat: 'wildWins',      goal: 10  },
+  };
+
+  const precondition = ACH_PRECONDITIONS[String(achievementId)];
+  if (precondition) {
+    const stats = await getPlayerGameStats(String(playerId));
+    if (stats !== null) {
+      const actual = stats[precondition.stat] ?? 0;
+      if (actual < precondition.goal) {
+        console.warn(`[ACH] Rejected ${achievementId} for ${playerId}: need ${precondition.goal} ${precondition.stat}, have ${actual}`);
+        return res.json({ ok: false, error: 'precondition_not_met' });
+      }
+    }
+  }
+
   const result = await recordAchievementUnlock(String(playerId), String(achievementId));
   if (result === 'already_unlocked') return res.json({ ok: false, error: 'already_unlocked' });
   if (result === 'error')            return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /xp/levelup  { playerId, level }
+// Records a level-up reward claim so it cannot be re-triggered after a save wipe.
+// Client calls this when awardLevelUp() fires. Server grants nothing — client already
+// applied the reward locally — this endpoint just raises the trusted-diamond ceiling
+// and records the level so future saves cannot replay it.
+app.post("/xp/levelup", async (req, res) => {
+  const { playerId, level } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const lvl = Number(level);
+  if (!lvl || lvl < 2 || lvl > 500) return res.status(400).json({ ok: false, error: 'invalid_level' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  const result = await recordLevelUpClaim(String(playerId), lvl);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+
+  // Free spin per level-up — raise ceiling by a conservative amount
+  await addTrustedDiamonds(String(playerId), 0).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /solo/complete  { playerId, levelNum, gemReward }
+// Records a solo level completion and raises the trusted-diamond ceiling by gemReward.
+// Idempotent: duplicate calls return already_claimed without re-raising the ceiling.
+app.post("/solo/complete", async (req, res) => {
+  const { playerId, levelNum, gemReward } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const lvl = Number(levelNum);
+  const gems = Number(gemReward);
+  if (!lvl || lvl < 1 || lvl > 100) return res.status(400).json({ ok: false, error: 'invalid_level' });
+  if (isNaN(gems) || gems < 0 || gems > 50) return res.status(400).json({ ok: false, error: 'invalid_reward' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  const result = await recordSoloLevelClaim(String(playerId), lvl, gems);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+
+  if (gems > 0) await addTrustedDiamonds(String(playerId), gems).catch(() => {});
   res.json({ ok: true });
 });
 
@@ -1212,6 +1287,33 @@ app.post("/koth/prizes/claim", async (req, res) => {
   const result = await claimKothWeeklyPrize(playerId, weekStart);
   if (!result) return res.json({ ok: false, reason: 'server_error' });
   res.json(result);
+});
+
+// POST /ring/reward  { playerId, amount, rewardType }
+// Raises the trusted-diamond ceiling for ring salvage and ring achievement rewards.
+// rewardType: 'salvage' | 'achievement'
+// Max 500 diamonds per call (highest single ring achievement reward). Rate-limited to 50/day.
+app.post("/ring/reward", async (req, res) => {
+  const { playerId, amount, rewardType } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const amt = Number(amount);
+  if (!amt || amt <= 0 || amt > 500) return res.status(400).json({ ok: false, error: 'invalid_amount' });
+  if (!['salvage', 'achievement'].includes(String(rewardType)))
+    return res.status(400).json({ ok: false, error: 'invalid_type' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  // Rate-limit: max 50 ring reward claims per 24 hours per player
+  const rows = await query(
+    `SELECT COUNT(*)::int AS cnt FROM diamond_spends
+     WHERE player_id = $1 AND item_id LIKE 'ring_%' AND spent_at > now() - interval '24 hours'`,
+    [playerId]
+  );
+  const cnt = Number(rows?.[0]?.cnt ?? 0);
+  if (cnt >= 50) return res.json({ ok: false, error: 'rate_limit' });
+
+  await addTrustedDiamonds(String(playerId), amt).catch(() => {});
+  res.json({ ok: true });
 });
 
 // ─── Ring System ─────────────────────────────────────────────────────────────

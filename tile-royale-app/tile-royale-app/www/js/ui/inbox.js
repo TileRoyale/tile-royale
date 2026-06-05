@@ -134,6 +134,35 @@ async function markNotificationRead(notificationId) {
   });
 }
 
+// ─── Startup: recover any inbox rewards that were claimed but not applied ──────
+// If the app crashed between the server marking claimed_at and the client's saveState(),
+// the reward_type/amount is stored in gameState._pendingInboxRewards and re-applied here.
+
+function _inboxRecoverPendingRewards() {
+  try {
+    const pending = gameState._pendingInboxRewards;
+    if (!pending || !Object.keys(pending).length) return;
+    let recovered = false;
+    for (const [, r] of Object.entries(pending)) {
+      if (!r) continue;
+      if (r.type === 'diamonds') gameState.diamonds = (gameState.diamonds || 0) + r.amount;
+      else if (r.type === 'tickets') gameState.tickets = (gameState.tickets || 0) + r.amount;
+      else if (r.type === 'spins')   gameState.freeSpins = (gameState.freeSpins || 0) + r.amount;
+      recovered = true;
+    }
+    if (recovered) {
+      gameState._pendingInboxRewards = {};
+      try { saveState(); updateMenuStats(); } catch(e) {}
+      console.log('[Inbox] Recovered pending rewards from previous session');
+    }
+  } catch(e) {}
+}
+
+// Called from cloudSave.js after loadFromCloud() completes
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(_inboxRecoverPendingRewards, 3500); // after cloud sync settles
+});
+
 // ─── Claim Reward ──────────────────────────────────────────────────────────────
 
 async function claimNotificationReward(notificationId) {
@@ -152,13 +181,21 @@ async function claimNotificationReward(notificationId) {
   }
 
   const { reward_type, reward_amount } = data;
+
+  // Mark pending BEFORE applying so a crash between here and saveState() is recoverable
+  if (!gameState._pendingInboxRewards) gameState._pendingInboxRewards = {};
+  gameState._pendingInboxRewards[notificationId] = { type: reward_type, amount: reward_amount };
+  try { saveState(); } catch(e) {}
+
   if (reward_type === 'diamonds') {
     gameState.diamonds = (gameState.diamonds || 0) + reward_amount;
   } else if (reward_type === 'tickets') {
-    gameState.tickets = Math.min((gameState.tickets || 0) + reward_amount, 10);
+    gameState.tickets = (gameState.tickets || 0) + reward_amount;
   } else if (reward_type === 'spins') {
     gameState.freeSpins = (gameState.freeSpins || 0) + reward_amount;
   }
+  // Clear the pending marker now that the reward is in gameState
+  gameState._pendingInboxRewards[notificationId] = null;
   try { saveState(); }    catch(e) {}
   try { updateMenuStats(); } catch(e) {}
 
