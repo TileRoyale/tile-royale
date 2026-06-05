@@ -112,9 +112,10 @@ async function createTables(): Promise<void> {
     ALTER TABLE players ADD COLUMN IF NOT EXISTS player_tag INTEGER;
 
     -- Trophy Road + Achievement summary (synced from client, used in public profiles)
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS trophy_points     INTEGER DEFAULT 0;
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS achievement_count INTEGER DEFAULT 0;
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS achievement_total INTEGER DEFAULT 108;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS trophy_points          INTEGER  DEFAULT 0;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS achievement_count      INTEGER  DEFAULT 0;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS achievement_total      INTEGER  DEFAULT 108;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS unlocked_achievements  TEXT[]   DEFAULT '{}';
 
     -- Diamond balance (synced from client for percentile ranking)
     ALTER TABLE players ADD COLUMN IF NOT EXISTS diamonds INTEGER DEFAULT 0;
@@ -156,10 +157,12 @@ async function createTables(): Promise<void> {
 
     -- Cloud Save: one row per player, UPSERT on every save
     CREATE TABLE IF NOT EXISTS player_save_data (
-      player_id   UUID         PRIMARY KEY,
-      save_json   TEXT         NOT NULL,
-      updated_at  TIMESTAMPTZ  DEFAULT now()
+      player_id    UUID         PRIMARY KEY,
+      save_json    TEXT         NOT NULL,
+      save_version INTEGER      NOT NULL DEFAULT 1,
+      updated_at   TIMESTAMPTZ  DEFAULT now()
     );
+    ALTER TABLE player_save_data ADD COLUMN IF NOT EXISTS save_version INTEGER NOT NULL DEFAULT 1;
 
     -- Push tokens: one row per FCM token (UNIQUE on token, indexed by player)
     CREATE TABLE IF NOT EXISTS push_tokens (
@@ -286,6 +289,36 @@ async function createTables(): Promise<void> {
       played_at   TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Daily login claims: one per player per calendar date (prevents re-claiming after localStorage wipe)
+    CREATE TABLE IF NOT EXISTS daily_login_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      claim_date  DATE         NOT NULL,
+      day_num     INTEGER      NOT NULL,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Mission reward claims: one per player per (mission_id, period_key)
+    CREATE TABLE IF NOT EXISTS mission_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      mission_id  TEXT         NOT NULL,
+      period_key  TEXT         NOT NULL,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Mode reward claims: one per player per (mode, period, period_key)
+    CREATE TABLE IF NOT EXISTS mode_reward_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      mode        TEXT         NOT NULL,
+      period      TEXT         NOT NULL,
+      period_key  TEXT         NOT NULL,
+      tier        TEXT         NOT NULL,
+      tickets     INTEGER      NOT NULL DEFAULT 0,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
     -- Gauntlet weekly prize claims: one per player per ISO week-start (Monday)
     CREATE TABLE IF NOT EXISTS gauntlet_weekly_claims (
       id          BIGSERIAL    PRIMARY KEY,
@@ -320,6 +353,9 @@ async function createTables(): Promise<void> {
     CREATE        INDEX IF NOT EXISTS idx_gauntlet_results_player ON gauntlet_results(player_id, played_at DESC);
     CREATE        INDEX IF NOT EXISTS idx_gauntlet_results_sess   ON gauntlet_results(session_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_gauntlet_weekly_claims  ON gauntlet_weekly_claims(player_id, week_start);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_login_claims       ON daily_login_claims(player_id, claim_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_mission_claims           ON mission_claims(player_id, mission_id, period_key);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_mode_reward_claims       ON mode_reward_claims(player_id, mode, period, period_key);
   `);
   console.log("[DB] Tables ready");
 }
@@ -897,21 +933,157 @@ export async function getFriendshipStatus(viewerId: string, targetId: string): P
 }
 
 // Upsert trophy points + achievement summary + diamond balance (called on client events).
+// achievement_ids is merged with existing server set (union — never removes).
 export async function updatePlayerProgress(
   playerId: string,
   trophyPoints: number,
   achievementCount: number,
   achievementTotal: number,
-  diamonds: number
+  diamonds: number,
+  achievementIds?: string[]
 ): Promise<void> {
-  await query(`
-    UPDATE players
-    SET trophy_points     = $2,
-        achievement_count = $3,
-        achievement_total = $4,
-        diamonds          = $5
-    WHERE player_id = $1
-  `, [playerId, trophyPoints, achievementCount, achievementTotal, diamonds]);
+  if (achievementIds && achievementIds.length > 0) {
+    await query(`
+      UPDATE players
+      SET trophy_points          = $2,
+          achievement_count      = $3,
+          achievement_total      = $4,
+          diamonds               = $5,
+          unlocked_achievements  = (
+            SELECT ARRAY(
+              SELECT DISTINCT unnest(
+                unlocked_achievements || $6::TEXT[]
+              )
+            )
+          )
+      WHERE player_id = $1
+    `, [playerId, trophyPoints, achievementCount, achievementTotal, diamonds, achievementIds]);
+  } else {
+    await query(`
+      UPDATE players
+      SET trophy_points     = $2,
+          achievement_count = $3,
+          achievement_total = $4,
+          diamonds          = $5
+      WHERE player_id = $1
+    `, [playerId, trophyPoints, achievementCount, achievementTotal, diamonds]);
+  }
+}
+
+export async function getPlayerAchievements(playerId: string): Promise<string[]> {
+  const rows = await query(
+    `SELECT unlocked_achievements FROM players WHERE player_id = $1`,
+    [playerId]
+  );
+  return rows?.[0]?.unlocked_achievements ?? [];
+}
+
+// ─── Reward Validation ────────────────────────────────────────────────────────
+
+export async function recordDailyLoginClaim(
+  playerId: string, claimDate: string, dayNum: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO daily_login_claims (player_id, claim_date, day_num) VALUES ($1, $2, $3)`,
+      [playerId, claimDate, dayNum]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] daily_login_claims error:', err?.message);
+    return 'error';
+  }
+}
+
+export async function recordMissionClaim(
+  playerId: string, missionId: string, periodKey: string
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO mission_claims (player_id, mission_id, period_key) VALUES ($1, $2, $3)`,
+      [playerId, missionId, periodKey]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] mission_claims error:', err?.message);
+    return 'error';
+  }
+}
+
+// Validates mode reward claim against actual game_results and records idempotently.
+// Returns the earned tier, or null if already claimed.
+export async function getAndValidateModeRewardClaim(
+  playerId: string, mode: string, period: 'daily' | 'weekly', periodKey: string,
+  periodStart: string, periodEnd: string
+): Promise<{ tier: string; tickets: number } | 'already_claimed' | 'no_reward' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    // Count actual wins from server game_results
+    const rows = await pool.query(
+      `SELECT COUNT(*)::INT AS wins FROM game_results
+       WHERE player_id = $1 AND mode = $2 AND placement = 1
+         AND played_at >= $3 AND played_at < $4`,
+      [playerId, mode, periodStart, periodEnd]
+    );
+    const wins = rows.rows[0]?.wins ?? 0;
+
+    const dailyTiers  = [{ minWins:5, tier:'TOP 1%', tickets:10 }, { minWins:2, tier:'TOP 3%', tickets:5 }, { minWins:1, tier:'TOP 5%', tickets:3 }];
+    const weeklyTiers = [{ minWins:20, tier:'TOP 1%', tickets:30 }, { minWins:10, tier:'TOP 3%', tickets:20 }, { minWins:3, tier:'TOP 5%', tickets:10 }];
+    const tiers = period === 'daily' ? dailyTiers : weeklyTiers;
+    const earned = tiers.find(t => wins >= t.minWins);
+    if (!earned) return 'no_reward';
+
+    // Record claim — idempotent
+    await pool.query(
+      `INSERT INTO mode_reward_claims (player_id, mode, period, period_key, tier, tickets)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [playerId, mode, period, periodKey, earned.tier, earned.tickets]
+    );
+    return { tier: earned.tier, tickets: earned.tickets };
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] mode_reward_claims error:', err?.message);
+    return 'error';
+  }
+}
+
+// Hard-delete all data for a player across every table. Returns true on success.
+export async function deletePlayerData(playerId: string): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  try {
+    // Delete in FK-safe order (children before parents)
+    await pool.query(`DELETE FROM push_tokens            WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM daily_login_claims     WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM mission_claims         WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM mode_reward_claims     WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM gauntlet_weekly_claims WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM gauntlet_results       WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM gauntlet_mmr           WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM koth_daily_claims      WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM koth_prize_claims      WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM solo_scores            WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM practice_scores        WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM purchase_receipts      WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM promo_redemptions      WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM ring_trades            WHERE seller_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM ring_grants            WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM player_notifications   WHERE player_id = $1::TEXT`, [playerId]);
+    await pool.query(`DELETE FROM player_save_data       WHERE player_id = $1`, [playerId]);
+    await pool.query(
+      `DELETE FROM friends
+       WHERE requester_player_id = $1 OR target_player_id = $1`, [playerId]
+    );
+    await pool.query(`DELETE FROM game_results           WHERE player_id = $1`, [playerId]);
+    await pool.query(`DELETE FROM players                WHERE player_id = $1`, [playerId]);
+    return true;
+  } catch (err: any) {
+    console.error('[DB] deletePlayerData error:', err?.message);
+    return false;
+  }
 }
 
 // Returns the most-played mode string for a player, or null.
@@ -1029,26 +1201,62 @@ export async function createPlayerNotification(
 
 // ─── Cloud Save ────────────────────────────────────────────────────────────────
 
-export async function savePlayerData(playerId: string, saveJson: string): Promise<boolean> {
-  const rows = await query(
-    `INSERT INTO player_save_data (player_id, save_json, updated_at)
-     VALUES ($1, $2, now())
-     ON CONFLICT (player_id) DO UPDATE
-       SET save_json  = EXCLUDED.save_json,
-           updated_at = now()
-     RETURNING player_id`,
-    [playerId, saveJson]
-  );
-  return (rows?.length ?? 0) > 0;
+// Returns { ok: true, newVersion } | { ok: false, conflict: true, serverVersion }
+export async function savePlayerData(
+  playerId: string,
+  saveJson: string,
+  clientVersion?: number
+): Promise<{ ok: boolean; newVersion?: number; conflict?: boolean; serverVersion?: number }> {
+  if (!pool || !dbAvailable) return { ok: false };
+  try {
+    if (clientVersion !== undefined) {
+      // Optimistic-lock: only update if DB version matches client version
+      const result = await pool.query(
+        `INSERT INTO player_save_data (player_id, save_json, save_version, updated_at)
+         VALUES ($1, $2, 1, now())
+         ON CONFLICT (player_id) DO UPDATE
+           SET save_json    = EXCLUDED.save_json,
+               save_version = player_save_data.save_version + 1,
+               updated_at   = now()
+         WHERE player_save_data.save_version = $3
+         RETURNING save_version`,
+        [playerId, saveJson, clientVersion]
+      );
+      if (result.rows.length === 0) {
+        // Conflict — another device saved a newer version
+        const cur = await pool.query(
+          `SELECT save_version FROM player_save_data WHERE player_id = $1`, [playerId]
+        );
+        return { ok: false, conflict: true, serverVersion: cur.rows[0]?.save_version ?? 0 };
+      }
+      return { ok: true, newVersion: result.rows[0].save_version };
+    } else {
+      // No version supplied (legacy / first save) — unconditional upsert
+      const result = await pool.query(
+        `INSERT INTO player_save_data (player_id, save_json, save_version, updated_at)
+         VALUES ($1, $2, 1, now())
+         ON CONFLICT (player_id) DO UPDATE
+           SET save_json    = EXCLUDED.save_json,
+               save_version = player_save_data.save_version + 1,
+               updated_at   = now()
+         RETURNING save_version`,
+        [playerId, saveJson]
+      );
+      return { ok: true, newVersion: result.rows[0]?.save_version };
+    }
+  } catch (err) {
+    console.error('[DB] savePlayerData error:', err);
+    return { ok: false };
+  }
 }
 
-export async function loadPlayerData(playerId: string): Promise<{ saveJson: string; updatedAt: string } | null> {
+export async function loadPlayerData(playerId: string): Promise<{ saveJson: string; updatedAt: string; saveVersion: number } | null> {
   const rows = await query(
-    `SELECT save_json, updated_at FROM player_save_data WHERE player_id = $1`,
+    `SELECT save_json, updated_at, save_version FROM player_save_data WHERE player_id = $1`,
     [playerId]
   );
   if (!rows?.length) return null;
-  return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
+  return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at, saveVersion: rows[0].save_version ?? 1 };
 }
 
 // ─── Push Tokens ───────────────────────────────────────────────────────────────

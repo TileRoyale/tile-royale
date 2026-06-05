@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -355,7 +355,7 @@ app.post("/friends/add", async (req, res) => {
 
 // POST /playerprogress — lightweight sync of trophy points + achievement summary + diamonds from client
 app.post("/playerprogress", async (req, res) => {
-  const { playerId, trophy_points, achievement_count, achievement_total, diamonds } = req.body;
+  const { playerId, trophy_points, achievement_count, achievement_total, diamonds, achievement_ids } = req.body;
   if (!playerId || playerId.length < 10) return res.json({ ok: false, error: 'invalid_player' });
   if (!getDbStatus().available)          return res.json({ ok: false, error: 'db_unavailable' });
 
@@ -363,9 +363,22 @@ app.post("/playerprogress", async (req, res) => {
   const count = Math.max(0, Math.min(Number(achievement_count) || 0, 9999));
   const total = Math.max(1, Math.min(Number(achievement_total) || 108, 9999));
   const gems  = Math.max(0, Math.min(Number(diamonds)          || 0, 9999999));
+  const ids   = Array.isArray(achievement_ids)
+    ? achievement_ids.filter((x: any) => typeof x === 'string').slice(0, 200)
+    : undefined;
 
-  await updatePlayerProgress(playerId, pts, count, total, gems);
+  await updatePlayerProgress(playerId, pts, count, total, gems, ids);
   res.json({ ok: true });
+});
+
+// GET /player/achievements/:playerId — returns server-stored achievement ID list
+app.get("/player/achievements/:playerId", async (req, res) => {
+  const { playerId } = req.params;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: false, achievement_ids: [] });
+  const ids = await getPlayerAchievements(playerId);
+  res.json({ ok: true, achievement_ids: ids });
 });
 
 // GET /playerpercentiles/:playerId — per-stat percentile vs all players
@@ -551,6 +564,71 @@ app.post("/notifications/claim", async (req, res) => {
     addTrustedDiamonds(String(playerId), Number(result.reward_amount)).catch(() => {});
   }
   res.json({ success: true, reward_type: result.reward_type, reward_amount: result.reward_amount });
+});
+
+// POST /daily-login/claim  { playerId, day, claimDate }
+// Idempotent: server records the claim so localStorage manipulation can't re-trigger it.
+app.post("/daily-login/claim", async (req, res) => {
+  const { playerId, day, claimDate } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!claimDate || !/^\d{4}-\d{2}-\d{2}$/.test(claimDate))
+    return res.status(400).json({ ok: false, error: 'invalid_date' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true }); // allow offline
+  const result = await recordDailyLoginClaim(playerId, claimDate, Number(day) || 1);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /missions/claim  { playerId, missionId, periodKey }
+// periodKey = ISO date (daily) or ISO week-start Monday (weekly).
+app.post("/missions/claim", async (req, res) => {
+  const { playerId, missionId, periodKey } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!missionId || !periodKey) return res.status(400).json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true }); // allow offline
+  const result = await recordMissionClaim(playerId, String(missionId), String(periodKey));
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /mode-rewards/claim  { playerId, mode, period, periodKey, periodStart, periodEnd }
+// Validates win count from server game_results — client win count not trusted.
+app.post("/mode-rewards/claim", async (req, res) => {
+  const { playerId, mode, period, periodKey, periodStart, periodEnd } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!['rush','buckshot','wild'].includes(mode))
+    return res.status(400).json({ ok: false, error: 'invalid_mode' });
+  if (!['daily','weekly'].includes(period))
+    return res.status(400).json({ ok: false, error: 'invalid_period' });
+  if (!periodKey || !periodStart || !periodEnd)
+    return res.status(400).json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available) return res.json({ ok: false, error: 'db_unavailable' });
+
+  const result = await getAndValidateModeRewardClaim(
+    playerId, mode, period as 'daily'|'weekly', String(periodKey),
+    String(periodStart), String(periodEnd)
+  );
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'no_reward')       return res.json({ ok: false, error: 'no_reward' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true, tier: result.tier, tickets: result.tickets });
+});
+
+// DELETE /admin/delete-player/:playerId — hard-delete all player data (GDPR / privacy policy)
+app.delete("/admin/delete-player/:playerId", requireAdmin, async (req, res) => {
+  const { playerId } = req.params;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const ok = await deletePlayerData(playerId);
+  if (!ok) return res.status(500).json({ ok: false, error: 'delete_failed' });
+  console.log(`[Admin] Player data deleted: ${playerId}`);
+  res.json({ ok: true, playerId });
 });
 
 // POST /admin/notification — send a notification to a player
@@ -809,8 +887,15 @@ app.post("/save", async (req, res) => {
   if (saveJson.length > 1_000_000) {
     res.status(400).json({ ok: false, error: 'Save data too large (max 1 MB)' }); return;
   }
-  const ok = await savePlayerData(playerId, saveJson);
-  const resp: Record<string, any> = { ok: ok ?? false };
+  const clientVersion = typeof saveData._saveVersion === 'number' ? saveData._saveVersion : undefined;
+  const saveResult = await savePlayerData(playerId, saveJson, clientVersion);
+  if (saveResult.conflict) {
+    // Another device saved newer state — tell client to reload before retrying
+    res.json({ ok: false, conflict: true, serverVersion: saveResult.serverVersion });
+    return;
+  }
+  const resp: Record<string, any> = { ok: saveResult.ok };
+  if (saveResult.newVersion !== undefined) resp.saveVersion = saveResult.newVersion;
   if (adjustedDiamonds !== undefined) resp.adjustedDiamonds = adjustedDiamonds;
   res.json(resp);
 });
@@ -827,7 +912,7 @@ app.get("/save/:playerId", async (req, res) => {
     const saveData = JSON.parse(result.saveJson);
     // Return the server-trusted diamond value so the client can apply it as override
     const trusted = getDbStatus().available ? await getTrustedDiamonds(playerId) : null;
-    const resp: Record<string, any> = { found: true, saveData, updatedAt: result.updatedAt };
+    const resp: Record<string, any> = { found: true, saveData, updatedAt: result.updatedAt, saveVersion: result.saveVersion };
     if (trusted !== null) resp.trustedDiamonds = trusted;
     res.json(resp);
   } catch {
