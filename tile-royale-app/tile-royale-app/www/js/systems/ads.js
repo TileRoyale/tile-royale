@@ -164,10 +164,10 @@ async function watchAdsForTickets(count) {
     const rewarded = await _watchRewardedAd();
     adWatchInProgress = false;
     if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
-    gameState.tickets = Math.min(TICKETS_MAX, getTickets() + 1);
+    gameState.tickets = Math.min(TICKETS_MAX, getTickets() + 2);
     gameState[adKey]  = Date.now();
     saveState(); updateTicketUI(); updateStoreAdTimer();
-    showToast('🎟️ +1 Ticket!', 'var(--gold)');
+    showToast('🎟️ +2 Tickets!', 'var(--gold)');
     playSound('achieve');
   } else {
     // Watch count ads in sequence — grant partial reward if chain breaks midway

@@ -153,9 +153,9 @@ async function gmWatchAdForKey() {
   const rewarded = await _watchRewardedAd();
   if (btn) btn.disabled = false;
   if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
-  gmAddKey(1);
+  gmAddKey(2);
   document.getElementById('ghNoKeyPopup')?.remove();
-  showToast('🔑 Key earned! Let\'s go!', '#ffd700');
+  showToast('🔑🔑 +2 Keys earned!', '#ffd700');
   playSound('achieve');
 }
 
@@ -188,7 +188,7 @@ function gmShowNoKeyPopup() {
       <div style="font-size:12px;color:rgba(255,255,255,0.45);letter-spacing:1px;margin-bottom:${timer ? '4px' : '18px'};">Keys regenerate 1 per hour (max ${GM_KEYS_MAX})</div>
       ${timer ? `<div style="font-size:13px;color:#9b00ff;letter-spacing:1px;margin-bottom:18px;">Next key in <b>${timer}</b></div>` : ''}
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
-        <button id="ghAdKeyBtn" style="padding:13px;border-radius:12px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.35);color:#ffd700;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;cursor:pointer;" onclick="gmWatchAdForKey()">📺 WATCH AD — FREE KEY</button>
+        <button id="ghAdKeyBtn" style="padding:13px;border-radius:12px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.35);color:#ffd700;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;cursor:pointer;" onclick="gmWatchAdForKey()">📺 WATCH AD — GET 2 KEYS</button>
         <button style="padding:13px;border-radius:12px;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.3);color:var(--diamond);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;cursor:pointer;" onclick="gmBuyKeyWithGems()">💎 ${GM_KEY_GEM_COST} GEMS — GET KEY</button>
       </div>
       <button style="width:100%;padding:10px;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:rgba(255,255,255,0.4);font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;cursor:pointer;" onclick="document.getElementById('ghNoKeyPopup').remove()">CLOSE</button>

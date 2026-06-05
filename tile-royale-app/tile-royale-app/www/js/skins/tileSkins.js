@@ -270,6 +270,29 @@ function renderSkinGrid(tab) {
   startMiniAnimations(tab);
 }
 
+// More vivid gradients for 58×58 mini-preview thumbnails (game arena uses darker versions)
+const MINI_TABLE_BG = {
+  table_dark:         'linear-gradient(135deg, #1e1e30, #0e0e1e)',
+  table_desert:       'linear-gradient(135deg, #b06828, #7a4010)',
+  table_arctic:       'linear-gradient(135deg, #1a5ea0, #0a3060)',
+  table_ocean:        'linear-gradient(135deg, #0a4888, #063060)',
+  table_marble:       'linear-gradient(135deg, #3a3a5e, #28284a)',
+  table_neon:         'linear-gradient(135deg, #004a00, #003200)',
+  table_lava:         'linear-gradient(135deg, #aa2200, #6a1000)',
+  table_circuit:      'linear-gradient(135deg, #003a00, #002400)',
+  table_galaxy:       'linear-gradient(135deg, #2a0088, #160050)',
+  table_toxic:        'linear-gradient(135deg, #005200, #003800)',
+  table_inferno:      'linear-gradient(135deg, #991800, #620800)',
+  table_cosmos:       'linear-gradient(135deg, #0a0068, #050040)',
+  table_candy:        'linear-gradient(135deg, #550090, #38005e)',
+  table_cheese:       'linear-gradient(135deg, #664400, #3e2800)',
+  table_disco:        'linear-gradient(135deg, #380055, #001838)',
+  table_money:        'linear-gradient(135deg, #005a00, #003800)',
+  table_obsidian:     'linear-gradient(135deg, #1a0028, #0a0018)',
+  table_aurora:       'linear-gradient(135deg, #005030, #003820)',
+  // Mythic skins intentionally omitted — applyTableBgToEl handles them as webp images
+};
+
 function buildMiniPreview(skinId, tab) {
   const el = document.getElementById('mini-' + skinId);
   if (!el) return;
@@ -277,7 +300,14 @@ function buildMiniPreview(skinId, tab) {
   el.className = 'skin-mini-preview';
 
   const tableSkin = tab === 'table' ? skinId : (activeSkins.table || 'table_dark');
-  applyTableBgToEl(el, tableSkin);
+
+  // Use vivid mini-preview colors so dark skins are distinguishable in the 58px thumbnail
+  const miniColor = MINI_TABLE_BG[tableSkin];
+  if (miniColor) {
+    el.style.background = miniColor;
+  } else {
+    applyTableBgToEl(el, tableSkin);
+  }
 
   // Table skin: show only background, no tiles
   if (tab === 'table') {
