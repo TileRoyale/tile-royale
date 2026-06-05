@@ -144,19 +144,43 @@ function giveAchievementReward(ach) {
   return { diamonds: reward.diamonds, items: itemsGiven, exclusiveSkin };
 }
 
-function unlockAchievement(id) {
+async function unlockAchievement(id) {
   initAchStats();
   if (gameState.unlockedAch.includes(id)) return;
+
+  // Optimistically lock to prevent concurrent duplicate calls
   gameState.unlockedAch.push(id);
+
+  // Server-side idempotency — if already recorded, restore state without re-granting reward
+  let alreadyUnlocked = false;
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const resp = await fetch(`${getActiveServer().http}/achievements/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, achievementId: id }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const data = resp.ok ? await resp.json() : null;
+      if (data && !data.ok && !data.offline && data.error === 'already_unlocked') {
+        alreadyUnlocked = true;
+      }
+    } catch(e) { /* offline — allow local grant */ }
+  }
+
   const ach = ACHIEVEMENTS.find(a => a.id === id);
-  if (!ach) return;
-  const reward = giveAchievementReward(ach);
-  // Unlock avatar tied to this achievement
-  const linkedAvatars = ALL_AVATARS.filter(av => av.unlock === ach.id);
-  (linkedAvatars||[]).forEach(av => unlockAvatar(av.id));
-  saveState();
-  playSound('achieve');
-  showAchievementPopup(ach, reward);
+  if (!ach) { saveState(); return; }
+
+  if (!alreadyUnlocked) {
+    const reward = giveAchievementReward(ach);
+    const linkedAvatars = ALL_AVATARS.filter(av => av.unlock === ach.id);
+    (linkedAvatars||[]).forEach(av => unlockAvatar(av.id));
+    saveState();
+    playSound('achieve');
+    showAchievementPopup(ach, reward);
+  } else {
+    saveState();
+  }
   _syncProgress();
 }
 
@@ -287,7 +311,11 @@ function _syncProgress() {
     fetch(`${getActiveServer().http}/playerprogress`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId: PLAYER_ID, trophy_points: pts, achievement_count: count, achievement_total: total, diamonds: gems }),
+      body: JSON.stringify({
+        playerId: PLAYER_ID,
+        trophy_points: pts, achievement_count: count, achievement_total: total, diamonds: gems,
+        achievement_ids: gameState.unlockedAch || [],
+      }),
       signal: AbortSignal.timeout(8000),
     }).catch(() => {});
   } catch(e) {}
@@ -300,11 +328,29 @@ function getCurrentLeague() {
   return league;
 }
 
-function claimTrophyMilestone(pts) {
+async function claimTrophyMilestone(pts) {
   if (!gameState.trophyMilestonesClaimed) gameState.trophyMilestonesClaimed = [];
   if (gameState.trophyMilestonesClaimed.includes(pts)) return;
   const milestone = TROPHY_MILESTONES.find(m => m.pts === pts);
   if (!milestone || getTrophyPoints() < pts) return;
+
+  // Server-side idempotency — block re-claim after localStorage wipe
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const resp = await fetch(`${getActiveServer().http}/trophyroad/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, milestonePts: pts }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const data = resp.ok ? await resp.json() : null;
+      if (data && !data.ok && !data.offline && data.error === 'already_claimed') {
+        gameState.trophyMilestonesClaimed.push(pts);
+        try { saveState(); renderTrophyRoad(); } catch(e) {}
+        return;
+      }
+    } catch(e) { /* offline — allow local claim */ }
+  }
 
   gameState.trophyMilestonesClaimed.push(pts);
   const r = milestone.reward;

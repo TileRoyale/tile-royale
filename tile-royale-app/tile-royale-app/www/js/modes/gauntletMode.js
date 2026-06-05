@@ -4,12 +4,11 @@
 const GM_GRID_SIZE      = 25;       // 5×5
 const GM_ROUND_SECS     = 35;
 const GM_BASE_SPAWN_MS  = 600;
-const GM_TILE_LIFE_MS   = 4000;     // regular tiles vanish after this
+const GM_TILE_LIFE_MS   = 4500;     // regular tiles vanish after this
 const GM_VOID_DURATION  = 1.2;      // seconds
 const GM_MAX_VOID_BOMBS = 2;
 const GM_SCORE_CORRECT  = 10;
 const GM_SCORE_WRONG    = -10;
-const GM_BOT_COUNT      = 29;       // simulated opponents (total lobby = 30)
 
 // ── Key system ──
 const GM_KEYS_MAX       = 10;
@@ -163,6 +162,7 @@ function gmBuyKeyWithGems() {
   if ((gameState.diamonds || 0) < GM_KEY_GEM_COST) {
     showToast(`Need 💎 ${GM_KEY_GEM_COST}!`, 'var(--red)'); return;
   }
+  _auditDiamondSpend('gauntlet_key', GM_KEY_GEM_COST);
   gameState.diamonds -= GM_KEY_GEM_COST;
   saveState();
   gmAddKey(1);
@@ -251,7 +251,6 @@ function _gmReset() {
     spawnId:         null,
     roundId:         null,
     effects:         null,
-    botScores:       [],
     finalPlace:      1,
     mmrDelta:        0,
   };
@@ -293,6 +292,8 @@ function openGauntletHub() {
   gmUpdateKeyUI();
   try { renderGauntletModeEffects(); } catch(e) {}
   showScreen('gauntletHubScreen');
+  // Fetch real leaderboard in the background — updates hub once data arrives
+  _gmFetchLeaderboard();
 }
 
 function gmStartOrNoKey() {
@@ -302,6 +303,33 @@ function gmStartOrNoKey() {
     return;
   }
   startGauntletLobby();
+}
+
+// Fetch leaderboard from server, cache in localStorage, re-render hub.
+async function _gmFetchLeaderboard() {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+  try {
+    const url = getActiveServer().http;
+    const r = await fetch(`${url}/gauntlet/leaderboard?playerId=${PLAYER_ID}`,
+                          { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data.dbAvailable || !Array.isArray(data.rankings) || data.rankings.length === 0) return;
+
+    const gd = gmLoadData();
+    // Normalise server rows → { name, mmr, isMe }
+    gd.weeklySnapshot = data.rankings.slice(0, 10).map(row => ({
+      name:  (row.avatar || '') + ' ' + (row.player_name || 'Player'),
+      mmr:   Number(row.mmr) || 0,
+      isMe:  !!row.is_me,
+      rank:  Number(row.rank) || 0,
+    }));
+    gd.leaderboardTotal = data.rankings.length;
+    gmSaveData(gd);
+    renderGauntletHub(gd);
+  } catch(e) {
+    // Silent — stale snapshot or skeleton stays visible
+  }
 }
 
 function renderGauntletHub(gd) {
@@ -314,55 +342,148 @@ function renderGauntletHub(gd) {
   if (el('ghMmrRank'))   el('ghMmrRank').textContent   = gmRankLabel(mmr);
   if (el('ghSeasonTimer')) el('ghSeasonTimer').textContent = `Season ends in ${gmSeasonDaysLeft()} days`;
 
+  // Determine player rank from real snapshot if available
+  const snapshot = gd.weeklySnapshot || [];
+  const total    = gd.leaderboardTotal || snapshot.length || 1;
+  const myRow    = snapshot.find(r => r.isMe);
+  const myRank   = myRow ? myRow.rank : total;
+
   // Placement % and reward tier
-  const place = _gmPlacementInfo(mmr);
+  const place = _gmPlacementInfo(myRank, total);
   const badgeEl = el('ghPlacementBadge');
   const rewardEl = el('ghRewardPreview');
   if (badgeEl) {
     badgeEl.innerHTML = `<span style="display:inline-block;padding:3px 12px;border-radius:14px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;background:${place.bg};color:${place.color};border:1px solid ${place.color}44;">${place.label}</span>`;
   }
   if (rewardEl) {
-    rewardEl.textContent = `Weekly reward: ${place.reward}`;
+    rewardEl.textContent = snapshot.length ? `Weekly reward: ${place.reward}` : 'Loading…';
   }
 
-  // Weekly leaderboard (simulated — shows own entry + placeholders)
+  // Weekly leaderboard
   const lb = el('ghLeaderboard');
   if (lb) {
-    const snapshot = gd.weeklySnapshot || [];
-    const rows = snapshot.length ? snapshot : _gmDefaultLeaderboard(mmr);
-    lb.innerHTML = rows.slice(0, 5).map((r, i) => `
-      <div class="gh-lb-row">
-        <div class="gh-lb-rank ${i === 0 ? 'gh-rank-1' : ''}">#${i+1}</div>
-        <div class="gh-lb-name">${r.name}</div>
-        <div class="gh-lb-mmr">${r.mmr}</div>
-      </div>`).join('');
+    if (snapshot.length === 0) {
+      lb.innerHTML = '<div class="gh-lb-row" style="color:var(--muted);font-size:12px;justify-content:center;">Loading leaderboard…</div>';
+    } else {
+      lb.innerHTML = snapshot.slice(0, 5).map((r, i) => `
+        <div class="gh-lb-row${r.isMe ? ' gh-lb-me' : ''}">
+          <div class="gh-lb-rank ${i === 0 ? 'gh-rank-1' : ''}">#${r.rank || i+1}</div>
+          <div class="gh-lb-name">${r.name}</div>
+          <div class="gh-lb-mmr">${r.mmr}</div>
+        </div>`).join('');
+    }
+  }
+
+  // Weekly claim button
+  _gmRenderClaimButton(gd, place);
+}
+
+// Maps player rank/total → placement % tier → weekly reward info.
+// rank and total come from the real server leaderboard.
+function _gmPlacementInfo(rank, total) {
+  total = total || 1;
+  const pct = rank / total * 100;
+  if (rank === 1)   return { label:'#1 THIS WEEK', color:'#ffd700', bg:'rgba(255,215,0,0.08)',    reward:'40 spins + 400💎',  spins:40,  diamonds:400  };
+  if (pct <= 2)     return { label:'TOP 2%',        color:'#ffd700', bg:'rgba(255,215,0,0.08)',    reward:'25 spins + 250💎',  spins:25,  diamonds:250  };
+  if (pct <= 3)     return { label:'TOP 3%',        color:'#ff8800', bg:'rgba(255,136,0,0.08)',    reward:'20 spins + 200💎',  spins:20,  diamonds:200  };
+  if (pct <= 5)     return { label:'TOP 5%',        color:'#ff8800', bg:'rgba(255,136,0,0.08)',    reward:'15 spins + 150💎',  spins:15,  diamonds:150  };
+  if (pct <= 10)    return { label:'TOP 10%',       color:'#9b00ff', bg:'rgba(155,0,255,0.08)',    reward:'10 spins + 100💎',  spins:10,  diamonds:100  };
+  if (pct <= 25)    return { label:'TOP 25%',       color:'#9b00ff', bg:'rgba(155,0,255,0.08)',    reward:'7 spins + 70💎',    spins:7,   diamonds:70   };
+  if (pct <= 50)    return { label:'TOP 50%',       color:'#00e5ff', bg:'rgba(0,229,255,0.06)',    reward:'5 spins + 50💎',    spins:5,   diamonds:50   };
+  if (pct <= 75)    return { label:'TOP 75%',       color:'rgba(255,255,255,0.5)', bg:'rgba(255,255,255,0.04)', reward:'3 spins + 30💎', spins:3, diamonds:30 };
+  return               { label:'TOP 100%',      color:'rgba(255,255,255,0.35)', bg:'rgba(255,255,255,0.03)', reward:'1 spin + 10💎',  spins:1,  diamonds:10  };
+}
+
+// ── Weekly claim button ──
+
+// Returns the ISO Monday date string for the most recently completed week (UTC).
+function _gmPrevWeekStart() {
+  const now         = new Date();
+  const utcDay      = now.getUTCDay();          // 0=Sun … 6=Sat
+  const daysSinceMon = (utcDay + 6) % 7;        // 0 on Mon, 6 on Sun
+  // Go back to last Monday (at least 7 days ago = previous full week's Monday)
+  const prevMon = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(),
+    now.getUTCDate() - daysSinceMon - 7
+  ));
+  return prevMon.toISOString().slice(0, 10);
+}
+
+function _gmRenderClaimButton(gd, place) {
+  const wrap = document.getElementById('ghWeeklyClaimWrap');
+  const btn  = document.getElementById('ghWeeklyClaimBtn');
+  if (!wrap || !btn) return;
+
+  const snapshot = gd.weeklySnapshot || [];
+  if (snapshot.length === 0) { wrap.style.display = 'none'; return; }
+
+  const weekStart  = _gmPrevWeekStart();
+  const alreadyClaimed = (gd.claimedWeeks || []).includes(weekStart);
+
+  if (alreadyClaimed) {
+    wrap.style.display = 'block';
+    btn.textContent    = '✓ Reward claimed this week';
+    btn.disabled       = true;
+    btn.style.opacity  = '0.5';
+  } else {
+    wrap.style.display = 'block';
+    btn.textContent    = `🎡 CLAIM WEEKLY REWARD — ${place.reward}`;
+    btn.disabled       = false;
+    btn.style.opacity  = '1';
+    btn.onclick        = () => claimGauntletWeekly(place);
   }
 }
 
-// Maps player rank in leaderboard → placement % tier → weekly reward info
-function _gmPlacementInfo(myMmr) {
-  const rows  = _gmDefaultLeaderboard(myMmr);
-  const total = rows.length;
-  const rank  = rows.findIndex(r => r.name === (gameState.playerName || 'You')) + 1 || total;
-  const pct   = rank / total * 100;
+async function claimGauntletWeekly(place) {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) {
+    showToast('Account required — restart the app', 'var(--red)'); return;
+  }
+  const btn = document.getElementById('ghWeeklyClaimBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Claiming…'; }
 
-  if (rank === 1)   return { label:'#1 THIS WEEK', color:'#ffd700', bg:'rgba(255,215,0,0.08)',    reward:'40 spins + 400💎' };
-  if (pct <= 2)     return { label:'TOP 2%',        color:'#ffd700', bg:'rgba(255,215,0,0.08)',    reward:'25 spins + 250💎' };
-  if (pct <= 3)     return { label:'TOP 3%',        color:'#ff8800', bg:'rgba(255,136,0,0.08)',    reward:'20 spins + 200💎' };
-  if (pct <= 5)     return { label:'TOP 5%',        color:'#ff8800', bg:'rgba(255,136,0,0.08)',    reward:'15 spins + 150💎' };
-  if (pct <= 10)    return { label:'TOP 10%',       color:'#9b00ff', bg:'rgba(155,0,255,0.08)',    reward:'10 spins + 100💎' };
-  if (pct <= 25)    return { label:'TOP 25%',       color:'#9b00ff', bg:'rgba(155,0,255,0.08)',    reward:'7 spins + 70💎' };
-  if (pct <= 50)    return { label:'TOP 50%',       color:'#00e5ff', bg:'rgba(0,229,255,0.06)',    reward:'5 spins + 50💎' };
-  if (pct <= 75)    return { label:'TOP 75%',       color:'rgba(255,255,255,0.5)', bg:'rgba(255,255,255,0.04)', reward:'3 spins + 30💎' };
-  return               { label:'TOP 100%',      color:'rgba(255,255,255,0.35)', bg:'rgba(255,255,255,0.03)', reward:'1 spin + 10💎' };
-}
-
-function _gmDefaultLeaderboard(myMmr) {
-  const names = ['VoidSlayer','CrimsonAce','PhantomX','DarkMatter','NeonRift'];
-  return names.map((name, i) => ({
-    name: i === 0 ? (gameState.playerName || 'You') : name,
-    mmr:  myMmr + (4 - i) * Math.floor(Math.random() * 40 + 10)
-  })).sort((a,b) => b.mmr - a.mmr);
+  const weekStart = _gmPrevWeekStart();
+  let ok = false;
+  try {
+    const r = await fetch(`${getActiveServer().http}/gauntlet/weekly/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, weekStart }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = r.ok ? await r.json() : null;
+    if (data?.ok) {
+      // Apply server-returned amounts (authoritative over place object)
+      const spins    = data.spins    ?? place.spins;
+      const diamonds = data.diamonds ?? place.diamonds;
+      if (diamonds > 0) { gameState.diamonds = (gameState.diamonds || 0) + diamonds; }
+      if (spins    > 0) { gameState.freeSpins = (gameState.freeSpins || 0) + spins; }
+      saveState(); updateMenuStats();
+      // Record locally so button stays in claimed state until next week
+      const gd = gmLoadData();
+      if (!gd.claimedWeeks) gd.claimedWeeks = [];
+      if (!gd.claimedWeeks.includes(weekStart)) gd.claimedWeeks.push(weekStart);
+      // Keep at most 4 weeks to prevent unbounded growth
+      if (gd.claimedWeeks.length > 4) gd.claimedWeeks = gd.claimedWeeks.slice(-4);
+      gmSaveData(gd);
+      ok = true;
+      showToast(`🎡 Claimed! +${spins} Spins · +💎 ${diamonds}!`, 'var(--gold)');
+      playSound('achieve'); vibrate([50, 50, 200]);
+      renderGauntletHub(gd);
+    } else if (data?.error === 'already_claimed') {
+      const gd = gmLoadData();
+      if (!gd.claimedWeeks) gd.claimedWeeks = [];
+      if (!gd.claimedWeeks.includes(weekStart)) gd.claimedWeeks.push(weekStart);
+      gmSaveData(gd);
+      showToast('Already claimed this week!', 'var(--muted)');
+      renderGauntletHub(gd);
+    } else {
+      showToast('Claim failed — try again later', 'var(--red)');
+      if (btn) { btn.disabled = false; btn.textContent = `🎡 CLAIM WEEKLY REWARD — ${place.reward}`; }
+    }
+  } catch(e) {
+    showToast('Network error — try again later', 'var(--red)');
+    if (btn) { btn.disabled = false; btn.textContent = `🎡 CLAIM WEEKLY REWARD — ${place.reward}`; }
+  }
 }
 
 // ── Lobby / matchmaking ──
@@ -372,6 +493,7 @@ let _gmLobbyTick = 0;
 async function startGauntletLobby() {
   try { _gmRestoreResultButtons(); } catch(e) {}
   if (!gmUseKey()) { gmShowNoKeyPopup(); return; }
+  _gmLobbyCancelled = false;
 
   const gd    = gmLoadData();
   const myMmr = gd.mmr || 0;
@@ -381,12 +503,22 @@ async function startGauntletLobby() {
 
   _gmLobbyTick = 0;
   _gmUpdateLobbyUI(15, 0);
+  const _unrankedEl = document.getElementById('glUnrankedNotice');
+  if (_unrankedEl) { _unrankedEl.style.display = 'none'; _unrankedEl.textContent = ''; }
   showScreen('gauntletLobbyScreen');
   playSound('menu');
 
   // Try to join a real Colyseus gauntlet room
   const client = (typeof getColyseusClient === 'function') ? getColyseusClient() : null;
-  if (!client) { _gmStartBotFallback(); return; }
+  if (!client) {
+    clearInterval(_gmLobbyId);
+    gmAddKey(1);
+    showScreen('gauntletHubScreen');
+    renderGauntletHub();
+    gmUpdateKeyUI();
+    showToast('No server connection — try again later', 'var(--red)');
+    return;
+  }
 
   try {
     const effects  = gmGetRingEffects();
@@ -411,9 +543,14 @@ async function startGauntletLobby() {
       if (lobbySecsLeft <= 0) clearInterval(_gmLobbyId);
     }, 1000);
   } catch (err) {
-    console.warn('[Gauntlet] Server join failed, bot fallback:', err?.message || err);
+    console.warn('[Gauntlet] Server join failed:', err?.message || err);
     _gmRoom = null;
-    _gmStartBotFallback();
+    clearInterval(_gmLobbyId);
+    gmAddKey(1);
+    showScreen('gauntletHubScreen');
+    renderGauntletHub();
+    gmUpdateKeyUI();
+    showToast('Could not connect to server — key refunded', 'var(--red)');
   }
 }
 
@@ -429,6 +566,17 @@ function _gmSetupRoomListeners() {
 
   _gmRoom.onMessage('ping', data => {
     try { _gmRoom.send('pong', { id: data.id }); } catch(e) {}
+  });
+
+  _gmRoom.onMessage('ranked_status', data => {
+    if (_gm) _gm.isRanked = data.ranked;
+    if (!data.ranked) {
+      const noticeEl = document.getElementById('glUnrankedNotice');
+      if (noticeEl) {
+        noticeEl.style.display = 'block';
+        noticeEl.textContent   = `Only ${data.realPlayers} real player${data.realPlayers !== 1 ? 's' : ''} in lobby — unranked match, key will be refunded`;
+      }
+    }
   });
 
   _gmRoom.onMessage('game_start', data => {
@@ -463,28 +611,6 @@ function _gmSetupRoomListeners() {
   });
 }
 
-// Old bot-only path — used when server is unreachable
-function _gmStartBotFallback() {
-  _gmLobbyTick = 0;
-  clearInterval(_gmLobbyId);
-  _gmLobbyId = setInterval(() => {
-    _gmLobbyTick++;
-    const totalSecs = 15;
-    const secsLeft  = totalSecs - _gmLobbyTick;
-
-    let playersFound;
-    if (_gmLobbyTick <= 5)       playersFound = Math.min(GM_BOT_COUNT, Math.round((_gmLobbyTick / 5) * 15));
-    else if (_gmLobbyTick <= 10) playersFound = Math.min(GM_BOT_COUNT, 15 + Math.round(((_gmLobbyTick-5)/5) * 12));
-    else                         playersFound = Math.min(GM_BOT_COUNT, 27 + Math.round(((_gmLobbyTick-10)/5) * 2));
-
-    _gmUpdateLobbyUI(secsLeft, playersFound);
-
-    if (secsLeft <= 0 || playersFound >= GM_BOT_COUNT) {
-      clearInterval(_gmLobbyId);
-      _gmStartGame(playersFound + 1);
-    }
-  }, 1000);
-}
 
 function _gmUpdateLobbyUI(secsLeft, playersFound) {
   const el = id => document.getElementById(id);
@@ -498,7 +624,11 @@ function _gmUpdateLobbyUI(secsLeft, playersFound) {
   if (el('glSearchRange')) el('glSearchRange').textContent = rangeText;
 }
 
+let _gmLobbyCancelled = false;
+
 function cancelGauntletLobby() {
+  if (_gmLobbyCancelled) return; // idempotency guard
+  _gmLobbyCancelled = true;
   clearInterval(_gmLobbyId);
   _gmLobbyId = null;
   if (_gmRoom) {
@@ -524,17 +654,7 @@ function _gmStartGame(totalPlayers, serverTargetColour) {
   // Use server-provided target colour if in multiplayer, else random
   _gm.targetColour = serverTargetColour || GM_COLOURS[Math.floor(Math.random() * GM_COLOURS.length)];
 
-  // Pre-roll bot scores only in fallback (bot) mode
-  if (!_gmRoom) {
-    const botCount = totalPlayers - 1;
-    _gm.botScores = Array.from({length: botCount}, () => {
-      const taps = Math.floor(Math.random() * 30 + 10);
-      const acc  = 0.5 + Math.random() * 0.45;
-      return Math.round(taps * acc * GM_SCORE_CORRECT - taps * (1-acc) * GM_SCORE_CORRECT);
-    });
-  } else {
-    _gm.botScores = []; // server handles all scoring
-  }
+  _gm.botScores = []; // no bots in Gauntlet
 
   showScreen('gauntletGameScreen');
   _gmBuildGrid();
@@ -673,28 +793,20 @@ function _gmClickTile(pos) {
   if (!t) return; // empty tile
 
   if (t.isVoid) {
-    // Clicking void bomb = defuse bonus +20
-    if (!_gmRoom) _gmApplyScore(20);
     _gm.correctTaps++;
     _gmClearTile(pos);
     _gmFlashScore('+20', '#9b00ff');
     if (_gmRoom) try { _gmRoom.send('tap', { pos, correct: false, isVoid: true }); } catch(e) {}
   } else if (t.colour === _gm.targetColour) {
-    // Correct!
     const pts = GM_SCORE_CORRECT * (1 + (_gm.effects.plusPoints || 0));
-    if (!_gmRoom) _gmApplyScore(pts);
     _gm.correctTaps++;
     _gmClearTile(pos);
-    // Change target colour
     _gm.targetColour = GM_COLOURS[Math.floor(Math.random() * GM_COLOURS.length)];
     _gmUpdateTarget();
     _gmFlashScore(`+${Math.round(pts)}`, '#00ff88');
     vibrate(20);
     if (_gmRoom) try { _gmRoom.send('tap', { pos, correct: true, isVoid: false }); } catch(e) {}
   } else {
-    // Wrong colour
-    const penalty = GM_SCORE_WRONG * (1 - (_gm.effects.minusPenalty || 0));
-    if (!_gmRoom) _gmApplyScore(penalty);
     _gm.wrongTaps++;
     _gmFlashScore('WRONG! -10', '#ff4444');
     if (_gmRoom) try { _gmRoom.send('tap', { pos, correct: false, isVoid: false }); } catch(e) {}
@@ -760,7 +872,7 @@ function _gmUpdateHud() {
     timerEl.className   = `gm-timer-display${_gm.timeLeft <= 5 ? ' gm-timer-low' : ''}`;
   }
   if (aliveEl) {
-    const total = _gm.totalPlayers || (_gm.botScores.length + 1);
+    const total = _gm.totalPlayers || 1;
     aliveEl.textContent = `${total}/${total}`;
   }
 }
@@ -790,41 +902,19 @@ function _gmEndGame() {
     if (_gm.tiles[i]) _gmClearTile(i);
   }
 
-  if (_gmRoom) {
-    // Server-authoritative mode: show "Calculating..." and wait for results message
-    _gmShowWaitingForResults();
-    // Results arrive via _gmRoom.onMessage('results', ...) → _gmHandleServerResults()
-    // Safety fallback: if server doesn't respond in 10s, leave gracefully
-    setTimeout(() => {
-      if (_gm && _gm.ending && !_gm.resultsReceived) {
-        console.warn('[Gauntlet] Results timeout — disconnecting');
-        try { _gmRoom?.leave(); } catch(e) {}
-        _gmRoom = null;
-        showScreen('gauntletHubScreen');
-        renderGauntletHub();
-      }
-    }, 10000);
-    return;
-  }
-
-  // Bot fallback: calculate locally
-  const allScores = [..._gm.botScores, _gm.score].sort((a,b) => b - a);
-  const place = allScores.indexOf(_gm.score) + 1;
-  _gm.finalPlace = Math.max(1, place);
-
-  const baseDelta = gmMmrDelta(_gm.finalPlace);
-  const bonusMult = 1 + (_gm.effects.bonusMmr || 0);
-  _gm.mmrDelta = Math.round(baseDelta * bonusMult);
-
-  const gd = gmLoadData();
-  gd.mmr         = Math.max(0, (gd.mmr || 0) + _gm.mmrDelta);
-  gd.totalGames  = (gd.totalGames || 0) + 1;
-  if (_gm.finalPlace === 1) gd.totalWins = (gd.totalWins || 0) + 1;
-  gmSaveData(gd);
-  gameState.gauntletMmr = gd.mmr;
-  saveState();
-
-  setTimeout(() => _gmShowResults(), 800);
+  // Server-authoritative mode: show "Calculating..." and wait for results message
+  _gmShowWaitingForResults();
+  // Results arrive via _gmRoom.onMessage('results', ...) → _gmHandleServerResults()
+  // Safety fallback: if server doesn't respond in 10s, leave gracefully
+  setTimeout(() => {
+    if (_gm && _gm.ending && !_gm.resultsReceived) {
+      console.warn('[Gauntlet] Results timeout — disconnecting');
+      try { _gmRoom?.leave(); } catch(e) {}
+      _gmRoom = null;
+      showScreen('gauntletHubScreen');
+      renderGauntletHub();
+    }
+  }, 10000);
 }
 
 function _gmShowWaitingForResults() {
@@ -837,29 +927,34 @@ function _gmShowWaitingForResults() {
 
 function _gmHandleServerResults(data) {
   if (!_gm) return;
-  _gm.resultsReceived = true;
-
-  _gm.finalPlace  = data.placement  || 1;
-  _gm.score       = data.score      ?? _gm.score;
-  _gm.correctTaps = data.taps       ?? _gm.correctTaps;
-  _gm.mmrDelta    = data.mmrDelta   ?? 0;
+  _gm.resultsReceived    = true;
+  _gm.finalPlace         = data.placement  || 1;
+  _gm.score              = data.score      ?? _gm.score;
+  _gm.correctTaps        = data.taps       ?? _gm.correctTaps;
+  _gm.mmrDelta           = data.mmrDelta   ?? 0;
+  _gm.isRanked           = data.ranked     ?? true;
   _gm._serverLeaderboard = data.leaderboard || null;
 
-  // Sync local MMR with server
   const gd = gmLoadData();
-  gd.mmr        = data.newMmr ?? Math.max(0, (gd.mmr || 0) + _gm.mmrDelta);
-  gd.totalGames = (gd.totalGames || 0) + 1;
-  if (_gm.finalPlace === 1) gd.totalWins = (gd.totalWins || 0) + 1;
-  gmSaveData(gd);
-  gameState.gauntletMmr = gd.mmr;
-  saveState();
+
+  if (_gm.isRanked) {
+    gd.mmr       = data.newMmr ?? Math.max(0, (gd.mmr || 0) + _gm.mmrDelta);
+    gd.totalGames = (gd.totalGames || 0) + 1;
+    if (_gm.finalPlace === 1) gd.totalWins = (gd.totalWins || 0) + 1;
+    gmSaveData(gd);
+    gameState.gauntletMmr = gd.mmr;
+    saveState();
+  } else {
+    // Unranked — refund the key that was consumed at lobby entry
+    gmAddKey(1);
+    _gm.mmrDelta = 0;
+  }
 
   setTimeout(() => _gmShowResults(), 500);
 }
 
 // ── Build sorted leaderboard data ──
 function _gmBuildLeaderboard() {
-  // Use server leaderboard if available (multiplayer mode)
   if (_gm._serverLeaderboard && _gm._serverLeaderboard.length > 0) {
     return _gm._serverLeaderboard.map(e => ({
       name:  e.name,
@@ -868,20 +963,8 @@ function _gmBuildLeaderboard() {
       isYou: e.isYou,
     }));
   }
-
-  // Bot fallback
-  const BOT_POOL = (typeof BOT_NAMES !== 'undefined' ? BOT_NAMES : [])
-    .concat(['VoidSlayer','CrimsonAce','PhantomX','DarkMatter','NeonRift',
-             'Spectral','AbyssWalker','VoidHunter','NullByte','GhostAce',
-             'StarKiller','DuskBlade','ChaosEdge','VoidEcho','NightFall']);
-  const entries = [];
-  _gm.botScores.forEach((score, i) => {
-    entries.push({ name: BOT_POOL[i % BOT_POOL.length] || `Player${i+2}`, score, isYou: false });
-  });
-  entries.push({ name: gameState.playerName || 'YOU', score: _gm.score, isYou: true });
-  entries.sort((a, b) => b.score - a.score);
-  entries.forEach((e, i) => { e.place = i + 1; });
-  return entries;
+  // No server data — show solo entry only
+  return [{ name: gameState.playerName || 'YOU', score: _gm.score, place: 1, isYou: true }];
 }
 
 // ── Render leaderboard in gauntletResultsScreen ──
@@ -913,13 +996,18 @@ function _gmPopulateResultsScreen(entries) {
   if (el('grScore'))       el('grScore').textContent = _gm.score;
   if (el('grCorrectTaps')) el('grCorrectTaps').textContent = _gm.correctTaps;
   if (el('grWrongTaps'))   el('grWrongTaps').textContent   = _gm.wrongTaps;
-  if (el('grNewMmr'))      el('grNewMmr').textContent      = gd.mmr || 0;
+  if (el('grNewMmr'))      el('grNewMmr').textContent      = _gm.isRanked === false ? '—' : (gd.mmr || 0);
 
   const mmrEl = el('grMmrChange');
   if (mmrEl) {
-    const d = _gm.mmrDelta;
-    mmrEl.textContent = d >= 0 ? `+${d} MMR` : `${d} MMR`;
-    mmrEl.className   = `gr-mmr-change ${d > 0 ? 'gr-mmr-pos' : d < 0 ? 'gr-mmr-neg' : 'gr-mmr-zero'}`;
+    if (_gm.isRanked === false) {
+      mmrEl.textContent = 'UNRANKED — Key refunded';
+      mmrEl.className   = 'gr-mmr-change gr-mmr-zero';
+    } else {
+      const d = _gm.mmrDelta;
+      mmrEl.textContent = d >= 0 ? `+${d} MMR` : `${d} MMR`;
+      mmrEl.className   = `gr-mmr-change ${d > 0 ? 'gr-mmr-pos' : d < 0 ? 'gr-mmr-neg' : 'gr-mmr-zero'}`;
+    }
   }
   const survEl = el('grSurvivalTag');
   if (survEl) {
@@ -957,14 +1045,14 @@ function _gmShowVictoryScreen() {
   if (placeEl) { placeEl.textContent = '#1 PLACE'; placeEl.style.color = 'var(--gold)'; }
 
   // MMR reward in rewards box
-  if (el('rewardDiamonds')) el('rewardDiamonds').textContent = `+${_gm.mmrDelta}`;
+  if (el('rewardDiamonds')) el('rewardDiamonds').textContent = _gm.isRanked === false ? 'UNRANKED' : `+${_gm.mmrDelta}`;
   if (el('rewardXP')) el('rewardXP').textContent = `+${_gm.score}`;
   const capRow = el('rewardCapRow'); if (capRow) capRow.style.display = 'none';
   const itemRow = el('rewardItemRow'); if (itemRow) itemRow.style.display = 'none';
   const levelRow = el('rewardLevelRow'); if (levelRow) levelRow.style.display = 'none';
   // Relabel to Gauntlet context
   const dmdLbl = document.querySelector('#resultScreen .reward-row .reward-lbl');
-  if (dmdLbl && dmdLbl.textContent.includes('Diamonds')) dmdLbl.textContent = '⚔ MMR Gain';
+  if (dmdLbl && dmdLbl.textContent.includes('Diamonds')) dmdLbl.textContent = _gm.isRanked === false ? '🔑 Key Refunded' : '⚔ MMR Gain';
   const xpRow = document.querySelectorAll('#resultScreen .reward-row')[1];
   if (xpRow) { const lbl = xpRow.querySelector('.reward-lbl'); if (lbl) lbl.textContent = '🎯 Score'; }
 

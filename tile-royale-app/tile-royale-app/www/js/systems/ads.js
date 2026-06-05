@@ -1,9 +1,7 @@
 // ===== AD REWARD SYSTEM =====
 const AD_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
-// TEST: Google's official test rewarded ad unit — always fills, never charges
-// TODO: switch back to 'ca-app-pub-1687381057809117/7980217936' before production release
-const ADMOB_REWARDED_ID = 'ca-app-pub-3940256099942544/5224354917';
+const ADMOB_REWARDED_ID = 'ca-app-pub-1687381057809117/7980217936';
 
 // ─── AdMob Bridge ─────────────────────────────────────────────────────────────
 
@@ -129,7 +127,24 @@ function getAdCooldownText() {
   return `Available in ${m}:${s.toString().padStart(2,'0')}`;
 }
 
-function giveAdReward(reward) {
+async function _serverAdClaim(rewardType) {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID || typeof getActiveServer !== 'function') return true;
+  try {
+    const r = await fetch(`${getActiveServer().http}/ads/reward/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, rewardType }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = r.ok ? await r.json() : null;
+    if (data && !data.ok && !data.offline && data.error === 'cooldown_active') return false;
+    return true;
+  } catch(e) { return true; } // offline — allow
+}
+
+async function giveAdReward(reward) {
+  const allowed = await _serverAdClaim(reward.type === 'tickets' ? 'tickets' : reward.id);
+  if (!allowed) { showToast('Ad reward already claimed recently', 'var(--muted)'); return; }
   if (reward.type === 'tickets') {
     gameState.tickets = Math.min(TICKETS_MAX, getTickets() + reward.qty);
     gameState.ticketLastUse = gameState.tickets < TICKETS_MAX ? (gameState.ticketLastUse || Date.now()) : null;
@@ -164,6 +179,8 @@ async function watchAdsForTickets(count) {
     const rewarded = await _watchRewardedAd();
     adWatchInProgress = false;
     if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
+    const allowed = await _serverAdClaim('tickets');
+    if (!allowed) { showToast('Ad reward already claimed recently', 'var(--muted)'); return; }
     gameState.tickets = Math.min(TICKETS_MAX, getTickets() + 2);
     gameState[adKey]  = Date.now();
     saveState(); updateTicketUI(); updateStoreAdTimer();
@@ -178,10 +195,13 @@ async function watchAdsForTickets(count) {
       if (!rewarded) {
         adWatchInProgress = false;
         if (earned > 0) {
-          gameState.tickets = Math.min(TICKETS_MAX, getTickets() + earned);
-          gameState[adKey]  = Date.now();
-          saveState(); updateTicketUI(); updateStoreAdTimer();
-          showToast(`🎟️ +${earned} Ticket${earned > 1 ? 's' : ''} (stopped early)`, 'var(--gold)');
+          const allowed = await _serverAdClaim('tickets');
+          if (allowed) {
+            gameState.tickets = Math.min(TICKETS_MAX, getTickets() + earned);
+            gameState[adKey]  = Date.now();
+            saveState(); updateTicketUI(); updateStoreAdTimer();
+            showToast(`🎟️ +${earned} Ticket${earned > 1 ? 's' : ''} (stopped early)`, 'var(--gold)');
+          }
         } else {
           showToast('Ad not available — try again later', 'var(--muted)');
         }
@@ -190,6 +210,8 @@ async function watchAdsForTickets(count) {
       earned++;
     }
     adWatchInProgress = false;
+    const allowed = await _serverAdClaim('tickets');
+    if (!allowed) { showToast('Ad reward already claimed recently', 'var(--muted)'); return; }
     gameState.tickets = Math.min(TICKETS_MAX, getTickets() + count);
     gameState[adKey]  = Date.now();
     saveState(); updateTicketUI(); updateStoreAdTimer();

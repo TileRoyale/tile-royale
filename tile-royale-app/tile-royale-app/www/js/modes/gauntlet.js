@@ -814,6 +814,24 @@ function getAdSpinsUsedToday() {
   return gameState.adSpinsUsed || 0;
 }
 
+function claimWhaleFreeSpin() {
+  const adUsed = getAdSpinsUsedToday();
+  if (adUsed >= AD_SPINS_MAX) {
+    showToast('🐋 No more free spins today (3/3 used)', 'var(--muted)');
+    return;
+  }
+  if (wheelSpinning) return;
+  gameState.adSpinsUsed  = (gameState.adSpinsUsed || 0) + 1;
+  gameState.dailyAdSpins = gameState.adSpinsUsed;
+  // spinsToday NOT incremented here — _executeSpin() does not touch it,
+  // and spinWheel() would double-count. Increment once manually:
+  gameState.spinsToday = (gameState.spinsToday || 0) + 1;
+  saveState();
+  showToast('🐋 Whale perk — free spin!', 'var(--gold)');
+  updateGauntletSpinUI();
+  _executeSpin(); // bypass cost-check entirely — whale earns this for free
+}
+
 async function watchAdForSpin() {
   const adUsed = getAdSpinsUsedToday();
   if (adUsed >= AD_SPINS_MAX) {
@@ -916,21 +934,25 @@ function updateGauntletSpinUI() {
       // Diamond cost for display (after ads exhausted) — +50 per gem spin, resets at noon Helsinki
       const dCost = getGemSpinCost();
 
-      // Ad button — visible until 3 ads used, whales see it greyed
+      // Ad button — whales get free spins without watching an ad
       if (adBtn) {
-        const adExhausted = adUsed >= AD_SPINS_MAX || isWhale;
+        const adExhausted = adUsed >= AD_SPINS_MAX;
         adBtn.disabled      = adExhausted;
         adBtn.style.opacity = adExhausted ? '0.35' : '1';
         const icon = adBtn.querySelector('span:first-child');
-        if (icon) icon.textContent = '📺';
-        if (adTxt) adTxt.textContent = isWhale
-          ? 'NO ADS (WHALE PERK 🐋)'
-          : adUsed < AD_SPINS_MAX ? 'WATCH AD — FREE SPIN' : 'NO MORE ADS TODAY';
-        if (adCnt) {
-          adCnt.textContent = isWhale ? '' : `(${adUsed}/${AD_SPINS_MAX})`;
-          adCnt.style.color = adUsed >= AD_SPINS_MAX ? 'var(--red)' : '';
+        if (isWhale) {
+          if (icon) icon.textContent = '🐋';
+          if (adTxt) adTxt.textContent = adExhausted ? 'NO MORE FREE SPINS TODAY' : 'WHALE PERK — FREE SPIN';
+          adBtn.onclick = () => claimWhaleFreeSpin();
+        } else {
+          if (icon) icon.textContent = '📺';
+          if (adTxt) adTxt.textContent = adExhausted ? 'NO MORE ADS TODAY' : 'WATCH AD — FREE SPIN';
+          adBtn.onclick = () => watchAdForSpin();
         }
-        adBtn.onclick = () => watchAdForSpin();
+        if (adCnt) {
+          adCnt.textContent = `(${adUsed}/${AD_SPINS_MAX})`;
+          adCnt.style.color = adExhausted ? 'var(--red)' : '';
+        }
       }
 
       // Diamond button — always available
@@ -946,6 +968,7 @@ function updateGauntletSpinUI() {
         // Wire onclick to direct diamond spin
         dmdBtn.onclick = () => {
           if ((gameState.diamonds||0) < dCost) { showToast(`💎 Need ${dCost} diamonds!`,'var(--red)'); return; }
+          _auditDiamondSpend('gauntlet_spin', dCost);
           gameState.diamonds -= dCost;
           gameState.spinsToday   = (gameState.spinsToday||0) + 1;
           gameState.gemSpinsToday = (gameState.gemSpinsToday||0) + 1;

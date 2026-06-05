@@ -73,6 +73,7 @@ function selectVictorySkin(skin, isOwned) {
     showToast(`Need 💎 ${skin.price}!`, 'var(--red)'); return;
   }
   // Purchase victory skin
+  _auditDiamondSpend(skin.id, skin.price);
   gameState.diamonds -= skin.price;
   if (!gameState.ownedSkins) gameState.ownedSkins = {};
   gameState.ownedSkins[skin.id] = true;

@@ -330,6 +330,57 @@ async function createTables(): Promise<void> {
       diamonds    INTEGER      NOT NULL DEFAULT 0,
       claimed_at  TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Trophy Road milestone claims: one per player per milestone threshold
+    CREATE TABLE IF NOT EXISTS trophy_milestone_claims (
+      id            BIGSERIAL    PRIMARY KEY,
+      player_id     UUID         NOT NULL REFERENCES players(player_id),
+      milestone_pts INTEGER      NOT NULL,
+      claimed_at    TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Achievement unlocks (server-side idempotency — prevents re-unlock after save wipe)
+    CREATE TABLE IF NOT EXISTS achievement_unlocks (
+      id             BIGSERIAL    PRIMARY KEY,
+      player_id      UUID         NOT NULL REFERENCES players(player_id),
+      achievement_id TEXT         NOT NULL,
+      unlocked_at    TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Ad reward claims (1-hour server-enforced cooldown)
+    CREATE TABLE IF NOT EXISTS ad_reward_claims (
+      id           BIGSERIAL    PRIMARY KEY,
+      player_id    UUID         NOT NULL REFERENCES players(player_id),
+      reward_type  TEXT         NOT NULL DEFAULT 'tickets',
+      claimed_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Offline reward claims: one per player per UTC calendar day
+    CREATE TABLE IF NOT EXISTS offline_reward_claims (
+      id           BIGSERIAL    PRIMARY KEY,
+      player_id    UUID         NOT NULL REFERENCES players(player_id),
+      claim_date   DATE         NOT NULL,
+      amount       INTEGER      NOT NULL DEFAULT 0,
+      claimed_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Daily Challenge claims: one per player per calendar date
+    CREATE TABLE IF NOT EXISTS dc_claims (
+      id             BIGSERIAL    PRIMARY KEY,
+      player_id      UUID         NOT NULL REFERENCES players(player_id),
+      challenge_date DATE         NOT NULL,
+      challenge_id   TEXT         NOT NULL,
+      claimed_at     TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Diamond spend audit log
+    CREATE TABLE IF NOT EXISTS diamond_spends (
+      id         BIGSERIAL    PRIMARY KEY,
+      player_id  UUID         NOT NULL REFERENCES players(player_id),
+      item_id    TEXT         NOT NULL,
+      amount     INTEGER      NOT NULL,
+      spent_at   TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -356,6 +407,12 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_login_claims       ON daily_login_claims(player_id, claim_date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_mission_claims           ON mission_claims(player_id, mission_id, period_key);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_mode_reward_claims       ON mode_reward_claims(player_id, mode, period, period_key);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trophy_milestone_claims  ON trophy_milestone_claims(player_id, milestone_pts);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_achievement_unlocks      ON achievement_unlocks(player_id, achievement_id);
+    CREATE        INDEX IF NOT EXISTS idx_ad_reward_claims_player  ON ad_reward_claims(player_id, claimed_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_offline_reward_claims    ON offline_reward_claims(player_id, claim_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_claims                ON dc_claims(player_id, challenge_date);
+    CREATE        INDEX IF NOT EXISTS idx_diamond_spends_player    ON diamond_spends(player_id, spent_at DESC);
   `);
   console.log("[DB] Tables ready");
 }
@@ -1951,4 +2008,189 @@ export async function claimGauntletWeeklyReward(
     console.error('[DB] gauntlet weekly claim error:', err?.message);
     return 'error';
   }
+}
+
+// ─── Trophy Road Milestone Claims ─────────────────────────────────────────────
+
+export async function recordTrophyMilestoneClaim(
+  playerId: string, milestonePts: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO trophy_milestone_claims (player_id, milestone_pts) VALUES ($1, $2)`,
+      [playerId, milestonePts]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] trophy milestone claim error:', err?.message);
+    return 'error';
+  }
+}
+
+// ─── Achievement Unlocks ───────────────────────────────────────────────────────
+
+export async function recordAchievementUnlock(
+  playerId: string, achievementId: string
+): Promise<'ok' | 'already_unlocked' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO achievement_unlocks (player_id, achievement_id) VALUES ($1, $2)`,
+      [playerId, achievementId]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_unlocked';
+    console.error('[DB] achievement unlock error:', err?.message);
+    return 'error';
+  }
+}
+
+// Returns true if the player has already unlocked this achievement
+export async function hasAchievementUnlock(playerId: string, achievementId: string): Promise<boolean> {
+  const rows = await query(
+    `SELECT 1 FROM achievement_unlocks WHERE player_id = $1 AND achievement_id = $2`,
+    [playerId, achievementId]
+  );
+  return (rows?.length ?? 0) > 0;
+}
+
+// ─── Ad Reward Claims ──────────────────────────────────────────────────────────
+
+const AD_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
+// Returns true if the player may claim an ad reward right now (server-side check)
+export async function checkAdRewardCooldown(playerId: string): Promise<boolean> {
+  const rows = await query(
+    `SELECT claimed_at FROM ad_reward_claims
+     WHERE player_id = $1
+     ORDER BY claimed_at DESC LIMIT 1`,
+    [playerId]
+  );
+  if (!rows || rows.length === 0) return true;
+  const last = new Date(rows[0].claimed_at).getTime();
+  return (Date.now() - last) >= AD_COOLDOWN_MS;
+}
+
+export async function recordAdRewardClaim(
+  playerId: string, rewardType: string
+): Promise<void> {
+  await query(
+    `INSERT INTO ad_reward_claims (player_id, reward_type) VALUES ($1, $2)`,
+    [playerId, rewardType]
+  );
+}
+
+// ─── Offline Reward Claims ─────────────────────────────────────────────────────
+
+export async function recordOfflineRewardClaim(
+  playerId: string, claimDate: string, amount: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO offline_reward_claims (player_id, claim_date, amount) VALUES ($1, $2::date, $3)`,
+      [playerId, claimDate, amount]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] offline reward claim error:', err?.message);
+    return 'error';
+  }
+}
+
+// Returns the server's last_seen_at for a player (used to compute offline time server-side)
+export async function getPlayerLastSeen(playerId: string): Promise<Date | null> {
+  const rows = await query(
+    `SELECT last_seen_at FROM players WHERE player_id = $1`,
+    [playerId]
+  );
+  return rows && rows.length > 0 ? new Date(rows[0].last_seen_at) : null;
+}
+
+// ─── Daily Challenge Claims ────────────────────────────────────────────────────
+
+export async function recordDcClaim(
+  playerId: string, challengeDate: string, challengeId: string
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO dc_claims (player_id, challenge_date, challenge_id) VALUES ($1, $2::date, $3)`,
+      [playerId, challengeDate, challengeId]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] dc claim error:', err?.message);
+    return 'error';
+  }
+}
+
+// ─── Diamond Spend Validation ──────────────────────────────────────────────────
+
+// Records a diamond spend in the audit log. Returns 'ok' | 'error'.
+export async function recordDiamondSpend(
+  playerId: string, itemId: string, amount: number
+): Promise<'ok' | 'error'> {
+  try {
+    await query(
+      `INSERT INTO diamond_spends (player_id, item_id, amount) VALUES ($1, $2, $3)`,
+      [playerId, itemId, amount]
+    );
+    return 'ok';
+  } catch (err: any) {
+    console.error('[DB] diamond spend error:', err?.message);
+    return 'error';
+  }
+}
+
+// ─── Mission Progress Validation ──────────────────────────────────────────────
+// Re-counts game_results for the period to validate game-based missions server-side.
+
+export async function getMissionServerCount(
+  playerId: string,
+  missionType: string,
+  periodStart: string,
+  periodEnd: string
+): Promise<number> {
+  let sql: string;
+  switch (missionType) {
+    case 'matches':
+      sql = `SELECT COUNT(*)::int AS cnt FROM game_results
+             WHERE player_id = $1 AND played_at BETWEEN $2::timestamptz AND $3::timestamptz`;
+      break;
+    case 'wins':
+      sql = `SELECT COUNT(*)::int AS cnt FROM game_results
+             WHERE player_id = $1 AND placement = 1 AND played_at BETWEEN $2::timestamptz AND $3::timestamptz`;
+      break;
+    case 'top3':
+      sql = `SELECT COUNT(*)::int AS cnt FROM game_results
+             WHERE player_id = $1 AND placement <= 3 AND played_at BETWEEN $2::timestamptz AND $3::timestamptz`;
+      break;
+    case 'taps':
+      sql = `SELECT COALESCE(SUM(tiles_tapped),0)::int AS cnt FROM game_results
+             WHERE player_id = $1 AND played_at BETWEEN $2::timestamptz AND $3::timestamptz`;
+      break;
+    case 'mode_wild':
+      sql = `SELECT COUNT(*)::int AS cnt FROM game_results
+             WHERE player_id = $1 AND mode = 'wild' AND played_at BETWEEN $2::timestamptz AND $3::timestamptz`;
+      break;
+    case 'mode_buckshot':
+      sql = `SELECT COUNT(*)::int AS cnt FROM game_results
+             WHERE player_id = $1 AND mode = 'buckshot' AND played_at BETWEEN $2::timestamptz AND $3::timestamptz`;
+      break;
+    case 'all_modes':
+      sql = `SELECT COUNT(DISTINCT mode)::int AS cnt FROM game_results
+             WHERE player_id = $1 AND mode IN ('rush','buckshot','wild')
+             AND played_at BETWEEN $2::timestamptz AND $3::timestamptz`;
+      break;
+    default:
+      return -1; // type not server-validatable (xp, tickets)
+  }
+  const rows = await query(sql, [playerId, periodStart, periodEnd]);
+  return rows && rows.length > 0 ? (rows[0].cnt ?? 0) : 0;
 }

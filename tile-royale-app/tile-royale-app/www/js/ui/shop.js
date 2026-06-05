@@ -434,30 +434,99 @@ function buildBundleCard(b) {
   return div;
 }
 
+// ---- Purchase verify helpers ----
+
+// Calls /purchase/verify and applies the server-authoritative grant.
+// Falls back to a locally-computed grant if the server is unreachable.
+async function _verifyAndDeliverPurchase(purchase) {
+  const { productId, purchaseToken = '', orderId = '' } = purchase || {};
+
+  let grant = null;
+
+  if (productId && purchaseToken && typeof PLAYER_ID !== 'undefined' && PLAYER_ID) {
+    try {
+      const r = await fetch(`${getActiveServer().http}/purchase/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, productId, purchaseToken, orderId }),
+        signal: AbortSignal.timeout(12000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data?.ok || data?.error === 'already_processed') {
+        grant = data.grant;
+      } else {
+        console.warn('[Purchase] Server verify failed:', data?.error);
+      }
+    } catch(e) {
+      console.warn('[Purchase] Verify network error — falling back to local delivery:', e?.message || e);
+    }
+  }
+
+  if (!grant) {
+    // Server unreachable: build grant from local catalog so the player still gets their items.
+    // The purchase will be re-verified on the next /purchase/restore call.
+    const pkg = DIAMOND_PACKAGES.find(p => p.id === productId);
+    const bundle = STORE_BUNDLES.find(b => b.id === productId);
+    if (pkg) {
+      grant = { type:'diamonds', diamonds: pkg.amount + pkg.bonus, priceVal: pkg.priceVal };
+    } else if (bundle) {
+      grant = { type:'bundle', bundleId: bundle.id, diamonds: bundle.diamondAmt,
+                items: bundle.items, skins: bundle.skins, tickets: bundle.tickets,
+                nameChanges: bundle.nameChanges, whaleBadge: bundle.whaleBadge, priceVal: bundle.priceVal };
+    } else {
+      console.error('[Purchase] Unknown productId:', productId);
+      return;
+    }
+  }
+
+  _applyPurchaseGrant(grant);
+}
+
+// Applies a purchase grant (from server or local fallback) to gameState.
+function _applyPurchaseGrant(grant) {
+  const diamonds = grant.diamonds || 0;
+  if (diamonds > 0) {
+    gameState.diamonds      = (gameState.diamonds      || 0) + diamonds;
+    gameState.totalDiamonds = (gameState.totalDiamonds || 0) + diamonds;
+  }
+  if (grant.items)       Object.entries(grant.items).forEach(([k, v]) => addItemToInventory(k, Number(v)));
+  if (grant.skins)       { if (!gameState.ownedSkins) gameState.ownedSkins = {}; grant.skins.forEach(s => gameState.ownedSkins[s] = true); }
+  if (grant.tickets)     gameState.tickets  = (gameState.tickets  || 0) + grant.tickets;
+  if (grant.nameChanges) gameState.renames  = Math.max(0, (gameState.renames || 3) - grant.nameChanges);
+  if (grant.whaleBadge)  { gameState.whaleBadge = true; showToast('🐋 Whale status unlocked!', 'var(--diamond)'); }
+  const linkedAvatars = typeof ALL_AVATARS !== 'undefined'
+    ? ALL_AVATARS.filter(av => av.unlock === grant.bundleId) : [];
+  linkedAvatars.forEach(av => { try { unlockAvatar(av.id); } catch(e) {} });
+
+  // Whale achievement stats
+  initAchStats();
+  gameState.achStats.diamondsPurchased = (gameState.achStats.diamondsPurchased || 0) + 1;
+  const priceCents = Math.round((grant.priceVal || 0) * 100);
+  gameState.achStats.totalSpentCents   = (gameState.achStats.totalSpentCents   || 0) + priceCents;
+  gameState.achStats.singlePurchaseMax = Math.max(gameState.achStats.singlePurchaseMax || 0, priceCents);
+  if (grant.bundleId) gameState.achStats.bundlesBought = (gameState.achStats.bundlesBought || 0) + 1;
+  checkAchievements();
+
+  saveState(); updateMenuStats(); updateInventoryUI();
+  const bal = document.getElementById('storeBalance');
+  if (bal) bal.textContent = (gameState.diamonds || 0).toLocaleString();
+  const label = grant.type === 'bundle'
+    ? `Bundle unlocked! 💎 +${diamonds.toLocaleString()}`
+    : `💎 +${diamonds.toLocaleString()} Diamonds added!`;
+  showToast(label, 'var(--green)');
+}
+
 // ---- Buy functions ----
 async function buyDiamondPackage(id) {
   const pkg = DIAMOND_PACKAGES.find(p => p.id === id);
   if (!pkg) return;
-  const total = pkg.amount + pkg.bonus;
 
   // Native Google Play Billing (Android)
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
     try {
       showToast('Opening store...', 'var(--blue)');
-      await nativePurchase(pkg.id);
-      // Deliver diamonds
-      gameState.diamonds = (gameState.diamonds || 0) + total;
-      gameState.totalDiamonds = (gameState.totalDiamonds || 0) + total;
-      // Track whale achievements
-      initAchStats();
-      gameState.achStats.diamondsPurchased = (gameState.achStats.diamondsPurchased || 0) + 1;
-      gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + Math.round(pkg.priceVal * 100);
-      checkAchievements();
-      saveState();
-      updateMenuStats();
-      const bal = document.getElementById('storeBalance');
-      if (bal) bal.textContent = (gameState.diamonds || 0).toLocaleString();
-      showToast(`💎 +${total.toLocaleString()} Diamonds added!`, 'var(--green)');
+      const purchase = await nativePurchase(pkg.id);
+      await _verifyAndDeliverPurchase(purchase);
     } catch (e) {
       const msg = (e && (e.message || e.code || e));
       if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');
@@ -466,6 +535,7 @@ async function buyDiamondPackage(id) {
   }
 
   // Web/dev fallback — add diamonds directly for testing
+  const total = pkg.amount + pkg.bonus;
   gameState.diamonds = (gameState.diamonds || 0) + total;
   saveState(); updateMenuStats();
   const bal = document.getElementById('storeBalance');
@@ -478,6 +548,7 @@ function buyStoreItem(id) {
   if (!item) return;
   if (gameState.diamonds < item.price) { showToast('Not enough diamonds!', 'var(--red)'); return; }
   showStoreBuyDialog(item.name, item.icon, `💎 ${item.price}`, () => {
+    _auditDiamondSpend(item.id, item.price);
     gameState.diamonds -= item.price;
     if (item.type === 'item') addItemToInventory(item.itemId, item.qty);
     else if (item.type === 'tickets') gameState.tickets = (gameState.tickets||0) + item.qty;
@@ -493,32 +564,12 @@ async function buyBundle(id) {
   const b = STORE_BUNDLES.find(x => x.id === id);
   if (!b) return;
 
-  const deliverBundle = () => {
-    gameState.diamonds = (gameState.diamonds||0) + b.diamondAmt;
-    gameState.totalDiamonds = (gameState.totalDiamonds||0) + b.diamondAmt;
-    if (b.items) Object.entries(b.items).forEach(([k,v]) => addItemToInventory(k,v));
-    if (b.skins) { if (!gameState.ownedSkins) gameState.ownedSkins={}; b.skins.forEach(s => gameState.ownedSkins[s]=true); }
-    if (b.tickets) gameState.tickets = (gameState.tickets||0) + b.tickets;
-    if (b.nameChanges) gameState.renames = Math.max(0, (gameState.renames||3) - b.nameChanges);
-    if (b.whaleBadge) { gameState.whaleBadge = true; showToast('🐋 Whale status unlocked!', 'var(--diamond)'); }
-    const linkedAvatars = ALL_AVATARS.filter(av => av.unlock === b.id);
-    (linkedAvatars||[]).forEach(av => unlockAvatar(av.id));
-    initAchStats();
-    gameState.achStats.bundlesBought = (gameState.achStats.bundlesBought || 0) + 1;
-    gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + Math.round(b.priceVal * 100);
-    checkAchievements();
-    saveState(); updateMenuStats(); updateInventoryUI();
-    const bal = document.getElementById('storeBalance');
-    if (bal) bal.textContent = (gameState.diamonds||0).toLocaleString();
-    showToast(`✅ ${b.name} unlocked!`, 'var(--gold)');
-  };
-
   // Native Google Play Billing (Android)
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
     try {
       showToast('Opening store...', 'var(--blue)');
-      await nativePurchase(b.id);
-      deliverBundle();
+      const purchase = await nativePurchase(b.id);
+      await _verifyAndDeliverPurchase(purchase);
     } catch (e) {
       const msg = (e && (e.message || e.code || e));
       if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');
@@ -527,6 +578,21 @@ async function buyBundle(id) {
   }
 
   // Web/dev fallback
+  const deliverBundle = () => {
+    gameState.diamonds = (gameState.diamonds||0) + b.diamondAmt;
+    gameState.totalDiamonds = (gameState.totalDiamonds||0) + b.diamondAmt;
+    if (b.items) Object.entries(b.items).forEach(([k,v]) => addItemToInventory(k,v));
+    if (b.skins) { if (!gameState.ownedSkins) gameState.ownedSkins={}; b.skins.forEach(s => gameState.ownedSkins[s]=true); }
+    if (b.tickets) gameState.tickets = (gameState.tickets||0) + b.tickets;
+    if (b.nameChanges) gameState.renames = Math.max(0, (gameState.renames||3) - b.nameChanges);
+    if (b.whaleBadge) { gameState.whaleBadge = true; }
+    const linkedAvatars = ALL_AVATARS.filter(av => av.unlock === b.id);
+    (linkedAvatars||[]).forEach(av => unlockAvatar(av.id));
+    saveState(); updateMenuStats(); updateInventoryUI();
+    const bal = document.getElementById('storeBalance');
+    if (bal) bal.textContent = (gameState.diamonds||0).toLocaleString();
+    showToast(`✅ ${b.name} unlocked!`, 'var(--gold)');
+  };
   showStoreBuyDialog(b.name, b.icon, b.price, deliverBundle);
 }
 
@@ -535,6 +601,7 @@ function buyDailyDeal() {
   const price = parseInt(deal.now);
   if (gameState.diamonds < price) { showToast('Not enough diamonds!', 'var(--red)'); return; }
   showStoreBuyDialog(deal.name, deal.icon, `💎 ${deal.now}`, () => {
+    _auditDiamondSpend(deal.skinId || deal.itemId || 'daily_deal', price);
     gameState.diamonds -= price;
     if (deal.skinId && deal.skinTab) {
       if (!gameState.ownedSkins) gameState.ownedSkins = {};

@@ -504,63 +504,9 @@ function buildSpecGrid() {
 
 function startSpecSimulation(lobby) {
   clearInterval(specInterval);
-  const players = Object.values(specPlayerData).filter(p => !p.eliminated);
-
-  specInterval = setInterval(() => {
-    if (specPlayersLeft <= 1) {
-      clearInterval(specInterval);
-      const winner = Object.values(specPlayerData).find(p => !p.eliminated);
-      addSpecFeed(`🏆 ${winner?.avatar || '🔥'} ${winner?.name || 'Winner'} WINS!`, 'win');
-      return;
-    }
-
-    // New round — ignite random tile
-    specRound++;
-    const tileIdx = Math.floor(Math.random() * 25);
-    highlightSpecTile(tileIdx);
-    document.getElementById('specPlayerCount').textContent = `${specPlayersLeft} players left`;
-
-    // Simulate player taps with realistic reactions
-    const activePlayers = Object.entries(specPlayerData).filter(([,p]) => !p.eliminated);
-    const tapOrder = [...activePlayers].sort(() => Math.random() - 0.5);
-    let delay = 0;
-
-    (typeof tapOrder !== "undefined" ? tapOrder : []).forEach(([id, player], i) => {
-      const reaction = 120 + Math.random() * 600; // 120–720ms
-      delay = reaction + i * 30;
-      setTimeout(() => {
-        player.lastTile     = tileIdx;
-        player.lastReaction = Math.round(reaction);
-        player.taps++;
-
-        // Mark tile with last tapper
-        const tile = document.getElementById(`spec-tile-${tileIdx}`);
-        if (tile) {
-          tile.className = 'spec-tile tapped';
-          tile.innerHTML = `<div class="spec-tap-label">${player.avatar}</div>`;
-        }
-        addSpecFeed(`${player.avatar} ${player.name} — ${Math.round(reaction)}ms`, 'tap');
-        updateSpecReactions();
-      }, delay);
-    });
-
-    // After all tap: eliminate last
-    setTimeout(() => {
-      const lastPlayer = tapOrder[tapOrder.length - 1];
-      if (lastPlayer) {
-        const [lastId, lastP] = lastPlayer;
-        lastP.eliminated = true;
-        specPlayersLeft--;
-        const tile = document.getElementById(`spec-tile-${tileIdx}`);
-        if (tile) { tile.className = 'spec-tile last'; tile.innerHTML = `<div class="spec-tap-label">💀${lastP.avatar}</div>`; }
-        addSpecFeed(`💀 ${lastP.avatar} ${lastP.name} — ELIMINATED`, 'out');
-        updateSpecReactions();
-        // Reset tile after delay
-        setTimeout(() => { if (tile) { tile.className = 'spec-tile'; tile.innerHTML = ''; } }, 800);
-      }
-    }, delay + 200);
-
-  }, 2500 + Math.random() * 1500);
+  // Spectator shows real player list only — no simulated taps or reactions.
+  addSpecFeed('👁️ Watching live — waiting for real match events...', 'tap');
+  document.getElementById('specPlayerCount').textContent = `${specPlayersLeft} players`;
 }
 
 function highlightSpecTile(idx) {

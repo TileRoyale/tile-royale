@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -581,17 +581,123 @@ app.post("/daily-login/claim", async (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /missions/claim  { playerId, missionId, periodKey }
+// POST /missions/claim  { playerId, missionId, periodKey, missionType, target, periodStart, periodEnd }
 // periodKey = ISO date (daily) or ISO week-start Monday (weekly).
+// For game-based mission types the server re-counts game_results before accepting.
 app.post("/missions/claim", async (req, res) => {
-  const { playerId, missionId, periodKey } = req.body;
+  const { playerId, missionId, periodKey, missionType, target, periodStart, periodEnd } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   if (!missionId || !periodKey) return res.status(400).json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true }); // allow offline
+
+  // Server-side progress re-validation for game-based missions
+  if (missionType && target && periodStart && periodEnd) {
+    const serverCount = await getMissionServerCount(
+      String(playerId), String(missionType), String(periodStart), String(periodEnd)
+    );
+    // serverCount === -1 means type not validatable (xp, tickets) — allow through
+    if (serverCount !== -1 && serverCount < Number(target)) {
+      return res.json({ ok: false, error: 'not_completed' });
+    }
+  }
+
   const result = await recordMissionClaim(playerId, String(missionId), String(periodKey));
   if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
   if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /trophyroad/claim  { playerId, milestonePts }
+// Server-side idempotency for Trophy Road milestone rewards.
+app.post("/trophyroad/claim", async (req, res) => {
+  const { playerId, milestonePts } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (milestonePts === undefined || milestonePts === null)
+    return res.status(400).json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordTrophyMilestoneClaim(String(playerId), Number(milestonePts));
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /achievements/unlock  { playerId, achievementId }
+// Server-side idempotency for achievement rewards — blocks re-unlock after save wipe.
+app.post("/achievements/unlock", async (req, res) => {
+  const { playerId, achievementId } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!achievementId) return res.status(400).json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordAchievementUnlock(String(playerId), String(achievementId));
+  if (result === 'already_unlocked') return res.json({ ok: false, error: 'already_unlocked' });
+  if (result === 'error')            return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /ads/reward/claim  { playerId, rewardType }
+// Server enforces 1-hour cooldown to prevent localStorage bypass.
+app.post("/ads/reward/claim", async (req, res) => {
+  const { playerId, rewardType = 'tickets' } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const canClaim = await checkAdRewardCooldown(String(playerId));
+  if (!canClaim) return res.json({ ok: false, error: 'cooldown_active' });
+  await recordAdRewardClaim(String(playerId), String(rewardType));
+  res.json({ ok: true });
+});
+
+// POST /offline-reward/claim  { playerId, claimDate, amount }
+// One claim per UTC day, cross-validated against server last_seen_at.
+app.post("/offline-reward/claim", async (req, res) => {
+  const { playerId, claimDate, amount } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!claimDate || !/^\d{4}-\d{2}-\d{2}$/.test(claimDate))
+    return res.status(400).json({ ok: false, error: 'invalid_date' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  // Cross-validate: server's last_seen_at must be more than 8h before now
+  const lastSeen = await getPlayerLastSeen(String(playerId));
+  const OFFLINE_RATE_MS = 8 * 60 * 60 * 1000;
+  if (!lastSeen || (Date.now() - lastSeen.getTime()) < OFFLINE_RATE_MS)
+    return res.json({ ok: false, error: 'not_eligible' });
+
+  const result = await recordOfflineRewardClaim(String(playerId), claimDate, Number(amount) || 0);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /dc/claim  { playerId, challengeDate, challengeId }
+// Server-side idempotency for Daily Challenge claims — one per calendar date.
+app.post("/dc/claim", async (req, res) => {
+  const { playerId, challengeDate, challengeId } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!challengeDate || !/^\d{4}-\d{2}-\d{2}$/.test(challengeDate) || !challengeId)
+    return res.status(400).json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordDcClaim(String(playerId), challengeDate, String(challengeId));
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /diamonds/spend  { playerId, itemId, amount }
+// Records the spend in the audit log. Client must call this before deducting locally.
+app.post("/diamonds/spend", async (req, res) => {
+  const { playerId, itemId, amount } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!itemId || !amount || Number(amount) <= 0)
+    return res.status(400).json({ ok: false, error: 'missing_params' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordDiamondSpend(String(playerId), String(itemId), Number(amount));
+  if (result === 'error') return res.json({ ok: false, error: 'db_error' });
   res.json({ ok: true });
 });
 

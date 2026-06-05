@@ -117,6 +117,7 @@ function buyTheme(themeId) {
     '🎨 ' + theme.name,
     theme.price + ' 💎',
     () => {
+      _auditDiamondSpend(themeId, theme.price);
       gameState.diamonds -= theme.price;
       gameState.ownedThemes.push(themeId);
       applyTheme(themeId);

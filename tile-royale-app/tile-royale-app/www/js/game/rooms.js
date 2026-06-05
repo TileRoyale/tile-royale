@@ -513,6 +513,7 @@ function startKoth() {
     return;
   }
   // Deduct entry fee
+  _auditDiamondSpend('koth_entry', KOTH_ENTRY_FEE);
   gameState.diamonds -= KOTH_ENTRY_FEE;
   const weekData = getKothWeekData();
   weekData.pool += KOTH_ENTRY_FEE * KOTH_POOL_PCT;
