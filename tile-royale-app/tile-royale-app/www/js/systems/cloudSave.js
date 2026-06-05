@@ -32,6 +32,36 @@ function _csUrl() {
 
 // ─── Save ──────────────────────────────────────────────────────────────────────
 
+// Bundle separate localStorage keys into the save blob so they survive reinstall.
+function _csCollectExtras() {
+  const keys = {
+    _tr_missions:    'tr_missions',
+    _tr_daily_login: 'tr_daily_login',
+    _solo_progress:  'soloProgress',
+    _solo_lives:     'soloLives',
+    _gauntlet_data:  'gauntletData',
+  };
+  const out = {};
+  for (const [field, lsKey] of Object.entries(keys)) {
+    try { const v = localStorage.getItem(lsKey); if (v) out[field] = v; } catch(e) {}
+  }
+  return out;
+}
+
+// Restore bundled keys back to localStorage after a cloud load.
+function _csRestoreExtras(saveData) {
+  const keys = {
+    _tr_missions:    'tr_missions',
+    _tr_daily_login: 'tr_daily_login',
+    _solo_progress:  'soloProgress',
+    _solo_lives:     'soloLives',
+    _gauntlet_data:  'gauntletData',
+  };
+  for (const [field, lsKey] of Object.entries(keys)) {
+    try { if (saveData[field]) localStorage.setItem(lsKey, saveData[field]); } catch(e) {}
+  }
+}
+
 async function saveToCloud() {
   if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
   const url = _csUrl();
@@ -39,16 +69,28 @@ async function saveToCloud() {
 
   _csSetStatus('syncing');
   try {
+    const saveData = Object.assign({}, gameState, _csCollectExtras());
     const r = await fetch(`${url}/save`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ playerId: PLAYER_ID, saveData: gameState }),
+      body:    JSON.stringify({ playerId: PLAYER_ID, saveData }),
       signal:  AbortSignal.timeout(10000),
     });
     _csSetStatus(r.ok ? 'synced' : 'offline');
     if (!r.ok) { console.warn('[CloudSave] server rejected save:', r.status); return; }
-    // If server capped diamonds (tamper detected), apply the corrected value
     const resp = await r.json().catch(() => null);
+    if (resp?.conflict) {
+      // Another device saved a newer version — reload from cloud before next save
+      console.warn('[CloudSave] conflict detected — reloading from cloud');
+      await loadFromCloud();
+      return;
+    }
+    // Track server version so next save can detect conflicts
+    if (resp?.saveVersion !== undefined) {
+      gameState._saveVersion = resp.saveVersion;
+      try { saveState(); } catch(e) {}
+    }
+    // If server capped diamonds (tamper detected), apply the corrected value
     if (resp?.adjustedDiamonds !== undefined) {
       console.warn('[CloudSave] economy adjusted by server:', resp.adjustedDiamonds);
       gameState.diamonds = resp.adjustedDiamonds;
@@ -98,15 +140,21 @@ async function loadFromCloud() {
       // Cloud is newer — restore it
       console.log(`[CloudSave] Restoring cloud save (cloud +${cloudTs - localTs}ms newer)`);
       Object.assign(gameState, data.saveData);
+      // Track server version for conflict detection on next save
+      if (data.saveVersion !== undefined) gameState._saveVersion = data.saveVersion;
       // Server-trusted diamond value overrides whatever is in the save blob
       if (data.trustedDiamonds !== undefined && data.trustedDiamonds !== null) {
         gameState.diamonds = data.trustedDiamonds;
       }
+      // Restore separate localStorage keys bundled in the save
+      _csRestoreExtras(data.saveData);
       try { saveState(); } catch(e) {}
       try { updateMenuStats(); } catch(e) {}
       try { updateInventoryUI(); } catch(e) {}
       try { if (gameState.activeSkins) activeSkins = gameState.activeSkins; } catch(e) {}
       try { updateFeatureLocks(); } catch(e) {}
+      // Merge server-stored achievement IDs (union — never removes locally unlocked ones)
+      _csMergeServerAchievements().catch(() => {});
       _csSetStatus('synced');
       return true;
     } else {
@@ -126,6 +174,27 @@ async function loadFromCloud() {
     console.warn('[CloudSave] load failed:', e?.message || e);
     return false;
   }
+}
+
+// Fetches server-stored achievement IDs and merges with local (union only).
+async function _csMergeServerAchievements() {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+  const url = _csUrl();
+  if (!url) return;
+  try {
+    const r = await fetch(`${url}/player/achievements/${PLAYER_ID}`,
+                          { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!Array.isArray(data.achievement_ids) || data.achievement_ids.length === 0) return;
+    const local  = Array.isArray(gameState.unlockedAch) ? gameState.unlockedAch : [];
+    const merged = [...new Set([...local, ...data.achievement_ids])];
+    if (merged.length > local.length) {
+      gameState.unlockedAch = merged;
+      try { saveState(); updateMenuStats(); } catch(e) {}
+      console.log(`[CloudSave] Merged ${merged.length - local.length} missing achievements from server`);
+    }
+  } catch(e) {}
 }
 
 // ─── Startup ───────────────────────────────────────────────────────────────────

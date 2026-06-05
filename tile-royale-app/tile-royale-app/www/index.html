@@ -231,10 +231,11 @@
       <div class="mode-name">Wild</div>
       <div class="mode-time">Special items mode</div>
     </div>
-    <div class="mode-card koth-card" data-mode="koth" onclick="selectMode('koth', this)">
-      <div class="mode-icon">👑</div>
-      <div class="mode-name">King of the Hill</div>
-      <div class="mode-time" style="color:var(--gold);">💎 50 entry</div>
+    <div class="mode-card koth-card" data-mode="koth" id="kothModeCard" onclick="onKothCardClick()">
+      <div class="mode-icon" id="kothModeIcon">👑</div>
+      <div class="mode-name" id="kothModeName">King of the Hill</div>
+      <div class="mode-time" id="kothModeSubtext" style="color:var(--gold);">💎 50 entry</div>
+      <button class="koth-schedule-badge" onclick="event.stopPropagation(); showKothSchedulePopup()" title="Schedule info">?</button>
     </div>
     <div class="mode-card practice-card" data-mode="practice" onclick="selectMode('practice', this)" style="border-color:rgba(0,255,136,0.2);">
       <div class="mode-icon">🎯</div>
@@ -250,6 +251,21 @@
       <div class="mode-icon" id="customLobbyIcon">🏟️</div>
       <div class="mode-name">Custom Lobby</div>
       <div class="mode-time" id="customLobbySubtext" style="color:var(--muted);">🔒 KOTH Top 3 required</div>
+    </div>
+  </div>
+
+  <!-- KOTH Schedule Info Popup -->
+  <div id="kothScheduleOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:none;align-items:center;justify-content:center;" onclick="closeKothSchedulePopup()">
+    <div style="background:var(--panel);border:1px solid rgba(255,215,0,0.3);border-radius:16px;padding:24px 20px;max-width:320px;width:90%;text-align:center;" onclick="event.stopPropagation()">
+      <div style="font-size:28px;margin-bottom:8px;">👑</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:var(--gold);margin-bottom:12px;">EARLY ACCESS — LIMITED WINDOWS</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.75);line-height:1.6;margin-bottom:16px;">
+        During early release, KOTH lobbies are open for <b style="color:var(--gold);">1 hour</b> twice daily to fill matches with real players.<br><br>
+        🇩🇪 <b>18:00 – 19:00</b> Central Europe<br>
+        🌎 <b>18:00 – 19:00</b> Central America
+      </div>
+      <div id="kothScheduleNextLine" style="font-size:12px;color:var(--muted);margin-bottom:16px;"></div>
+      <button class="btn-secondary" onclick="closeKothSchedulePopup()" style="width:100%;">GOT IT</button>
     </div>
   </div>
 
@@ -2278,6 +2294,7 @@
   <script src="js/game/effects.js"></script>
   <script src="js/game/themeRenderer.js"></script>
   <script src="js/game/rooms.js"></script>
+  <script src="js/systems/kothSchedule.js"></script>
   <script src="js/game/matchmaking.js"></script>
   <script src="js/game/gameLoop.js"></script>
 
@@ -2514,6 +2531,10 @@
     <div id="ghLeaderboard"></div>
   </div>
 
+  <div id="ghWeeklyClaimWrap" style="display:none;width:100%;margin-bottom:4px;">
+    <button id="ghWeeklyClaimBtn" class="btn-secondary" style="width:100%;background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,136,0,0.15));border:1px solid rgba(255,215,0,0.4);color:var(--gold);font-family:'Bebas Neue',sans-serif;letter-spacing:2px;"></button>
+  </div>
+
   <!-- Key display -->
   <div style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 14px;background:rgba(0,0,0,0.3);border:1px solid rgba(155,0,255,0.2);border-radius:12px;margin-bottom:2px;">
     <div>
@@ -2551,9 +2572,8 @@
     <div class="gl-players-found" id="glPlayersFound">0 players found</div>
     <div class="gl-search-range" id="glSearchRange">Searching ±100 MMR</div>
 
-    <div style="margin-top:14px;padding:8px 14px;background:rgba(255,180,0,0.07);border:1px solid rgba(255,180,0,0.25);border-radius:10px;max-width:280px;text-align:center;">
-      <div style="font-size:11px;color:rgba(255,180,0,0.85);line-height:1.5;">During test period, bots are enabled. Upon official release bots will be disabled in Gauntlet!</div>
-    </div>
+    <div id="glUnrankedNotice" style="display:none;margin-top:10px;padding:8px 14px;background:rgba(255,80,0,0.08);border:1px solid rgba(255,80,0,0.3);border-radius:10px;max-width:280px;text-align:center;font-size:11px;color:rgba(255,120,50,0.9);line-height:1.5;"></div>
+
 
     <div style="margin-top:16px;padding:10px 16px;background:var(--panel);border:1px solid var(--border);border-radius:10px;">
       <div style="font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:2px;">YOUR MMR</div>
