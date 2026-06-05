@@ -33,6 +33,7 @@ function _csUrl() {
 // ─── Save ──────────────────────────────────────────────────────────────────────
 
 // Bundle separate localStorage keys into the save blob so they survive reinstall.
+// Each value is validated as parseable JSON before being included — corrupted keys are skipped.
 function _csCollectExtras() {
   const keys = {
     _tr_missions:    'tr_missions',
@@ -43,12 +44,21 @@ function _csCollectExtras() {
   };
   const out = {};
   for (const [field, lsKey] of Object.entries(keys)) {
-    try { const v = localStorage.getItem(lsKey); if (v) out[field] = v; } catch(e) {}
+    try {
+      const v = localStorage.getItem(lsKey);
+      if (v) {
+        JSON.parse(v); // validate — throws if corrupted
+        out[field] = v;
+      }
+    } catch(e) {
+      console.warn('[CloudSave] Skipping corrupted key:', lsKey);
+    }
   }
   return out;
 }
 
 // Restore bundled keys back to localStorage after a cloud load.
+// Each value is validated before writing — corrupted cloud data is skipped.
 function _csRestoreExtras(saveData) {
   const keys = {
     _tr_missions:    'tr_missions',
@@ -58,7 +68,14 @@ function _csRestoreExtras(saveData) {
     _gauntlet_data:  'gauntletData',
   };
   for (const [field, lsKey] of Object.entries(keys)) {
-    try { if (saveData[field]) localStorage.setItem(lsKey, saveData[field]); } catch(e) {}
+    try {
+      if (saveData[field]) {
+        JSON.parse(saveData[field]); // validate before writing
+        localStorage.setItem(lsKey, saveData[field]);
+      }
+    } catch(e) {
+      console.warn('[CloudSave] Skipping corrupted cloud extra:', field);
+    }
   }
 }
 
@@ -155,6 +172,8 @@ async function loadFromCloud() {
       try { updateFeatureLocks(); } catch(e) {}
       // Merge server-stored achievement IDs (union — never removes locally unlocked ones)
       _csMergeServerAchievements().catch(() => {});
+      // Re-derive whale spend stats so whale achievements survive localStorage wipe
+      _csRestoreWhaleSpendStats().catch(() => {});
       _csSetStatus('synced');
       return true;
     } else {
@@ -174,6 +193,36 @@ async function loadFromCloud() {
     console.warn('[CloudSave] load failed:', e?.message || e);
     return false;
   }
+}
+
+// Re-derives whale spend stats from purchase_receipts on the server and merges
+// them into achStats — prevents whale achievement loss after a localStorage wipe.
+async function _csRestoreWhaleSpendStats() {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+  const url = _csUrl();
+  if (!url) return;
+  try {
+    const r = await fetch(`${url}/purchase/spend-stats/${PLAYER_ID}`,
+                          { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data.ok || !data.stats) return;
+    const { totalSpentCents, singlePurchaseMax, bundlesBought, purchaseCount } = data.stats;
+    if (purchaseCount === 0) return;
+    if (typeof initAchStats === 'function') initAchStats();
+    const s = gameState.achStats || {};
+    let changed = false;
+    if (totalSpentCents  > (s.totalSpentCents   || 0)) { s.totalSpentCents   = totalSpentCents;  changed = true; }
+    if (singlePurchaseMax > (s.singlePurchaseMax || 0)) { s.singlePurchaseMax = singlePurchaseMax; changed = true; }
+    if (bundlesBought    > (s.bundlesBought     || 0)) { s.bundlesBought     = bundlesBought;    changed = true; }
+    if (purchaseCount    > (s.diamondsPurchased  || 0)) { s.diamondsPurchased  = purchaseCount;   changed = true; }
+    if (changed) {
+      gameState.achStats = s;
+      try { saveState(); } catch(e) {}
+      try { if (typeof checkAchievements === 'function') checkAchievements(); } catch(e) {}
+      console.log('[CloudSave] Whale spend stats restored from server');
+    }
+  } catch(e) {}
 }
 
 // Fetches server-stored achievement IDs and merges with local (union only).
@@ -209,6 +258,8 @@ window.addEventListener('load', () => {
       console.warn('[CloudSave] startup sync error:', e);
       _csSetStatus('offline');
     }
+    // Re-verify any purchases that were delivered locally during a server outage
+    try { await restorePurchasesOnStartup(); } catch(e) {}
     // After state is loaded, check for any past KOTH weeks with unclaimed prizes
     try { await checkKothPrizesOnAppStart(); } catch(e) {}
   }, 2500);

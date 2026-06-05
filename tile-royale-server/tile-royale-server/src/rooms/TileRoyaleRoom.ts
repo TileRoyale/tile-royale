@@ -1,6 +1,6 @@
 import { Room, Client, Delayed } from "@colyseus/core";
 import { TileRoyaleState, Player } from "../schema/TileRoyaleState";
-import { upsertPlayer, writeGameResult } from "../db";
+import { upsertPlayer, writeGameResult, loadPlayerData } from "../db";
 
 const GRID_SIZE           = 25;
 const MAX_PLAYERS         = 30;
@@ -88,7 +88,7 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
     player.name      = (options?.name   || "Player").substring(0, 16);
     player.avatar    = options?.avatar  || "🔥";
     player.ping      = 0;
-    (player as any).isWhale = options?.isWhale || false;
+    (player as any).isWhale = false; // never trust client flag — verified from DB below
     (player as any).victorySkin = options?.victorySkin || "vic_classic";
     this.state.players.set(client.sessionId, player);
     this.state.playerCount = this.state.players.size;
@@ -101,6 +101,13 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
       upsertPlayer(playerId, player.name, player.avatar).catch(e =>
         console.error("[DB] upsertPlayer failed:", e)
       );
+      // Verify whale status from the DB — prevents clients from spoofing isWhale
+      loadPlayerData(playerId).then(saveData => {
+        const p = this.state.players.get(client.sessionId);
+        if (p && saveData?.whaleBadge === true) {
+          (p as any).isWhale = true;
+        }
+      }).catch(() => {});
     }
 
     console.log(`[Room ${this.roomId}] ${player.name} joined (${this.state.playerCount}/${MAX_PLAYERS})`);
@@ -702,6 +709,11 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
     });
 
     // Persist game results for every human player (fire-and-forget)
+    // Detect bot-only matches: if every opponent is a bot, flag as bot match
+    let humanOpponentCount = 0;
+    this.state.players.forEach(p => { if (!(p as any).isBot) humanOpponentCount++; });
+    const isBotMatch = humanOpponentCount <= 1; // only the local player is human
+
     this.state.players.forEach((p, sessionId) => {
       if ((p as any).isBot) return;
       const playerId = this.playerIds.get(sessionId);
@@ -717,7 +729,8 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
         p.place || this.state.playerCount,
         this.state.playerCount,
         this.roomMode,
-        tapStats
+        tapStats,
+        isBotMatch
       ).catch(e => console.error("[DB] writeGameResult failed:", e));
     });
 

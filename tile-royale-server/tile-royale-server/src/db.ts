@@ -107,6 +107,7 @@ async function createTables(): Promise<void> {
     ALTER TABLE game_results ADD COLUMN IF NOT EXISTS tiles_tapped     INTEGER DEFAULT 0;
     ALTER TABLE game_results ADD COLUMN IF NOT EXISTS avg_reaction_ms  INTEGER DEFAULT 0;
     ALTER TABLE game_results ADD COLUMN IF NOT EXISTS best_reaction_ms INTEGER DEFAULT 0;
+    ALTER TABLE game_results ADD COLUMN IF NOT EXISTS is_bot_match     BOOLEAN DEFAULT false;
 
     -- Player tag: permanent 4-digit identifier (1000–9999), unique per player
     ALTER TABLE players ADD COLUMN IF NOT EXISTS player_tag INTEGER;
@@ -373,6 +374,15 @@ async function createTables(): Promise<void> {
       claimed_at     TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Anti-cheat reports: client-submitted suspicious-behaviour flags
+    CREATE TABLE IF NOT EXISTS suspicious_reports (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL,
+      reason      TEXT         NOT NULL,
+      reported_at TIMESTAMPTZ  DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_suspicious_reports_player ON suspicious_reports(player_id);
+
     -- Diamond spend audit log
     CREATE TABLE IF NOT EXISTS diamond_spends (
       id         BIGSERIAL    PRIMARY KEY,
@@ -388,6 +398,61 @@ async function createTables(): Promise<void> {
       player_id    UUID         NOT NULL REFERENCES players(player_id),
       grant_date   DATE         NOT NULL,
       granted_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Ticket events: audit log of every ticket spend (source = 'match') and earn
+    CREATE TABLE IF NOT EXISTS ticket_events (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      delta       INTEGER      NOT NULL,
+      source      TEXT         NOT NULL,
+      balance     INTEGER,
+      created_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- KOTH fastest-clicker claims: one per player per claim_date per type ('daily'|'weekly')
+    CREATE TABLE IF NOT EXISTS koth_fastest_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      claim_date  DATE         NOT NULL,
+      claim_type  TEXT         NOT NULL,
+      reaction_ms INTEGER      NOT NULL DEFAULT 0,
+      diamonds    INTEGER      NOT NULL DEFAULT 0,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Solo milestone claims: one per player per milestone star threshold
+    CREATE TABLE IF NOT EXISTS solo_milestone_claims (
+      id           BIGSERIAL    PRIMARY KEY,
+      player_id    UUID         NOT NULL REFERENCES players(player_id),
+      milestone_pts INTEGER     NOT NULL,
+      gems         INTEGER      NOT NULL DEFAULT 0,
+      claimed_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Daily challenge swap records: one swap allowed per player per calendar date
+    CREATE TABLE IF NOT EXISTS dc_swap_records (
+      id           BIGSERIAL    PRIMARY KEY,
+      player_id    UUID         NOT NULL REFERENCES players(player_id),
+      swap_date    DATE         NOT NULL,
+      swapped_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Level-up reward claims: one per player per level (prevents re-claiming after save wipe)
+    CREATE TABLE IF NOT EXISTS level_up_claims (
+      id         BIGSERIAL    PRIMARY KEY,
+      player_id  UUID         NOT NULL REFERENCES players(player_id),
+      level      INTEGER      NOT NULL,
+      claimed_at TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Solo level completion rewards: one per player per level number
+    CREATE TABLE IF NOT EXISTS solo_level_claims (
+      id         BIGSERIAL    PRIMARY KEY,
+      player_id  UUID         NOT NULL REFERENCES players(player_id),
+      level_num  INTEGER      NOT NULL,
+      gem_reward INTEGER      NOT NULL DEFAULT 0,
+      claimed_at TIMESTAMPTZ  DEFAULT now()
     );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
@@ -422,6 +487,12 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_claims                ON dc_claims(player_id, challenge_date);
     CREATE        INDEX IF NOT EXISTS idx_diamond_spends_player    ON diamond_spends(player_id, spent_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_grants           ON surprise_grants(player_id, grant_date);
+    CREATE        INDEX IF NOT EXISTS idx_ticket_events_player      ON ticket_events(player_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_fastest_claims       ON koth_fastest_claims(player_id, claim_date, claim_type);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_milestone_claims     ON solo_milestone_claims(player_id, milestone_pts);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_swap_records           ON dc_swap_records(player_id, swap_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_level_up_claims           ON level_up_claims(player_id, level);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_level_claims         ON solo_level_claims(player_id, level_num);
   `);
   console.log("[DB] Tables ready");
 }
@@ -546,17 +617,19 @@ export async function writeGameResult(
   placement: number,
   totalPlayers: number,
   mode: string,
-  tapStats?: { tilesTapped: number; avgReactionMs: number; bestReactionMs: number }
+  tapStats?: { tilesTapped: number; avgReactionMs: number; bestReactionMs: number },
+  isBotMatch?: boolean
 ): Promise<void> {
   await query(`
     INSERT INTO game_results
-      (player_id, placement, total_players, mode, tiles_tapped, avg_reaction_ms, best_reaction_ms)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (player_id, placement, total_players, mode, tiles_tapped, avg_reaction_ms, best_reaction_ms, is_bot_match)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
   `, [
     playerId, placement, totalPlayers, mode,
-    tapStats?.tilesTapped  ?? 0,
-    tapStats?.avgReactionMs  ?? 0,
+    tapStats?.tilesTapped   ?? 0,
+    tapStats?.avgReactionMs ?? 0,
     tapStats?.bestReactionMs ?? 0,
+    isBotMatch ?? false,
   ]);
 }
 
@@ -579,7 +652,7 @@ async function queryRankings(periodFilter: string): Promise<any[] | null> {
         ROUND(AVG(gr.placement)::NUMERIC, 2)               AS avg_placement
       FROM game_results gr
       JOIN players p ON gr.player_id = p.player_id
-      WHERE TRUE ${periodFilter}
+      WHERE (gr.is_bot_match IS NULL OR gr.is_bot_match = false) ${periodFilter}
       GROUP BY p.player_id, p.player_name, p.avatar, p.player_tag
     )
     SELECT
@@ -627,6 +700,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
         ROUND(AVG(NULLIF(avg_reaction_ms, 0))::NUMERIC, 0)  AS overall_avg_reaction_ms
       FROM game_results
       WHERE player_id = $1
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
     weekly_stats AS (
       SELECT
@@ -635,6 +709,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
       FROM game_results
       WHERE player_id = $1
         AND played_at >= date_trunc('week', now())
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
     mode_stats AS (
       SELECT
@@ -646,8 +721,9 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
         COUNT(*) FILTER (WHERE mode = 'wild'    AND placement = 1)   AS wild_wins
       FROM game_results
       WHERE player_id = $1
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
-    -- Compute best win streak from ordered game history
+    -- Compute best win streak from ordered real-player game history
     streaks AS (
       SELECT
         placement,
@@ -656,6 +732,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
           OVER (ORDER BY played_at ROWS UNBOUNDED PRECEDING) AS streak_group
       FROM game_results
       WHERE player_id = $1
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
     win_streaks AS (
       SELECT streak_group, COUNT(*) AS streak_len
@@ -672,6 +749,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
         ) AS rank
       FROM game_results gr2
       JOIN players p2 ON gr2.player_id = p2.player_id
+      WHERE (gr2.is_bot_match IS NULL OR gr2.is_bot_match = false)
       GROUP BY p2.player_id
     ),
     weekly_ranks AS (
@@ -683,6 +761,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
       FROM game_results gr2
       JOIN players p2 ON gr2.player_id = p2.player_id
       WHERE gr2.played_at >= date_trunc('week', now())
+        AND (gr2.is_bot_match IS NULL OR gr2.is_bot_match = false)
       GROUP BY p2.player_id
     )
     SELECT
@@ -1373,13 +1452,21 @@ export async function getPlayerPushToken(playerId: string): Promise<string | nul
 
 // ─── Promo Codes ───────────────────────────────────────────────────────────────
 
-// Returns 'ok' | 'already_redeemed' | 'error'
+// Returns 'ok' | 'already_redeemed' | 'max_uses_reached' | 'error'
 export async function checkAndRecordPromoRedemption(
   playerId: string,
-  code: string
-): Promise<'ok' | 'already_redeemed' | 'error'> {
+  code: string,
+  maxUses: number = 999999
+): Promise<'ok' | 'already_redeemed' | 'max_uses_reached' | 'error'> {
   if (!pool || !dbAvailable) return 'error';
   try {
+    if (maxUses < 999999) {
+      const countRow = await pool.query(
+        `SELECT COUNT(*)::INT AS n FROM promo_redemptions WHERE code = $1`,
+        [code]
+      );
+      if ((countRow.rows[0]?.n ?? 0) >= maxUses) return 'max_uses_reached';
+    }
     await pool.query(
       `INSERT INTO promo_redemptions (code, player_id) VALUES ($1, $2)`,
       [code, playerId]
@@ -1440,9 +1527,9 @@ export async function getKothWeeklyLeaderboard(
   period: 'current' | 'prev' = 'current'
 ): Promise<{ weekly: any[]; playerRank: number | null; playerWins: number } | null> {
   const timeFilter = period === 'prev'
-    ? `AND gr.played_at >= date_trunc('week', now() - interval '7 days')
-       AND gr.played_at <  date_trunc('week', now())`
-    : `AND gr.played_at >= date_trunc('week', now())`;
+    ? `AND played_at >= date_trunc('week', now() - interval '7 days')
+       AND played_at <  date_trunc('week', now())`
+    : `AND played_at >= date_trunc('week', now())`;
 
   const rows = await query(`
     WITH wins_cte AS (
@@ -1737,6 +1824,33 @@ export async function getProcessedTokens(playerId: string): Promise<Set<string>>
     [playerId]
   );
   return new Set((rows || []).map((r: any) => r.purchase_token));
+}
+
+// Returns aggregated spend stats derived from purchase_receipts — used to re-hydrate
+// whale achievement progress (totalSpentCents etc.) after a localStorage wipe.
+export async function getPurchaseSpendStats(playerId: string): Promise<{
+  totalSpentCents: number;
+  singlePurchaseMax: number;
+  bundlesBought: number;
+  purchaseCount: number;
+} | null> {
+  const rows = await query(
+    `SELECT
+       COUNT(*)::int                                                                    AS purchase_count,
+       COALESCE(SUM(ROUND((granted_json::jsonb->>'priceVal')::numeric * 100)), 0)::int AS total_spent_cents,
+       COALESCE(MAX(ROUND((granted_json::jsonb->>'priceVal')::numeric * 100)), 0)::int AS single_purchase_max,
+       COUNT(CASE WHEN granted_json::jsonb ? 'bundleId' THEN 1 END)::int              AS bundles_bought
+     FROM purchase_receipts
+     WHERE player_id = $1`,
+    [playerId]
+  );
+  if (!rows || rows.length === 0) return null;
+  return {
+    totalSpentCents:   Number(rows[0].total_spent_cents),
+    singlePurchaseMax: Number(rows[0].single_purchase_max),
+    bundlesBought:     Number(rows[0].bundles_bought),
+    purchaseCount:     Number(rows[0].purchase_count),
+  };
 }
 
 // ─── Ring Grants & Trades ─────────────────────────────────────────────────────
@@ -2239,4 +2353,153 @@ export async function getMissionServerCount(
   }
   const rows = await query(sql, [playerId, periodStart, periodEnd]);
   return rows && rows.length > 0 ? (rows[0].cnt ?? 0) : 0;
+}
+
+// ─── KOTH Fastest Claims ──────────────────────────────────────────────────────
+
+export async function recordKothFastestClaim(
+  playerId: string, claimDate: string, claimType: string, reactionMs: number, diamonds: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO koth_fastest_claims (player_id, claim_date, claim_type, reaction_ms, diamonds)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [playerId, claimDate, claimType, reactionMs, diamonds]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordKothFastestClaim error:', err);
+    return 'error';
+  }
+}
+
+// ─── Solo Milestone Claims ────────────────────────────────────────────────────
+
+export async function recordSoloMilestoneClaim(
+  playerId: string, milestonePts: number, gems: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO solo_milestone_claims (player_id, milestone_pts, gems) VALUES ($1, $2, $3)`,
+      [playerId, milestonePts, gems]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordSoloMilestoneClaim error:', err);
+    return 'error';
+  }
+}
+
+// ─── Ticket Events ────────────────────────────────────────────────────────────
+
+export async function recordTicketEvent(
+  playerId: string, delta: number, source: string, balance?: number
+): Promise<boolean> {
+  if (!pool) return false;
+  try {
+    await pool.query(
+      `INSERT INTO ticket_events (player_id, delta, source, balance) VALUES ($1, $2, $3, $4)`,
+      [playerId, delta, source, balance ?? null]
+    );
+    return true;
+  } catch (err) {
+    console.error('[DB] recordTicketEvent error:', err);
+    return false;
+  }
+}
+
+// ─── DC Swap Records ─────────────────────────────────────────────────────────
+
+export async function recordDcSwap(
+  playerId: string, swapDate: string
+): Promise<'ok' | 'already_swapped' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO dc_swap_records (player_id, swap_date) VALUES ($1, $2)`,
+      [playerId, swapDate]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_swapped';
+    console.error('[DB] recordDcSwap error:', err);
+    return 'error';
+  }
+}
+
+// ─── Level-up Claims ──────────────────────────────────────────────────────────
+
+export async function recordLevelUpClaim(
+  playerId: string, level: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO level_up_claims (player_id, level) VALUES ($1, $2)`,
+      [playerId, level]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordLevelUpClaim error:', err);
+    return 'error';
+  }
+}
+
+// ─── Solo Level Claims ────────────────────────────────────────────────────────
+
+export async function recordSoloLevelClaim(
+  playerId: string, levelNum: number, gemReward: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO solo_level_claims (player_id, level_num, gem_reward) VALUES ($1, $2, $3)`,
+      [playerId, levelNum, gemReward]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordSoloLevelClaim error:', err);
+    return 'error';
+  }
+}
+
+// ─── Player Game Stats (for achievement precondition validation) ──────────────
+
+export async function getPlayerGameStats(playerId: string): Promise<{
+  games: number; wins: number; top3: number; top5: number;
+  buckshotWins: number; buckshotGames: number;
+  rushWins: number; wildWins: number; wildGames: number;
+} | null> {
+  if (!pool) return null;
+  try {
+    const rows = await pool.query(`
+      SELECT
+        COUNT(*)::int                                                    AS games,
+        COUNT(*) FILTER (WHERE placement = 1)::int                      AS wins,
+        COUNT(*) FILTER (WHERE placement <= 3)::int                     AS top3,
+        COUNT(*) FILTER (WHERE placement <= 5)::int                     AS top5,
+        COUNT(*) FILTER (WHERE mode = 'buckshot' AND placement = 1)::int AS buckshot_wins,
+        COUNT(*) FILTER (WHERE mode = 'buckshot')::int                  AS buckshot_games,
+        COUNT(*) FILTER (WHERE mode = 'rush'     AND placement = 1)::int AS rush_wins,
+        COUNT(*) FILTER (WHERE mode = 'wild'     AND placement = 1)::int AS wild_wins,
+        COUNT(*) FILTER (WHERE mode = 'wild')::int                      AS wild_games
+      FROM game_results
+      WHERE player_id = $1
+    `, [playerId]);
+    const r = rows.rows[0];
+    return {
+      games: r.games, wins: r.wins, top3: r.top3, top5: r.top5,
+      buckshotWins: r.buckshot_wins, buckshotGames: r.buckshot_games,
+      rushWins: r.rush_wins, wildWins: r.wild_wins, wildGames: r.wild_games,
+    };
+  } catch (err) {
+    console.error('[DB] getPlayerGameStats error:', err);
+    return null;
+  }
 }

@@ -152,6 +152,25 @@ async function swapDailyChallenge() {
 
   if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
 
+  // Record the swap on the server (one per day, idempotent)
+  const swapDate = new Date().toISOString().slice(0, 10);
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/dc/swap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, swapDate }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline && data.error === 'already_swapped') {
+        showToast('Already swapped today!', 'var(--muted)');
+        dc.swapped = true; saveState();
+        return;
+      }
+    } catch(e) { /* offline — allow */ }
+  }
+
   const current = getTodayDc();
   const others = DAILY_CHALLENGES.filter(c => c.id !== current.id);
   const newChallenge = others[Math.floor(Math.random() * others.length)];
@@ -231,6 +250,8 @@ async function maybeTriggerSurprise() {
   surpriseShown = true;
 
   const grantDate = new Date().toISOString().slice(0, 10);
+  let rewardIndex = null;
+
   if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
     try {
       const r = await fetch(`${getActiveServer().http}/surprise/claim`, {
@@ -241,7 +262,8 @@ async function maybeTriggerSurprise() {
       });
       const data = r.ok ? await r.json() : null;
       if (data && !data.ok && !data.offline) return; // already_claimed or db_error — skip
-    } catch(e) { /* offline — allow */ }
+      if (data?.rewardIndex !== undefined) rewardIndex = data.rewardIndex;
+    } catch(e) { /* offline — allow with local roll */ }
   }
 
   const surprises = [
@@ -250,7 +272,11 @@ async function maybeTriggerSurprise() {
     { text:'Secret chest opened!', reward: () => { gameState.diamonds += 8; addItemToInventory('shadow_tile', 1); return '+💎 8 & Shadow Tile'; } },
     { text:'Fortune smiles!', reward: () => { addItemToInventory('caltrops', 3); return '+⚙️ Caltrops ×3'; } },
   ];
-  const s = surprises[Math.floor(Math.random() * surprises.length)];
+  // Use server-determined index when available; fall back to local roll only when offline
+  const idx = (rewardIndex !== null && rewardIndex >= 0 && rewardIndex < surprises.length)
+    ? rewardIndex
+    : Math.floor(Math.random() * surprises.length);
+  const s = surprises[idx];
   const rewardText = s.reward();
   saveState(); updateMenuStats(); updateInventoryUI();
 
@@ -670,8 +696,7 @@ async function claimModeDailyReward() {
       if (resp && !resp.ok) {
         if (resp.error === 'already_claimed') { pending.claimed = true; saveState(); openModeRewardPopup(mode); return; }
         if (resp.error === 'no_reward') { showToast('Not enough wins for a reward!', 'var(--muted)'); return; }
-        if (resp.error !== 'db_unavailable') { showToast('Claim failed — try again', 'var(--red)'); return; }
-        // db_unavailable → fall through to local claim
+        showToast('Claim failed — try again when online', 'var(--red)'); return;
       } else if (resp?.ok) {
         // Server granted — use server-authoritative tier
         pending.claimed = true;
@@ -683,18 +708,13 @@ async function claimModeDailyReward() {
         playSound('achieve'); vibrate([50, 50, 200]);
         return;
       }
-    } catch(e) { /* offline fallback */ }
+    } catch(e) {
+      showToast('Connection required to claim rewards', 'var(--red)');
+      return;
+    }
   }
 
-  // Offline fallback: trust client win count
-  const tier = MODE_DAILY_TIERS.find(t => pending.wins >= t.minWins);
-  if (!tier) { showToast('No daily reward to claim!', 'var(--muted)'); return; }
-  pending.claimed = true;
-  gameState.tickets = Math.min((gameState.tickets || 0) + tier.tickets, 99);
-  saveState(); updateMenuStats(); updateTicketUI();
-  openModeRewardPopup(mode);
-  showToast(`🎟️ ${tier.tier} Daily! +${tier.tickets} Tickets`, tier.color);
-  playSound('achieve'); vibrate([50, 50, 200]);
+  showToast('Sign in to claim your reward', 'var(--muted)');
 }
 
 async function claimModeWeeklyReward() {
@@ -722,7 +742,7 @@ async function claimModeWeeklyReward() {
       if (resp && !resp.ok) {
         if (resp.error === 'already_claimed') { pending.claimed = true; saveState(); openModeRewardPopup(mode); return; }
         if (resp.error === 'no_reward') { showToast('Not enough wins for a reward!', 'var(--muted)'); return; }
-        if (resp.error !== 'db_unavailable') { showToast('Claim failed — try again', 'var(--red)'); return; }
+        showToast('Claim failed — try again when online', 'var(--red)'); return;
       } else if (resp?.ok) {
         pending.claimed = true;
         const tickets = resp.tickets;
@@ -733,18 +753,13 @@ async function claimModeWeeklyReward() {
         playSound('achieve'); vibrate([50, 50, 200]);
         return;
       }
-    } catch(e) { /* offline fallback */ }
+    } catch(e) {
+      showToast('Connection required to claim rewards', 'var(--red)');
+      return;
+    }
   }
 
-  // Offline fallback
-  const tier = MODE_WEEKLY_TIERS.find(t => pending.wins >= t.minWins);
-  if (!tier) { showToast('No weekly reward to claim!', 'var(--muted)'); return; }
-  pending.claimed = true;
-  gameState.tickets = Math.min((gameState.tickets || 0) + tier.tickets, 99);
-  saveState(); updateMenuStats(); updateTicketUI();
-  openModeRewardPopup(mode);
-  showToast(`🎟️ ${tier.tier} Weekly! +${tier.tickets} Tickets`, tier.color);
-  playSound('achieve'); vibrate([50, 50, 200]);
+  showToast('Sign in to claim your reward', 'var(--muted)');
 }
 
 function toggleCaltropsPrimed() {

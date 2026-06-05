@@ -112,7 +112,7 @@ function soloCheckMilestones(oldStars, newStars) {
 }
 
 // Manually claim a milestone reward (called from the milestone track UI).
-function claimSoloMilestone(stars) {
+async function claimSoloMilestone(stars) {
   const p = soloGetProgress();
   const total = soloGetTotalStars();
   if (total < stars) return;
@@ -120,6 +120,22 @@ function claimSoloMilestone(stars) {
   if (claimed.includes(stars)) return;
   const m = SOLO_MILESTONES.find(ms => ms.stars === stars);
   if (!m) return;
+
+  // Server-side idempotency — blocks re-claim after save manipulation
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/solo/milestone/claim`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, milestonePts: stars, gems: m.gems }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline && data.error === 'already_claimed') {
+        claimed.push(stars); p.claimedMilestones = claimed; soloSaveProgress(p);
+        renderSoloMilestoneTrack(); return;
+      }
+    } catch(e) { /* offline — allow local claim */ }
+  }
 
   claimed.push(stars);
   p.claimedMilestones = claimed;
@@ -625,6 +641,7 @@ function soloLevelComplete() {
   const gemReward = cfg.difficulty * 10;
   gameState.diamonds = (gameState.diamonds || 0) + gemReward;
   saveState();
+  _recordSoloCompleteServer(levelNum, gemReward);
 
   const newTotal   = soloGetTotalStars();
   const milestones = soloCheckMilestones(oldTotal, newTotal);
@@ -706,14 +723,38 @@ async function soloWatchAdForLife() {
     showToast('Ad already playing...', 'var(--muted)');
     return;
   }
+  // Check global ad cooldown before showing ad
+  if (typeof canWatchAd === 'function' && !canWatchAd()) {
+    if (typeof getAdCooldownText === 'function') showToast(getAdCooldownText(), 'var(--muted)');
+    else showToast('Ad not available yet — try later', 'var(--muted)');
+    return;
+  }
   showToast('📺 Loading ad...', 'var(--muted)');
   const earned = await _watchRewardedAd();
   if (!earned) {
     showToast('Watch the full ad to earn a life.', 'var(--muted)');
     return;
   }
+  // Record with server cooldown
+  if (typeof _serverAdClaim === 'function') {
+    const { allowed } = await _serverAdClaim();
+    if (!allowed) { showToast('Ad reward already claimed recently', 'var(--muted)'); return; }
+  }
   soloAddLife();
   updateSoloMenuLives();
   showToast('+1 ❤️ Life earned!', '#ff6b6b');
   openSoloPreLevel(soloCurrentLevelNum);
+}
+
+function _recordSoloCompleteServer(levelNum, gemReward) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    fetch(`${getActiveServer().http}/solo/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, levelNum, gemReward }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => {});
+  } catch(e) {}
 }

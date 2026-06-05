@@ -1,6 +1,22 @@
 // ===== ANTI-CHEAT =====
 let recentReactions = []; // track last N reaction times
 let suspiciousCount = 0;
+let _lastReportTs   = 0;  // throttle: one server report per 60s
+
+function _reportSuspicious(reason) {
+  const now = Date.now();
+  if (now - _lastReportTs < 60000) return; // throttle
+  _lastReportTs = now;
+  const pid = typeof PLAYER_ID !== 'undefined' ? PLAYER_ID : null;
+  if (!pid) return;
+  const srv = typeof getActiveServer === 'function' ? getActiveServer() : null;
+  if (!srv) return;
+  fetch(`${srv.http}/report/suspicious`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playerId: pid, reason }),
+  }).catch(() => {});
+}
 
 function recordReactionTime(ms) {
   // Floor — physically impossible to tap faster than 80ms
@@ -8,7 +24,7 @@ function recordReactionTime(ms) {
     suspiciousCount++;
     if (suspiciousCount >= 3) {
       showToast('⚠️ Unusual input detected', 'var(--red)');
-      // In real game: flag account server-side
+      _reportSuspicious('ultra_fast_taps');
     }
     return false; // reject tap
   }
@@ -26,6 +42,7 @@ function recordReactionTime(ms) {
       suspiciousCount++;
       if (suspiciousCount >= 5) {
         showToast('⚠️ Bot-like pattern detected', 'var(--red)');
+        _reportSuspicious('bot_pattern');
       }
     }
   }
@@ -66,7 +83,6 @@ function updateDangerMode() {
     !playerEliminated &&         // player must still be alive
     previousPlayersLeft > 5;     // must have just crossed the threshold from above
 
-  console.log('[FINAL PHASE CHECK]', { matchStarted, alivePlayers: playersLeft, previousAlivePlayers: previousPlayersLeft, triggered });
 
   if (triggered) {
     activateDangerMode();
@@ -78,9 +94,6 @@ function updateDangerMode() {
   }
   previousPlayersLeft = playersLeft;
 }
-
-// Override scheduleBurn to be faster in danger mode
-const _origScheduleBurn = window.scheduleBurn;
 
 // ===== GAME =====
 function startGame() {
@@ -229,7 +242,6 @@ function scheduleBotTaps() {
   (activeBots||[]).forEach((bot, i) => {
     const delay = _speed.min + Math.random() * (_speed.max - _speed.min);
 
-    console.log('[BOT SPEED]', { bot: bot.name, min: _speed.min, max: _speed.max, delay: Math.round(delay) });
     const t = setTimeout(() => {
       if (!roundActive) return;
       recordTap(allPlayers.indexOf(bot), bot.avatar + ' ' + bot.name);
@@ -521,7 +533,7 @@ function updateWatchBar() {
   el.textContent = `${playerPlace}${ordinal(playerPlace)} PLACE · WATCHING · ${playersLeft} REMAINING`;
 }
 
-function endGame(playerWon = false) {
+async function endGame(playerWon = false) {
   // Don't bail if session is null — game ending is always valid
   clearInterval(timerInterval);
   clearTimeout(burnTimeout);
@@ -597,6 +609,33 @@ function endGame(playerWon = false) {
   const xpBoostActive = (gameState.xpBoostGames || 0) > 0;
   if (!isCustomLobbyGame && xpBoostActive) { xp *= 2; gameState.xpBoostGames = Math.max(0, (gameState.xpBoostGames || 1) - 1); }
 
+  // Fetch server-authoritative diamond and XP cap before applying rewards
+  if (!isCustomLobbyGame) {
+    try {
+      const srv = typeof getActiveServer === 'function' ? getActiveServer() : null;
+      const pid = typeof PLAYER_ID !== 'undefined' ? PLAYER_ID : null;
+      if (srv && pid) {
+        const resp = await fetch(`${srv.http}/game/end-rewards`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            playerId: pid,
+            placement: playerPlace,
+            mode: gameState.mode,
+            isCustomLobby: false,
+            xpBoostActive,
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+        const data = resp.ok ? await resp.json() : null;
+        if (data?.ok) {
+          diamonds = data.diamonds;             // server-authoritative diamond grant
+          xp       = Math.min(xp, data.xp);    // cap XP at server-calculated maximum
+        }
+      }
+    } catch (_e) { /* server unreachable — use local values; ceiling still protects */ }
+  }
+
   const oldXP = gameState.xp || 0;
   if (!isCustomLobbyGame) {
     gameState.dailyDiamondsEarned.amount = (gameState.dailyDiamondsEarned.amount || 0) + diamonds;
@@ -650,28 +689,29 @@ function endGame(playerWon = false) {
   // Top 5 results
   const showPlaces = [
     { place: 1, name: winnerName, avatar: winnerAv,
-      isYou: !playerEliminated || playerWon, diamonds: playerEliminated && !playerWon ? 150 : diamonds },
+      isYou: !playerEliminated || playerWon, diamonds: diamonds },
   ];
 
   // Fill in some bots
   const activeBots = allPlayers.filter(p => p.isBot && !p.eliminated);
   let placeNum = playerEliminated && !playerWon ? 2 : 2;
   activeBots.slice(0, 4).forEach(bot => {
-    showPlaces.push({ place: placeNum++, name: bot.name, avatar: bot.avatar, isYou: false, diamonds: Math.max(5, 150 - (placeNum * 20)) });
+    showPlaces.push({ place: placeNum++, name: bot.name, avatar: bot.avatar, isYou: false, diamonds: 0 });
   });
 
   if (playerEliminated && !playerWon) {
     showPlaces.push({ place: playerPlace, name: 'YOU', avatar: '🎮', isYou: true, diamonds });
   }
 
+  const _escLb = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   showPlaces.sort((a, b) => a.place - b.place).forEach(p => {
     const placeColors = { 1: 'var(--gold)', 2: '#c0c0c0', 3: '#cd7f32' };
     const row = document.createElement('div');
     row.className = 'lb-row' + (p.isYou ? ' you-row' : '');
     row.innerHTML = `
       <div class="lb-place" style="color:${placeColors[p.place] || 'var(--muted)'}">${p.place}</div>
-      <div class="lb-avatar">${p.avatar}</div>
-      <div class="lb-name">${p.name}${p.isYou ? ' <span style="color:var(--gold);font-size:11px">(YOU)</span>' : ''}</div>
+      <div class="lb-avatar">${_escLb(p.avatar)}</div>
+      <div class="lb-name">${_escLb(p.name)}${p.isYou ? ' <span style="color:var(--gold);font-size:11px">(YOU)</span>' : ''}</div>
       <div class="lb-diamond">💎 ${p.diamonds}</div>
     `;
     lb.appendChild(row);

@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -67,15 +67,25 @@ async function sendPushToPlayer(playerId: string, title: string, body: string, d
   }
 }
 
+// ─── IAP Key Check ────────────────────────────────────────────────────────────
+// GOOGLE_PLAY_KEY_JSON must be set in production. Without it, verifyWithGooglePlay()
+// returns false and ALL new purchases are rejected with google_play_rejected.
+// Restore of existing tokens (already in purchase_receipts) still works.
+if (!process.env.GOOGLE_PLAY_KEY_JSON) {
+  console.error('[IAP] ❌ CRITICAL: GOOGLE_PLAY_KEY_JSON is not set.');
+  console.error('[IAP]    All new purchase verification will be rejected until this is configured.');
+  console.error('[IAP]    Set GOOGLE_PLAY_KEY_JSON in Railway environment variables before going live.');
+}
+
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
 const app    = express();
 
 // Bump this when releasing a client version that is required (breaks old clients)
-const MIN_CLIENT_VERSION = "v0.4.5";
+const MIN_CLIENT_VERSION = "v0.8.0";
 
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Privacy Policy page
 app.get("/privacy", (_req, res) => {
@@ -625,29 +635,142 @@ app.post("/trophyroad/claim", async (req, res) => {
 
 // POST /achievements/unlock  { playerId, achievementId }
 // Server-side idempotency for achievement rewards — blocks re-unlock after save wipe.
+// For game-stat-based achievements the server re-validates from game_results before recording.
 app.post("/achievements/unlock", async (req, res) => {
   const { playerId, achievementId } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   if (!achievementId) return res.status(400).json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  // Precondition map: achievementId → { stat, goal } for stats we can verify from game_results.
+  // Stats not in this map (totalTaps, totalDiamonds, solo, winStreak, etc.) pass through — they
+  // are harder to validate server-side and grant low-value rewards.
+  const ACH_PRECONDITIONS: Record<string, { stat: 'wins'|'games'|'top3'|'top5'|'rushWins'|'buckshotWins'|'buckshotGames'|'wildWins'|'wildGames', goal: number }> = {
+    first_blood:     { stat: 'games',        goal: 1   },
+    on_fire:         { stat: 'wins',          goal: 10  },
+    centurion:       { stat: 'wins',          goal: 100 },
+    grand_master:    { stat: 'wins',          goal: 500 },
+    survivor:        { stat: 'top5',          goal: 1   },
+    last_standing:   { stat: 'top3',          goal: 100 },
+    true_champion:   { stat: 'top3',          goal: 1000 },
+    speed_demon:     { stat: 'rushWins',      goal: 1   },
+    buckshot_rookie: { stat: 'buckshotGames', goal: 5   },
+    buckshot_king:   { stat: 'buckshotWins',  goal: 50  },
+    wild_card:       { stat: 'wildGames',     goal: 1   },
+    wild_master:     { stat: 'wildWins',      goal: 10  },
+  };
+
+  const precondition = ACH_PRECONDITIONS[String(achievementId)];
+  if (precondition) {
+    const stats = await getPlayerGameStats(String(playerId));
+    if (stats !== null) {
+      const actual = stats[precondition.stat] ?? 0;
+      if (actual < precondition.goal) {
+        console.warn(`[ACH] Rejected ${achievementId} for ${playerId}: need ${precondition.goal} ${precondition.stat}, have ${actual}`);
+        return res.json({ ok: false, error: 'precondition_not_met' });
+      }
+    }
+  }
+
   const result = await recordAchievementUnlock(String(playerId), String(achievementId));
   if (result === 'already_unlocked') return res.json({ ok: false, error: 'already_unlocked' });
   if (result === 'error')            return res.json({ ok: false, error: 'db_error' });
   res.json({ ok: true });
 });
 
-// POST /ads/reward/claim  { playerId, rewardType }
-// Server enforces 1-hour cooldown to prevent localStorage bypass.
-app.post("/ads/reward/claim", async (req, res) => {
-  const { playerId, rewardType = 'tickets' } = req.body;
+// POST /xp/levelup  { playerId, level }
+// Records a level-up reward claim so it cannot be re-triggered after a save wipe.
+// Client calls this when awardLevelUp() fires. Server grants nothing — client already
+// applied the reward locally — this endpoint just raises the trusted-diamond ceiling
+// and records the level so future saves cannot replay it.
+app.post("/xp/levelup", async (req, res) => {
+  const { playerId, level } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const lvl = Number(level);
+  if (!lvl || lvl < 2 || lvl > 500) return res.status(400).json({ ok: false, error: 'invalid_level' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  const result = await recordLevelUpClaim(String(playerId), lvl);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+
+  // Free spin per level-up — raise ceiling by a conservative amount
+  await addTrustedDiamonds(String(playerId), 0).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /solo/complete  { playerId, levelNum, gemReward }
+// Records a solo level completion and raises the trusted-diamond ceiling by gemReward.
+// Idempotent: duplicate calls return already_claimed without re-raising the ceiling.
+app.post("/solo/complete", async (req, res) => {
+  const { playerId, levelNum, gemReward } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const lvl = Number(levelNum);
+  const gems = Number(gemReward);
+  if (!lvl || lvl < 1 || lvl > 100) return res.status(400).json({ ok: false, error: 'invalid_level' });
+  if (isNaN(gems) || gems < 0 || gems > 100) return res.status(400).json({ ok: false, error: 'invalid_reward' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  const result = await recordSoloLevelClaim(String(playerId), lvl, gems);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+
+  if (gems > 0) await addTrustedDiamonds(String(playerId), gems).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /tickets/spend  { playerId, balance }
+// Fire-and-forget audit record of a ticket spend. Not authoritative (client still controls
+// balance) but provides a server-side audit trail for detecting impossible ticket counts.
+app.post("/tickets/spend", async (req, res) => {
+  const { playerId, balance } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  await recordTicketEvent(String(playerId), -1, 'match', Number(balance) || 0).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /dc/swap  { playerId, swapDate }
+// Records a daily-challenge swap (one allowed per UTC calendar day per player).
+app.post("/dc/swap", async (req, res) => {
+  const { playerId, swapDate } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!swapDate || !/^\d{4}-\d{2}-\d{2}$/.test(swapDate))
+    return res.status(400).json({ ok: false, error: 'invalid_date' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordDcSwap(String(playerId), swapDate);
+  if (result === 'already_swapped') return res.json({ ok: false, error: 'already_swapped' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /ads/reward/claim  { playerId }
+// Server enforces 1-hour cooldown and determines the reward type.
+// Returns { ok: true, rewardIndex: 0-3 } so client uses a deterministic table.
+function _serverRollAdReward(): number {
+  const roll = Math.random() * 100;
+  if (roll < 80) return 0; // tickets ×1
+  if (roll < 90) return 1; // crystal ×1
+  if (roll < 97) return 2; // caltrops ×1
+  return 3;                 // shadow_tile ×1
+}
+const AD_REWARD_TYPES = ['tickets', 'crystal', 'caltrops', 'shadow_tile'];
+
+app.post("/ads/reward/claim", async (req, res) => {
+  const { playerId } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true, rewardIndex: 0 });
   const canClaim = await checkAdRewardCooldown(String(playerId));
   if (!canClaim) return res.json({ ok: false, error: 'cooldown_active' });
-  await recordAdRewardClaim(String(playerId), String(rewardType));
-  res.json({ ok: true });
+  const rewardIndex = _serverRollAdReward();
+  await recordAdRewardClaim(String(playerId), AD_REWARD_TYPES[rewardIndex]);
+  res.json({ ok: true, rewardIndex });
 });
 
 // POST /offline-reward/claim  { playerId, claimDate, amount }
@@ -666,7 +789,9 @@ app.post("/offline-reward/claim", async (req, res) => {
   if (!lastSeen || (Date.now() - lastSeen.getTime()) < OFFLINE_RATE_MS)
     return res.json({ ok: false, error: 'not_eligible' });
 
-  const result = await recordOfflineRewardClaim(String(playerId), claimDate, Number(amount) || 0);
+  // Cap amount: OFFLINE_DIAMONDS=3 per 8h period, max 3 periods = 9 diamonds
+  const safeAmount = Math.min(Number(amount) || 0, 9);
+  const result = await recordOfflineRewardClaim(String(playerId), claimDate, safeAmount);
   if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
   if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
   res.json({ ok: true });
@@ -689,17 +814,27 @@ app.post("/dc/claim", async (req, res) => {
 
 // POST /surprise/claim  { playerId, grantDate }
 // One surprise bonus per player per UTC calendar day.
+// Server determines the reward deterministically (playerId + grantDate hash) and
+// returns rewardIndex so the client doesn't roll its own random.
+function _serverRollSurpriseReward(playerId: string, grantDate: string): number {
+  const seed = playerId + grantDate;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+  return Math.abs(h) % 4;
+}
+
 app.post("/surprise/claim", async (req, res) => {
   const { playerId, grantDate } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   if (!grantDate || !/^\d{4}-\d{2}-\d{2}$/.test(grantDate))
     return res.status(400).json({ ok: false, error: 'invalid_date' });
-  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const rewardIndex = _serverRollSurpriseReward(String(playerId), String(grantDate));
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true, rewardIndex });
   const result = await recordSurpriseGrant(String(playerId), grantDate);
   if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
   if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
-  res.json({ ok: true });
+  res.json({ ok: true, rewardIndex });
 });
 
 // POST /diamonds/spend  { playerId, itemId, amount }
@@ -752,6 +887,28 @@ app.delete("/admin/delete-player/:playerId", requireAdmin, async (req, res) => {
   res.json({ ok: true, playerId });
 });
 
+// POST /admin/player/reset-whale — revoke whale status from a player's save blob
+// Used when a whale badge was granted via refund, fraud, or fallback exploit.
+app.post("/admin/player/reset-whale", requireAdmin, async (req, res) => {
+  const { playerId } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  try {
+    await query(
+      `UPDATE player_saves
+       SET save_data = jsonb_set(save_data, '{whaleBadge}', 'false'::jsonb)
+       WHERE player_id = $1 AND save_data ? 'whaleBadge'`,
+      [playerId]
+    );
+    console.log(`[Admin] Whale badge revoked for ${playerId}`);
+    res.json({ ok: true, playerId });
+  } catch (e: any) {
+    console.error('[Admin] reset-whale error:', e?.message);
+    res.status(500).json({ ok: false, error: 'db_error' });
+  }
+});
+
 // POST /admin/notification — send a notification to a player
 // Body: { playerId, title, body, type?, reward_type?, reward_amount? }
 app.post("/admin/notification", requireAdmin, async (req, res) => {
@@ -769,10 +926,27 @@ app.post("/admin/notification", requireAdmin, async (req, res) => {
   res.status(201).json({ ok: true, notification: notif });
 });
 
+// POST /report/suspicious  { playerId, reason }
+// Client-submitted anti-cheat flag. Logged for review; does not auto-ban.
+app.post("/report/suspicious", async (req, res) => {
+  const { playerId, reason } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  const safeReason = String(reason || 'unknown').substring(0, 120);
+  console.warn(`[AntiCheat] ⚠️ Suspicious player reported: ${playerId} — ${safeReason}`);
+  if (getDbStatus().available) {
+    await query(
+      `INSERT INTO suspicious_reports (player_id, reason) VALUES ($1, $2)`,
+      [playerId, safeReason]
+    ).catch(() => {}); // table created lazily below
+  }
+  res.json({ ok: true });
+});
+
 // ─── End-to-end validation endpoint ─────────────────────────────────────────
 // Inserts synthetic data, runs all queries, reports results, then cleans up.
-// Safe to call repeatedly.
-app.get("/validate", async (_req, res) => {
+// Safe to call repeatedly. Requires X-Admin-Key header to prevent public access.
+app.get("/validate", requireAdmin, async (_req, res) => {
   const TEST_ID   = "00000000-0000-4000-a000-000000000001";
   const TEST_NAME = "_validate_player_";
   const results: Record<string, any> = {};
@@ -860,7 +1034,6 @@ const PROMO_CODES: Record<string, {
 }> = {
   'WELCOME2025':  { diamonds: 500,  items: { crystal: 2, caltrops: 2 },        desc: 'Welcome gift!',                       maxUses: 999999 },
   'TILEROYALE':   { diamonds: 1000, items: { crystal: 3 },                      desc: 'Official launch bonus!',              maxUses: 999999 },
-  'SUMMER2025':   { diamonds: 750,  items: { caltrops: 3 },                     desc: 'Summer campaign reward',              maxUses: 999999, expires: '2025-09-01' },
   'WILDMODE':     { diamonds: 300,  items: { shadow_tile: 3 },                  desc: 'Wild mode launch reward',             maxUses: 999999 },
   'KOTHWEEK1':    { diamonds: 500,  items: { crystal: 1, caltrops: 1 },         desc: 'King of the Hill launch!',            maxUses: 999999 },
   'WHALE4EVER':   { diamonds: 2000, items: { shadow_tile: 5 },                  desc: 'Whale appreciation gift 🐋',          maxUses: 999999 },
@@ -886,14 +1059,14 @@ app.post("/promo/redeem", async (req, res) => {
     return res.json({ ok: false, error: 'invalid_code' });
   if (promo.expires && new Date() > new Date(promo.expires))
     return res.json({ ok: false, error: 'expired' });
-  // Dev codes skip redemption recording — reusable indefinitely for testing
-  if (!promo.dev) {
-    if (!getDbStatus().available)
-      return res.json({ ok: false, error: 'db_unavailable' });
-    const result = await checkAndRecordPromoRedemption(playerId, code);
-    if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
-    if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
-  }
+  // Dev codes must never appear in production — this path is a safety net only
+  if (promo.dev) return res.json({ ok: false, error: 'invalid_code' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+  const result = await checkAndRecordPromoRedemption(playerId, code, promo.maxUses);
+  if (result === 'already_redeemed')  return res.json({ ok: false, error: 'already_redeemed' });
+  if (result === 'max_uses_reached')  return res.json({ ok: false, error: 'expired' });
+  if (result === 'error')             return res.json({ ok: false, error: 'server_error' });
 
   const reward: Record<string, any> = {};
   if (promo.diamonds) reward.diamonds = promo.diamonds;
@@ -937,6 +1110,58 @@ app.get("/admin/push/count", requireAdmin, async (_req, res) => {
   res.json({ totalTokens, dbAvailable: true });
 });
 
+// ─── Game End Rewards ─────────────────────────────────────────────────────────
+
+// POST /game/end-rewards  { playerId, placement, mode, isCustomLobby, xpBoostActive }
+// Returns server-authoritative diamond grant for the just-completed game.
+// Calculates daily cap from actual game_results (server-written by TileRoyaleRoom).
+// Also raises the trusted diamond ceiling so the cloud save accepts the grant.
+app.post("/game/end-rewards", async (req, res) => {
+  const { playerId, placement, mode, isCustomLobby, xpBoostActive } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+
+  // Custom lobby games give no rewards
+  if (Boolean(isCustomLobby)) return res.json({ ok: true, diamonds: 0, xp: 0 });
+
+  const p = Math.max(1, Math.min(Number(placement) || 99, 99));
+
+  // Base diamond reward by placement
+  const baseDiamonds = p === 1 ? 6 : p === 2 ? 4 : p === 3 ? 2 : 1;
+
+  let diamonds = baseDiamonds;
+
+  if (getDbStatus().available) {
+    // Daily cap: sum diamonds earned from game_results today (server-written rows are authoritative)
+    const capRows = await query(
+      `SELECT COALESCE(SUM(
+         CASE WHEN placement = 1 THEN 6
+              WHEN placement = 2 THEN 4
+              WHEN placement = 3 THEN 2
+              ELSE 1 END
+       ), 0) AS earned_today
+       FROM game_results
+       WHERE player_id = $1
+         AND played_at >= date_trunc('day', now() AT TIME ZONE 'UTC')
+         AND (is_bot_match IS NULL OR is_bot_match = false)`,
+      [playerId]
+    );
+    const earnedToday = Number(capRows?.[0]?.earned_today ?? 0);
+    const dailyLeft   = Math.max(0, 80 - earnedToday);
+    diamonds = Math.min(baseDiamonds, dailyLeft);
+
+    // Raise server-trusted ceiling so the cloud save accepts the grant
+    if (diamonds > 0) await addTrustedDiamonds(playerId, diamonds);
+  }
+
+  // XP: server returns a cap — client must not exceed this.
+  // Includes base + streak bonus + survival bonus + optional 2× boost.
+  const baseXp    = p === 1 ? 150 : p === 2 ? 100 : p === 3 ? 85 : p <= 5 ? 65 : 40;
+  const xpCap     = baseXp * (Boolean(xpBoostActive) ? 2 : 1);
+
+  res.json({ ok: true, diamonds, xp: xpCap });
+});
+
 // ─── Cloud Save ────────────────────────────────────────────────────────────────
 
 // POST /save — upsert full game state for a player
@@ -971,7 +1196,7 @@ app.post("/save", async (req, res) => {
       // NOTE: once billing is server-validated, purchased amounts will be added via
       // addTrustedDiamonds() before this save arrives, making BASE_PURCHASE irrelevant
       // for that path. Until then, this cap must stay above the max single-session purchase.
-      const BASE_PURCHASE = 100_000;   // covers all realistic IAP stacks; still stops 999k+ exploits
+      const BASE_PURCHASE = 30_000;    // covers the largest single IAP package (bundle.whale2 = 26k); multi-package buyers have addTrustedDiamonds() called per purchase
       const PER_GAME_BOOTSTRAP = 80;
       const gameCountRows = await query(
         `SELECT COUNT(*)::INT AS cnt FROM game_results WHERE player_id = $1`,
@@ -1114,6 +1339,76 @@ app.post("/koth/prizes/claim", async (req, res) => {
   res.json(result);
 });
 
+// POST /koth/fastest/claim  { playerId, claimDate, claimType, reactionMs, amount }
+// Records KOTH fastest-clicker reward claim (daily or weekly), idempotent.
+app.post("/koth/fastest/claim", async (req, res) => {
+  const { playerId, claimDate, claimType, reactionMs, amount } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!claimDate || !/^\d{4}-\d{2}-\d{2}$/.test(claimDate))
+    return res.status(400).json({ ok: false, error: 'invalid_date' });
+  if (!['daily', 'weekly'].includes(String(claimType)))
+    return res.status(400).json({ ok: false, error: 'invalid_type' });
+  const ms  = Math.max(0, Number(reactionMs) || 0);
+  const amt = Math.min(500, Math.max(0, Number(amount) || 0));
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordKothFastestClaim(String(playerId), claimDate, String(claimType), ms, amt);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  if (amt > 0) await addTrustedDiamonds(String(playerId), amt).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /solo/milestone/claim  { playerId, milestonePts, gems }
+// Records a solo milestone reward claim, idempotent per player per milestone threshold.
+app.post("/solo/milestone/claim", async (req, res) => {
+  const { playerId, milestonePts, gems } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const pts = Number(milestonePts);
+  const g   = Math.min(1000, Math.max(0, Number(gems) || 0));
+  if (!pts || pts < 1) return res.status(400).json({ ok: false, error: 'invalid_milestone' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordSoloMilestoneClaim(String(playerId), pts, g);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  if (g > 0) await addTrustedDiamonds(String(playerId), g).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /ring/reward  { playerId, amount, rewardType }
+// Raises the trusted-diamond ceiling for ring salvage and ring achievement rewards.
+// rewardType: 'salvage' | 'achievement'
+// Max 500 diamonds per call (highest single ring achievement reward). Rate-limited to 50/day.
+app.post("/ring/reward", async (req, res) => {
+  const { playerId, amount, rewardType } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const amt = Number(amount);
+  if (!amt || amt <= 0 || amt > 500) return res.status(400).json({ ok: false, error: 'invalid_amount' });
+  if (!['salvage', 'achievement'].includes(String(rewardType)))
+    return res.status(400).json({ ok: false, error: 'invalid_type' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+
+  // Rate-limit: max 50 ring reward grants per 24 hours per player
+  const rows = await query(
+    `SELECT COUNT(*)::int AS cnt FROM ticket_events
+     WHERE player_id = $1 AND source = 'ring_reward' AND created_at > now() - interval '24 hours'`,
+    [playerId]
+  );
+  const cnt = Number(rows?.[0]?.cnt ?? 0);
+  if (cnt >= 50) return res.json({ ok: false, error: 'rate_limit' });
+
+  // Record the grant so rate limit works on subsequent calls
+  await query(
+    `INSERT INTO ticket_events (player_id, delta, source, balance) VALUES ($1, 0, 'ring_reward', $2)`,
+    [playerId, amt]
+  ).catch(() => {});
+
+  await addTrustedDiamonds(String(playerId), amt).catch(() => {});
+  res.json({ ok: true });
+});
+
 // ─── Ring System ─────────────────────────────────────────────────────────────
 
 // Server-side ring pool — mirrors client RINGS array (100 rings, indices 0-99).
@@ -1153,12 +1448,26 @@ function _serverRollRing(rarityId: string): string {
 // POST /ring/spin  { playerId, spinType }
 // Server rolls the rarity and ring, records in ring_grants, returns to client.
 // spinType: 'free' | 'freeSpin' | 'ad' | 'diamond'
+// Free/freeSpin spins are rate-limited to 20 per 24 hours to prevent direct-API abuse.
 app.post("/ring/spin", async (req, res) => {
   const { playerId, spinType = 'free' } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.json({ ok: false, error: 'invalid_player' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });
+
+  // Rate-limit free spins: max 20 per 24 hours per player
+  if (spinType === 'free' || spinType === 'freeSpin') {
+    const rows = await query(
+      `SELECT COUNT(*) AS cnt FROM ring_grants
+       WHERE player_id = $1
+         AND (spin_type = 'free' OR spin_type = 'freeSpin')
+         AND granted_at > now() - interval '24 hours'`,
+      [playerId]
+    );
+    const cnt = Number(rows?.[0]?.cnt ?? 0);
+    if (cnt >= 20) return res.json({ ok: false, error: 'free_spin_rate_limit' });
+  }
 
   const rarityId = _serverRollRarity();
   const ringId   = _serverRollRing(rarityId);
@@ -1172,7 +1481,9 @@ app.post("/ring/spin", async (req, res) => {
 // Validates the grant and creates a trade code.
 app.post("/ring/trade/create", async (req, res) => {
   const { playerId, grantId, ringId } = req.body;
-  if (!playerId || !grantId || !ringId)
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!grantId || !ringId)
     return res.json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });
@@ -1190,7 +1501,9 @@ app.post("/ring/trade/create", async (req, res) => {
 // Validates the trade code and transfers the ring + new grant to the claimer.
 app.post("/ring/trade/accept", async (req, res) => {
   const { claimerPlayerId, tradeCode } = req.body;
-  if (!claimerPlayerId || !tradeCode)
+  if (!claimerPlayerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(claimerPlayerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!tradeCode)
     return res.json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });
@@ -1208,7 +1521,9 @@ app.post("/ring/trade/accept", async (req, res) => {
 // Cancels a trade — returns the grant to 'held' status.
 app.post("/ring/trade/cancel", async (req, res) => {
   const { playerId, tradeCode } = req.body;
-  if (!playerId || !tradeCode)
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!tradeCode)
     return res.json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });
@@ -1376,8 +1691,8 @@ const PRODUCT_CATALOG: Record<string, {
 async function verifyWithGooglePlay(productId: string, purchaseToken: string): Promise<boolean> {
   const keyJson = process.env.GOOGLE_PLAY_KEY_JSON;
   if (!keyJson) {
-    console.log('[Purchase] GOOGLE_PLAY_KEY_JSON not set — skipping API verification (token deduplication only)');
-    return true;
+    console.error('[IAP] Purchase rejected — GOOGLE_PLAY_KEY_JSON not configured.');
+    return false;
   }
   try {
     const credentials = JSON.parse(keyJson);
@@ -1523,6 +1838,19 @@ app.post("/purchase/restore", async (req, res) => {
   }
 
   res.json({ ok: true, restored });
+});
+
+// GET /purchase/spend-stats/:playerId
+// Returns aggregated spend totals from purchase_receipts so the client can
+// re-hydrate whale achievement progress after a localStorage wipe.
+app.get("/purchase/spend-stats/:playerId", async (req, res) => {
+  const { playerId } = req.params;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ error: 'invalid_player' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+  const stats = await getPurchaseSpendStats(playerId);
+  res.json({ ok: true, stats: stats ?? { totalSpentCents: 0, singlePurchaseMax: 0, bundlesBought: 0, purchaseCount: 0 } });
 });
 
 app.use("/colyseus", monitor());

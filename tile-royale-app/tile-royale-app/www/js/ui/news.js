@@ -116,14 +116,17 @@ function _newsRenderFeed(posts) {
     return;
   }
 
+  const _esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const _escLines = s => _esc(s).replace(/\n/g,'<br>');
+
   feed.innerHTML = posts.map(p => {
     const nid      = Number(p.id);
     _newsBodies[nid] = p.body || '';     // store body safely outside HTML attrs
     const meta     = _NEWS_TYPE_META[p.type] || { label: 'NEWS', cls: 'news' };
     const isLong   = (p.body || '').length > 220;
     const bodyHtml = _newsExpanded.has(nid)
-      ? p.body.replace(/\n/g, '<br>')
-      : (isLong ? _newsPreview(p.body) : p.body.replace(/\n/g, '<br>'));
+      ? _escLines(p.body)
+      : (isLong ? _newsPreview(_esc(p.body)) : _escLines(p.body));
 
     return `
       <div class="news-card${p.pinned ? ' news-card--pinned' : ''}">
@@ -132,7 +135,7 @@ function _newsRenderFeed(posts) {
           <span class="news-type-badge news-type-badge--${meta.cls}">${meta.label}</span>
           <span class="news-time">${_newsRelTime(p.created_at)}</span>
         </div>
-        <div class="news-card-title">${p.title}</div>
+        <div class="news-card-title">${_esc(p.title)}</div>
         <div class="news-card-body" id="nb-${nid}">${bodyHtml}</div>
         ${isLong
           ? `<button class="news-expand-btn" id="nxb-${nid}"

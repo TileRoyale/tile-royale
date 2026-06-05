@@ -847,7 +847,7 @@ const LEGAL_CONTENT = {
   privacy: {
     title: 'PRIVACY POLICY',
     html: `
-      <p><b style="color:var(--text)">Last updated: January 1, 2025</b></p>
+      <p><b style="color:var(--text)">Last updated: June 2, 2026</b></p>
       <p>Tile Royale ("we", "our", or "the game") is committed to protecting your privacy. This policy explains what data we collect and how we use it.</p>
 
       <h2>1. Data We Collect</h2>
@@ -899,7 +899,7 @@ const LEGAL_CONTENT = {
   terms: {
     title: 'TERMS OF SERVICE',
     html: `
-      <p><b style="color:var(--text)">Last updated: January 1, 2025</b></p>
+      <p><b style="color:var(--text)">Last updated: June 2, 2026</b></p>
       <p>By downloading or playing Tile Royale, you agree to these Terms of Service. Please read them carefully.</p>
 
       <h2>1. Eligibility</h2>
@@ -1038,18 +1038,37 @@ async function buyFirstWeekOffer() {
     try {
       showToast('Opening store...', 'var(--blue)');
       const purchase = await nativePurchase('offer.firstweek');
-      // Verify with server (fire-and-forget; local delivery is the source of truth here
-      // because the server needs to record the token for duplicate-prevention only).
-      if (purchase?.purchaseToken && typeof PLAYER_ID !== 'undefined' && PLAYER_ID) {
-        fetch(`${getActiveServer().http}/purchase/verify`, {
+      if (!purchase?.purchaseToken) {
+        showToast('Purchase incomplete. Please try again.', 'var(--red)');
+        return;
+      }
+      // Verify with server before delivering — prevents double-delivery on restore
+      if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) {
+        deliverOffer();
+        return;
+      }
+      showToast('Verifying purchase...', 'var(--blue)');
+      try {
+        const resp = await fetch(`${getActiveServer().http}/purchase/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ playerId: PLAYER_ID, productId: 'offer.firstweek',
                                  purchaseToken: purchase.purchaseToken, orderId: purchase.orderId || '' }),
-          signal: AbortSignal.timeout(12000),
-        }).catch(() => {});
+          signal: AbortSignal.timeout(15000),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          deliverOffer();
+        } else if (data.error === 'already_processed') {
+          // Token already recorded — apply locally if not yet reflected
+          if (!gameState.firstWeekClaimed) deliverOffer();
+          else showToast('🎉 Welcome offer already active!', 'var(--gold)');
+        } else {
+          showToast('Verification failed. Restart the app to retry.', 'var(--red)');
+        }
+      } catch (_netErr) {
+        showToast('Purchase recorded by Play. Restart the app to claim your items.', 'var(--gold)');
       }
-      deliverOffer();
     } catch (e) {
       const msg = (e && (e.message || e.code || e));
       if (msg !== 'cancelled') showToast('Purchase failed. Try again.', 'var(--red)');

@@ -89,18 +89,19 @@ function _inboxRenderFeed(notifications) {
     const canClaim = rewardMeta && !n.claimed_at;
     const wasClaimed = rewardMeta && n.claimed_at;
 
+    const _esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     return `
       <div class="inbox-card${isUnread ? ' inbox-card--unread' : ''}" id="inbox-card-${n.id}"
            onclick="markNotificationRead(${n.id})">
         <div class="inbox-card-header">
           <span class="inbox-type-icon">${meta.icon}</span>
           <div class="inbox-card-titles">
-            <div class="inbox-card-title">${n.title}</div>
+            <div class="inbox-card-title">${_esc(n.title)}</div>
             <div class="inbox-card-time">${_inboxRelTime(n.created_at)}</div>
           </div>
           ${isUnread ? '<div class="inbox-unread-dot"></div>' : ''}
         </div>
-        <div class="inbox-card-body">${(n.body || '').replace(/\n/g, '<br>')}</div>
+        <div class="inbox-card-body">${_esc(n.body || '').replace(/\n/g, '<br>')}</div>
         ${canClaim ? `
           <div class="inbox-reward-row">
             <span class="inbox-reward-label">${rewardMeta.icon} ${n.reward_amount} ${rewardMeta.label}</span>
@@ -134,6 +135,35 @@ async function markNotificationRead(notificationId) {
   });
 }
 
+// ─── Startup: recover any inbox rewards that were claimed but not applied ──────
+// If the app crashed between the server marking claimed_at and the client's saveState(),
+// the reward_type/amount is stored in gameState._pendingInboxRewards and re-applied here.
+
+function _inboxRecoverPendingRewards() {
+  try {
+    const pending = gameState._pendingInboxRewards;
+    if (!pending || !Object.keys(pending).length) return;
+    let recovered = false;
+    for (const [, r] of Object.entries(pending)) {
+      if (!r) continue;
+      if (r.type === 'diamonds') gameState.diamonds = (gameState.diamonds || 0) + r.amount;
+      else if (r.type === 'tickets') gameState.tickets = (gameState.tickets || 0) + r.amount;
+      else if (r.type === 'spins')   gameState.freeSpins = (gameState.freeSpins || 0) + r.amount;
+      recovered = true;
+    }
+    if (recovered) {
+      gameState._pendingInboxRewards = {};
+      try { saveState(); updateMenuStats(); } catch(e) {}
+      console.log('[Inbox] Recovered pending rewards from previous session');
+    }
+  } catch(e) {}
+}
+
+// Called from cloudSave.js after loadFromCloud() completes
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(_inboxRecoverPendingRewards, 3500); // after cloud sync settles
+});
+
 // ─── Claim Reward ──────────────────────────────────────────────────────────────
 
 async function claimNotificationReward(notificationId) {
@@ -152,13 +182,21 @@ async function claimNotificationReward(notificationId) {
   }
 
   const { reward_type, reward_amount } = data;
+
+  // Mark pending BEFORE applying so a crash between here and saveState() is recoverable
+  if (!gameState._pendingInboxRewards) gameState._pendingInboxRewards = {};
+  gameState._pendingInboxRewards[notificationId] = { type: reward_type, amount: reward_amount };
+  try { saveState(); } catch(e) {}
+
   if (reward_type === 'diamonds') {
     gameState.diamonds = (gameState.diamonds || 0) + reward_amount;
   } else if (reward_type === 'tickets') {
-    gameState.tickets = Math.min((gameState.tickets || 0) + reward_amount, 10);
+    gameState.tickets = (gameState.tickets || 0) + reward_amount;
   } else if (reward_type === 'spins') {
     gameState.freeSpins = (gameState.freeSpins || 0) + reward_amount;
   }
+  // Clear the pending marker now that the reward is in gameState
+  gameState._pendingInboxRewards[notificationId] = null;
   try { saveState(); }    catch(e) {}
   try { updateMenuStats(); } catch(e) {}
 

@@ -229,6 +229,7 @@ function updateFeatureLocks() {
 
 // ── VIP SYSTEM ──────────────────────────────────────────────────────
 function toggleVipTest() {
+  if (!window.TILE_ROYALE_DEV) return;
   gameState.isVip = !gameState.isVip;
   saveState();
   updateFeatureLocks();
@@ -387,18 +388,43 @@ function rollRingForRarity(rarityId) {
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
-function spinWheel() {
+async function spinWheel() {
   if (wheelSpinning) return;
   if ((gameState.level||1) < 3) { showToast('🔒 Unlocks at level 3!','var(--muted)'); return; }
 
-  const cost = getSpinCost();
+  const cost   = getSpinCost();
   const isFree = cost === 0 || (gameState.freeSpins||0) > 0;
 
   if (!isFree && (gameState.diamonds||0) < cost) {
     showToast(`💎 Not enough diamonds (need ${cost})!`, 'var(--red)'); return;
   }
 
-  // Deduct cost
+  // Determine spin type for server
+  const spinType = isFree
+    ? ((gameState.freeSpins||0) > 0 ? 'freeSpin' : 'free')
+    : 'diamond';
+
+  // Ask server to roll the ring — this prevents client-side manipulation of rarity.
+  // Falls back to local roll when offline so the spinner always works.
+  let serverRing = null, serverRarityId = null, serverGrantId = null;
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const resp = await fetch(`${getActiveServer().http}/ring/spin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, spinType }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const data = resp.ok ? await resp.json() : null;
+      if (data?.ok && data.ringId && data.rarityId) {
+        serverRing     = typeof getRingDef === 'function' ? getRingDef(data.ringId) : null;
+        serverRarityId = data.rarityId;
+        serverGrantId  = data.grantId || null;
+      }
+    } catch(e) { /* offline — fall through to local roll */ }
+  }
+
+  // Now deduct cost (only after server confirmed or we're offline)
   if (!isFree) {
     _auditDiamondSpend('spin', cost);
     gameState.diamonds -= cost;
@@ -410,15 +436,16 @@ function spinWheel() {
   saveState();
   updateGauntletSpinUI();
 
-  _executeSpin();
+  _executeSpin(serverRing, serverRarityId, serverGrantId);
 }
 
-// Core spin animation — uses Wheel 2.png image rotation; reward rarity always matches visual sector
-function _executeSpin() {
+// Core spin animation — uses Wheel 2.png image rotation; reward rarity always matches visual sector.
+// ring/rarityId/grantId come from the server when online; falls back to client roll when null.
+function _executeSpin(serverRing, serverRarityId, serverGrantId) {
   if (wheelSpinning) return;
 
-  const rarityId = rollRingRarity();
-  const ring     = rollRingForRarity(rarityId);
+  const rarityId = serverRarityId || rollRingRarity();
+  const ring     = serverRing     || rollRingForRarity(rarityId);
   const rarDef   = getRarityDef(rarityId);
 
   // Pick a random matching sector from Wheel 2.png for this rarity, add natural jitter
@@ -474,6 +501,11 @@ function _executeSpin() {
       wheelAngle    = finalAngle;
       if (!gameState.ringInventory) gameState.ringInventory = [];
       gameState.ringInventory.push(ring.id);
+      // Track server grant IDs by grantId key (not by index — indices shift on salvage)
+      if (serverGrantId) {
+        if (!gameState.ringGrantMap) gameState.ringGrantMap = {};
+        gameState.ringGrantMap[serverGrantId] = ring.id;
+      }
       saveState();
       showSpinResult(ring, rarDef);
       renderGauntletHand();
@@ -487,6 +519,7 @@ function _executeSpin() {
 }
 
 function devCalibrate50() {
+  if (!window.TILE_ROYALE_DEV) return;
   // Build a list of (rarity, angle) pairs — each sector repeated to reach ~50 total
   const order = [];
   for (const [rar, angles] of Object.entries(WHEEL_SECTOR_DEF)) {

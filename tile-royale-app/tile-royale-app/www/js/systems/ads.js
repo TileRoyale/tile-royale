@@ -73,7 +73,8 @@ async function _showRewardedAd() {
   }
 }
 
-// Browser / dev fallback — 5-second fake countdown so the UI stays testable
+// Dev-only fallback — only active when window.TILE_ROYALE_DEV === true.
+// Never set in production builds. Lets UI be tested without a device.
 function _simulateFallback() {
   return new Promise(resolve => {
     let t = 5;
@@ -92,28 +93,33 @@ function _simulateFallback() {
   });
 }
 
-// Public: real ad on device, simulation in browser
+// Public: real ad on device, dev sim only if TILE_ROYALE_DEV flag is set
 async function _watchRewardedAd() {
-  const native = _isNative();
-  console.log('[AdMob] check —', {
-    native,
-    hasCapacitor: !!window.Capacitor,
-    hasNativePromise: typeof window.Capacitor?.nativePromise,
-    hasPlugin: !!window.Capacitor?.Plugins?.AdMob,
-    hasRegister: typeof window.Capacitor?.registerPlugin,
-  });
-  if (native) return await _showRewardedAd();
-  return await _simulateFallback();
+  if (_isNative()) return await _showRewardedAd();
+  if (window.TILE_ROYALE_DEV === true) return await _simulateFallback();
+  // Non-native without dev flag — ad not available (production web context)
+  return false;
 }
 
 // ─── Reward helpers ───────────────────────────────────────────────────────────
 
-function rollAdReward() {
+// Reward table matches server AD_REWARD_TYPES array order — index is server-determined
+const _AD_REWARD_TABLE = [
+  { type:'tickets', id:'ticket',      icon:'🎟️', name:'1 Ticket',     qty:1 },
+  { type:'item',    id:'crystal',     icon:'🔮', name:'Crystal Ball', qty:1 },
+  { type:'item',    id:'caltrops',    icon:'⚙️', name:'Caltrops',     qty:1 },
+  { type:'item',    id:'shadow_tile', icon:'🌑', name:'Shadow Tile',  qty:1 },
+];
+
+function rollAdReward(serverIndex) {
+  if (serverIndex !== undefined && serverIndex >= 0 && serverIndex < _AD_REWARD_TABLE.length)
+    return _AD_REWARD_TABLE[serverIndex];
+  // Offline fallback — local roll
   const roll = Math.random() * 100;
-  if (roll < 80)  return { type:'tickets',  id:'ticket',      icon:'🎟️', name:'1 Ticket',     qty:1 };
-  if (roll < 90)  return { type:'item',     id:'crystal',     icon:'🔮', name:'Crystal Ball', qty:1 };
-  if (roll < 97)  return { type:'item',     id:'caltrops',    icon:'⚙️', name:'Caltrops',     qty:1 };
-  return               { type:'item',     id:'shadow_tile', icon:'🌑', name:'Shadow Tile',  qty:1 };
+  if (roll < 80) return _AD_REWARD_TABLE[0];
+  if (roll < 90) return _AD_REWARD_TABLE[1];
+  if (roll < 97) return _AD_REWARD_TABLE[2];
+  return _AD_REWARD_TABLE[3];
 }
 
 function canWatchAd() {
@@ -127,24 +133,29 @@ function getAdCooldownText() {
   return `Available in ${m}:${s.toString().padStart(2,'0')}`;
 }
 
-async function _serverAdClaim(rewardType) {
-  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID || typeof getActiveServer !== 'function') return true;
+// Returns { allowed: bool, rewardIndex: number|null }
+// Server now determines reward type; rewardIndex is used to pick from _AD_REWARD_TABLE
+async function _serverAdClaim() {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID || typeof getActiveServer !== 'function')
+    return { allowed: true, rewardIndex: null };
   try {
     const r = await fetch(`${getActiveServer().http}/ads/reward/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId: PLAYER_ID, rewardType }),
+      body: JSON.stringify({ playerId: PLAYER_ID }),
       signal: AbortSignal.timeout(5000),
     });
     const data = r.ok ? await r.json() : null;
-    if (data && !data.ok && !data.offline && data.error === 'cooldown_active') return false;
-    return true;
-  } catch(e) { return true; } // offline — allow
+    if (data && !data.ok && !data.offline && data.error === 'cooldown_active')
+      return { allowed: false, rewardIndex: null };
+    return { allowed: true, rewardIndex: data?.rewardIndex ?? null };
+  } catch(e) { return { allowed: true, rewardIndex: null }; } // offline — allow with local roll
 }
 
-async function giveAdReward(reward) {
-  const allowed = await _serverAdClaim(reward.type === 'tickets' ? 'tickets' : reward.id);
+async function giveAdReward() {
+  const { allowed, rewardIndex } = await _serverAdClaim();
   if (!allowed) { showToast('Ad reward already claimed recently', 'var(--muted)'); return; }
+  const reward = rollAdReward(rewardIndex);
   if (reward.type === 'tickets') {
     gameState.tickets = Math.min(TICKETS_MAX, getTickets() + reward.qty);
     gameState.ticketLastUse = gameState.tickets < TICKETS_MAX ? (gameState.ticketLastUse || Date.now()) : null;
@@ -153,6 +164,7 @@ async function giveAdReward(reward) {
   }
   gameState.lastAdWatch = Date.now();
   saveState(); updateMenuStats(); updateInventoryUI(); updateTicketUI();
+  return reward;
 }
 
 // ─── Public ad entry points ───────────────────────────────────────────────────
@@ -171,6 +183,8 @@ async function watchAdsForTickets(count) {
     showToast(`Available in ${m}:${s.toString().padStart(2,'0')}`, 'var(--muted)');
     return;
   }
+  // Also check global cooldown (shared with random item ads) before showing the ad
+  if (!canWatchAd()) { showToast(getAdCooldownText(), 'var(--muted)'); return; }
 
   adWatchInProgress = true;
 
@@ -179,7 +193,7 @@ async function watchAdsForTickets(count) {
     const rewarded = await _watchRewardedAd();
     adWatchInProgress = false;
     if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
-    const allowed = await _serverAdClaim('tickets');
+    const { allowed } = await _serverAdClaim();
     if (!allowed) { showToast('Ad reward already claimed recently', 'var(--muted)'); return; }
     gameState.tickets = Math.min(TICKETS_MAX, getTickets() + 2);
     gameState[adKey]  = Date.now();
@@ -195,7 +209,7 @@ async function watchAdsForTickets(count) {
       if (!rewarded) {
         adWatchInProgress = false;
         if (earned > 0) {
-          const allowed = await _serverAdClaim('tickets');
+          const { allowed } = await _serverAdClaim();
           if (allowed) {
             gameState.tickets = Math.min(TICKETS_MAX, getTickets() + earned);
             gameState[adKey]  = Date.now();
@@ -210,7 +224,7 @@ async function watchAdsForTickets(count) {
       earned++;
     }
     adWatchInProgress = false;
-    const allowed = await _serverAdClaim('tickets');
+    const { allowed } = await _serverAdClaim();
     if (!allowed) { showToast('Ad reward already claimed recently', 'var(--muted)'); return; }
     gameState.tickets = Math.min(TICKETS_MAX, getTickets() + count);
     gameState[adKey]  = Date.now();
@@ -234,9 +248,8 @@ async function watchAdForRandomItem() {
   const rewarded = await _watchRewardedAd();
   adWatchInProgress = false;
   if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
-  const reward = rollAdReward();
-  giveAdReward(reward);
-  showToast(`🎁 You got: ${reward.icon} ${reward.name}!`, 'var(--gold)');
+  const reward = await giveAdReward();
+  if (reward) showToast(`🎁 You got: ${reward.icon} ${reward.name}!`, 'var(--gold)');
   playSound('achieve');
   updateStoreAdTimer();
 }

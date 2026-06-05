@@ -140,7 +140,7 @@ function renderFeatured(c) {
       <div class="store-banner-content">
         <div class="store-banner-tag">🔥 Limited Time</div>
         <div class="store-banner-title">Champion Bundle</div>
-        <div class="store-banner-desc">Galaxy skin + Void effect + 30k diamonds — 50% off</div>
+        <div class="store-banner-desc">Galaxy skin + Void effect + 4,000 diamonds — 50% off</div>
         <button class="store-banner-btn" style="color:#ff4500;" onclick="switchStoreTab('bundles', document.querySelectorAll('.store-tab')[4])">VIEW BUNDLE →</button>
       </div>
     </div>`;
@@ -219,7 +219,7 @@ function renderFeatured(c) {
 function renderDiamonds(c) {
   c.innerHTML = `
     <div class="store-section-hdr">💎 Diamond Packages</div>
-    <div style="font-size:11px; color:var(--muted); letter-spacing:1px; margin-bottom:12px;">Tap to purchase — works with in-app billing when live</div>`;
+    <div style="font-size:11px; color:var(--muted); letter-spacing:1px; margin-bottom:12px;">Tap to purchase</div>`;
   const grid = document.createElement('div');
   grid.className = 'diamond-grid';
   (DIAMOND_PACKAGES||[]).forEach(pkg => { grid.innerHTML += buildDiamondCard(pkg); });
@@ -228,7 +228,12 @@ function renderDiamonds(c) {
     <div style="font-size:11px; color:var(--muted); text-align:center; margin-top:12px; letter-spacing:1px; line-height:1.6;">
       🔒 Secure payment · Prices include VAT<br>
       💎 Diamonds are added instantly after purchase
-    </div>`;
+    </div>
+    <button onclick="manualRestorePurchases()"
+      style="width:100%;margin-top:16px;padding:10px;background:transparent;border:1px solid var(--border);
+             border-radius:8px;color:var(--muted);font-size:11px;letter-spacing:1px;cursor:pointer;">
+      RESTORE PURCHASES
+    </button>`;
 }
 
 function buildDiamondCard(pkg) {
@@ -464,7 +469,7 @@ async function _verifyAndDeliverPurchase(purchase) {
 
   if (!grant) {
     // Server unreachable: build grant from local catalog so the player still gets their items.
-    // The purchase will be re-verified on the next /purchase/restore call.
+    // Also store in pendingPurchases queue so billing.js retries on next startup.
     const pkg = DIAMOND_PACKAGES.find(p => p.id === productId);
     const bundle = STORE_BUNDLES.find(b => b.id === productId);
     if (pkg) {
@@ -477,6 +482,22 @@ async function _verifyAndDeliverPurchase(purchase) {
       console.error('[Purchase] Unknown productId:', productId);
       return;
     }
+    // Queue for retry on next startup — survives even if Google Play token is already consumed
+    try {
+      const pending = JSON.parse(localStorage.getItem('_pendingPurchases') || '[]');
+      const alreadyQueued = pending.some(p => p.purchaseToken === purchaseToken);
+      if (!alreadyQueued) {
+        pending.push({ productId, purchaseToken, orderId, queuedAt: Date.now() });
+        localStorage.setItem('_pendingPurchases', JSON.stringify(pending));
+      }
+    } catch(e) {}
+  } else {
+    // Server verified successfully — remove from pending queue if it was there
+    try {
+      const pending = JSON.parse(localStorage.getItem('_pendingPurchases') || '[]');
+      const filtered = pending.filter(p => p.purchaseToken !== purchaseToken);
+      if (filtered.length !== pending.length) localStorage.setItem('_pendingPurchases', JSON.stringify(filtered));
+    } catch(e) {}
   }
 
   _applyPurchaseGrant(grant);
@@ -534,13 +555,7 @@ async function buyDiamondPackage(id) {
     return;
   }
 
-  // Web/dev fallback — add diamonds directly for testing
-  const total = pkg.amount + pkg.bonus;
-  gameState.diamonds = (gameState.diamonds || 0) + total;
-  saveState(); updateMenuStats();
-  const bal = document.getElementById('storeBalance');
-  if (bal) bal.textContent = (gameState.diamonds || 0).toLocaleString();
-  showToast(`[DEV] 💎 +${total.toLocaleString()} Diamonds`, 'var(--blue)');
+  showToast('Purchases require the Android app.', 'var(--muted)');
 }
 
 function buyStoreItem(id) {
@@ -577,23 +592,7 @@ async function buyBundle(id) {
     return;
   }
 
-  // Web/dev fallback
-  const deliverBundle = () => {
-    gameState.diamonds = (gameState.diamonds||0) + b.diamondAmt;
-    gameState.totalDiamonds = (gameState.totalDiamonds||0) + b.diamondAmt;
-    if (b.items) Object.entries(b.items).forEach(([k,v]) => addItemToInventory(k,v));
-    if (b.skins) { if (!gameState.ownedSkins) gameState.ownedSkins={}; b.skins.forEach(s => gameState.ownedSkins[s]=true); }
-    if (b.tickets) gameState.tickets = (gameState.tickets||0) + b.tickets;
-    if (b.nameChanges) gameState.renames = Math.max(0, (gameState.renames||3) - b.nameChanges);
-    if (b.whaleBadge) { gameState.whaleBadge = true; }
-    const linkedAvatars = ALL_AVATARS.filter(av => av.unlock === b.id);
-    (linkedAvatars||[]).forEach(av => unlockAvatar(av.id));
-    saveState(); updateMenuStats(); updateInventoryUI();
-    const bal = document.getElementById('storeBalance');
-    if (bal) bal.textContent = (gameState.diamonds||0).toLocaleString();
-    showToast(`✅ ${b.name} unlocked!`, 'var(--gold)');
-  };
-  showStoreBuyDialog(b.name, b.icon, b.price, deliverBundle);
+  showToast('Purchases require the Android app.', 'var(--muted)');
 }
 
 function buyDailyDeal() {

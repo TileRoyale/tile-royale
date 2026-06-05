@@ -8,277 +8,71 @@ let practiceLastTile = -1;
 let practiceTimerInterval = null;
 let practiceSecondsLeft = 30;
 
-function startPractice() {
-  gameState.mode = 'practice';
-  practiceTaps = 0;
-  practiceWrongTaps = 0;
-  practiceTapTimes = [];
-  practiceStartTime = Date.now();
-  practiceSecondsLeft = 30;
 
-  showScreen('gameScreen');
-  document.getElementById('gameModeBadge').textContent = '🎯 PRACTICE';
-  document.getElementById('kothGameBanner').style.display = 'none';
-  document.getElementById('itemHud').style.display = 'none';
-  document.getElementById('watchBar').classList.remove('show');
-
-  // Timer display shows countdown
-  const timerEl = document.getElementById('gameTimer');
-  timerEl.textContent = '30s';
-  timerEl.className = 'game-timer';
-  timerEl.style.fontSize = '22px';
-  timerEl.style.color = '';
-
-  // Tap counter in players area
-  document.getElementById('playersLeftCount').textContent = '0 🎯';
-
-  // Back button
-  let backBtn = document.getElementById('practiceBackBtn');
-  if (!backBtn) {
-    backBtn = document.createElement('button');
-    backBtn.id = 'practiceBackBtn';
-    backBtn.className = 'btn-secondary';
-    backBtn.style.cssText = 'width:auto;padding:6px 12px;font-size:13px;margin-bottom:8px;';
-    backBtn.textContent = '← MENU';
-    backBtn.onclick = () => {
-      clearTimeout(burnTimeout);
-      clearInterval(practiceTimerInterval);
-      timerEl.style.fontSize = '';
-      timerEl.style.color = '';
-      backBtn.remove();
-      showScreen('menuScreen');
-    };
-    document.getElementById('gameScreen').insertBefore(backBtn, document.getElementById('gameScreen').firstChild);
-  }
-
-  // Setup 5x5 grid
-  const grid = document.getElementById('tileGrid');
-  grid.style.gridTemplateColumns = 'repeat(5, 1fr)';
-  grid.innerHTML = '';
-  tileStates = Array(25).fill('idle');
-  for (let i = 0; i < 25; i++) {
-    const t = document.createElement('div');
-    t.className = 'tile'; t.id = `tile-${i}`;
-    t.onclick = () => practiceTapTile(i);
-    grid.appendChild(t);
-  }
-
-  updatePendingCounter(0);
-  applySkins();
-  startCountdown(() => {
-    // Start 30s countdown timer
-    practiceTimerInterval = setInterval(() => {
-      practiceSecondsLeft--;
-      const el = document.getElementById('gameTimer');
-      if (el) {
-        el.textContent = practiceSecondsLeft + 's';
-        if (practiceSecondsLeft <= 10) el.style.color = 'var(--red)';
-        else if (practiceSecondsLeft <= 20) el.style.color = 'var(--fire)';
-      }
-      if (practiceSecondsLeft <= 0) {
-        clearInterval(practiceTimerInterval);
-        clearTimeout(burnTimeout);
-        // Flash all tiles then end
-        for (let i = 0; i < 25; i++) {
-          const te = document.getElementById('tile-'+i);
-          if (te) te.className = 'tile';
-        }
-        setTimeout(() => {
-          const backBtn2 = document.getElementById('practiceBackBtn');
-          if (backBtn2) backBtn2.remove();
-          const timerEl2 = document.getElementById('gameTimer');
-          if (timerEl2) { timerEl2.style.fontSize=''; timerEl2.style.color=''; }
-          endPractice();
-        }, 300);
-      }
-    }, 1000);
-    schedulePracticeTile();
-  });
-}
-
-function schedulePracticeTile() {
-  clearTimeout(burnTimeout);
-  // Reset all tiles immediately — no delay
-  tileStates = tileStates.map(() => 'idle');
-  for (let i = 0; i < 25; i++) {
-    const el = document.getElementById('tile-' + i);
-    if (el) { el.className = 'tile'; el.innerHTML = ''; }
-  }
-  // Pick a new tile — ensure different from last
-  let idx;
-  do { idx = Math.floor(Math.random() * 25); } while (idx === practiceLastTile && 25 > 1);
-  practiceLastTile = idx;
-
-  tileStates[idx] = 'burning';
-  const el = document.getElementById('tile-' + idx);
-  if (el) el.className = 'tile burning';
-  practiceTileIgniteTime = Date.now();
-  juiceUpdateHeatNeighbors();
-
-  // Auto-miss after 2.5s — speed increases as time runs out
-  const autoMissTime = practiceSecondsLeft > 20 ? 2500 : practiceSecondsLeft > 10 ? 2000 : 1600;
-  burnTimeout = setTimeout(() => {
-    if (tileStates[idx] === 'burning') {
-      tileStates[idx] = 'idle';
-      if (el) el.className = 'tile';
-      practiceWrongTaps++;
-      if (practiceSecondsLeft > 0) schedulePracticeTile();
-    }
-  }, autoMissTime);
-}
-
-function practiceTapTile(idx) {
-  if (practiceSecondsLeft <= 0) return;
-  if (gridLocked) return;
-  if (tileStates[idx] !== 'burning') {
-    practiceWrongTaps++;
-    playSound('wrong'); vibrate(40);
-    document.querySelectorAll('.tile').forEach(t => { t.style.borderColor = 'var(--red)'; t.style.opacity = '0.5'; });
-    showLockOverlay(700);
-    setTimeout(() => {
-      document.querySelectorAll('.tile').forEach(t => { t.style.borderColor = ''; t.style.opacity = ''; });
-    }, 700);
-    return;
-  }
-  const rt = Date.now() - practiceTileIgniteTime;
-  if (!recordReactionTime(rt)) return;
-  practiceTapTimes.push(rt);
-  practiceTaps++;
-  playSound('tap'); vibrate(20);
-  clearTimeout(burnTimeout);
-
-  // Update tap counter
-  const plEl = document.getElementById('playersLeftCount');
-  if (plEl) plEl.textContent = practiceTaps + ' 🎯';
-
-  tileStates[idx] = 'tapped';
-  const el = document.getElementById(`tile-${idx}`);
-  if (el) {
-    juiceTileTap(el);
-    setTimeout(() => juicePopEffect(el), 40);
-    el.className = 'tile tapped'; el.innerHTML = '✓';
-    const r = document.createElement('div'); r.className = getTapEffectClass(); el.appendChild(r);
-    setTimeout(() => r.remove(), 400);
-  }
-
-  // No tile limit — keep going until timer runs out
-  setTimeout(() => {
-    if (practiceSecondsLeft <= 0) return;
-    tileStates[idx]='idle';
-    const e=document.getElementById(`tile-${idx}`);
-    if(e){e.className='tile';e.innerHTML='';}
-    schedulePracticeTile();
-  }, 180);
-}
-
-function endPractice() {
-  clearTimeout(burnTimeout);
-  clearInterval(practiceTimerInterval);
-  const totalAttempts = practiceTaps + practiceWrongTaps;
-  const accuracy = totalAttempts > 0 ? Math.round(practiceTaps / totalAttempts * 100) : 100;
-  const avgReaction = practiceTapTimes.length > 0
-    ? Math.round(practiceTapTimes.reduce((a,b)=>a+b,0)/practiceTapTimes.length)
-    : 0;
-  const bestReaction = practiceTapTimes.length > 0 ? Math.min(...practiceTapTimes) : 0;
-
-  // Grade based on taps in 30s + accuracy
-  let grade, gradeLabel, tip;
-  if      (practiceTaps >= 28 && accuracy >= 95) { grade='S'; gradeLabel='PERFECT';    tip='Elite tapper — incredible speed and precision!' }
-  else if (practiceTaps >= 22 && accuracy >= 90) { grade='A'; gradeLabel='EXCELLENT';  tip='Very sharp reactions! Keep it up.' }
-  else if (practiceTaps >= 16 && accuracy >= 80) { grade='B'; gradeLabel='GOOD';       tip='Good speed — work on accuracy.' }
-  else if (practiceTaps >= 10 && accuracy >= 70) { grade='C'; gradeLabel='OK';         tip='Decent — try to be faster!' }
-  else                                            { grade='D'; gradeLabel='KEEP TRYING';tip='Practice makes perfect — try again!' }
-
-  const gradeColors = {S:'#ffd700',A:'#00ff88',B:'#00e5ff',C:'#ff8c00',D:'#ff3355'};
-
-  // Personal bests
-  if (!gameState.achStats) gameState.achStats = {};
-  const oldBestTaps = gameState.achStats.bestPracticeTaps30s || 0;
-  const newBestTaps = practiceTaps > oldBestTaps;
-  if (newBestTaps) gameState.achStats.bestPracticeTaps30s = practiceTaps;
-
-  const oldBestReaction = gameState.achStats.bestPracticeReaction || 9999;
-  const newBestReaction = bestReaction > 0 && bestReaction < oldBestReaction;
-  if (newBestReaction) gameState.achStats.bestPracticeReaction = bestReaction;
-
-  gameState.achStats.bestPracticeTaps = Math.max(practiceTaps, gameState.achStats.bestPracticeTaps || 0);
-  const scoreVal = Math.round(practiceTaps * (accuracy / 100) * 10);
-  gameState.achStats.practiceScore = Math.max(scoreVal, gameState.achStats.practiceScore || 0);
-  saveState();
-
-  document.getElementById('practiceGrade').textContent = grade;
-  document.getElementById('practiceGrade').style.color = gradeColors[grade];
-  document.getElementById('practiceGradeLabel').textContent = gradeLabel;
-  document.getElementById('practiceTip').textContent = tip;
-  document.getElementById('prTiles').textContent = practiceTaps;
-  document.getElementById('prAccuracy').textContent = accuracy + '%';
-  document.getElementById('prAvgSpeed').textContent = avgReaction + 'ms';
-  document.getElementById('prDuration').textContent = '30s';
-
-  const pbRow = document.getElementById('prPbRow');
-  if (pbRow) {
-    if (newBestTaps || newBestReaction) {
-      pbRow.style.display = 'block';
-      let pbText = '';
-      if (newBestTaps) pbText += `${practiceTaps} taps — new record!`;
-      if (newBestReaction) pbText += (pbText?' · ':'') + `${bestReaction}ms reaction — new best!`;
-      document.getElementById('prPbVal').textContent = pbText;
-    } else {
-      pbRow.style.display = 'none';
-    }
-  }
-
-  // Update practice leaderboard rows
-  renderPracticeLeaderboard();
-
-  showScreen('practiceResultScreen');
-  playSound(grade === 'S' || grade === 'A' ? 'victory' : 'tap');
-}
-
-function renderPracticeLeaderboard() {
-  // Tap count leaderboard + reaction leaderboard
-  const tapLbEl  = document.getElementById('practiceLbTaps');
+async function renderPracticeLeaderboard() {
+  const tapLbEl   = document.getElementById('practiceLbTaps');
   const reactLbEl = document.getElementById('practiceLbReaction');
   if (!tapLbEl && !reactLbEl) return;
 
-  const stats = gameState.achStats || {};
+  const stats      = gameState.achStats || {};
   const playerName = gameState.playerName || 'You';
+  const myTaps     = stats.bestPracticeTaps30s || practiceTaps;
+  const myReact    = stats.bestPracticeReaction || (practiceTapTimes.length > 0 ? Math.min(...practiceTapTimes) : 0);
 
-  // Bot mock data for context
-  const botTapScores = [
-    {name:'TapMaster_99', taps:32},{name:'QuickFingers', taps:29},{name:'SpeedDemon', taps:27},
-    {name:'TapBot_X', taps:24},{name:'NitroNails', taps:21},
-  ];
-  const botReactScores = [
-    {name:'TapMaster_99', ms:188},{name:'QuickFingers', ms:210},{name:'SpeedDemon', ms:235},
-    {name:'TapBot_X', ms:258},{name:'NitroNails', ms:274},
-  ];
+  const loading = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">Loading...</div>';
+  if (tapLbEl)   tapLbEl.innerHTML   = loading;
+  if (reactLbEl) reactLbEl.innerHTML = loading;
 
-  const myTaps = stats.bestPracticeTaps30s || practiceTaps;
-  const myReact = stats.bestPracticeReaction || (practiceTapTimes.length>0?Math.min(...practiceTapTimes):0);
-
-  function buildLb(entries, myEntry, suffix, betterIsFn) {
-    const all = [...entries, myEntry].sort((a,b)=>betterIsFn(a,b)?-1:1);
-    return all.map((e,i) => {
-      const isMe = e.isMe;
-      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':''+(i+1)+'.';
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);${isMe?'background:rgba(0,229,255,0.06);border-radius:6px;padding:6px 8px;':''}">
+  function buildLb(serverRows, myEntry, suffix, betterIsFn, nameKey, valKey) {
+    const entries = (serverRows || []).map(r => ({ name: r[nameKey] || 'Player', val: Number(r[valKey]) || 0 }));
+    const all = [...entries, myEntry].sort((a, b) => betterIsFn(a, b) ? -1 : 1);
+    // Deduplicate — server may already include the player's own personal best
+    const seen = new Set();
+    const deduped = [];
+    for (const e of all) {
+      const key = e.isMe ? '__me__' : e.name;
+      if (!seen.has(key)) { seen.add(key); deduped.push(e); }
+    }
+    return deduped.slice(0, 6).map((e, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);${e.isMe?'background:rgba(0,229,255,0.06);border-radius:6px;padding:6px 8px;':''}">
         <span style="font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--muted);min-width:28px;">${medal}</span>
-        <span style="flex:1;font-size:13px;${isMe?'color:var(--diamond);font-weight:bold;':''}">${e.name}</span>
-        <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${isMe?'var(--diamond)':'var(--text)'};">${e.val}${suffix}</span>
+        <span style="flex:1;font-size:13px;${e.isMe?'color:var(--diamond);font-weight:bold;':''}">${e.name}</span>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${e.isMe?'var(--diamond)':'var(--text)'};">${e.val}${suffix}</span>
       </div>`;
     }).join('');
   }
 
-  if (tapLbEl) {
-    const myEntry = {name:playerName, val:myTaps, isMe:true};
-    const entries = botTapScores.map(b=>({...b,val:b.taps}));
-    tapLbEl.innerHTML = buildLb(entries, myEntry, ' taps', (a,b)=>a.val>b.val);
-  }
-  if (reactLbEl && myReact > 0) {
-    const myEntry = {name:playerName, val:myReact, isMe:true};
-    const entries = botReactScores.map(b=>({...b,val:b.ms}));
-    reactLbEl.innerHTML = buildLb(entries, myEntry, 'ms', (a,b)=>a.val<b.val);
+  try {
+    const srv = typeof getActiveServer === 'function' ? getActiveServer() : null;
+    const url = srv ? `${srv.http}/practice/leaderboard` : null;
+    if (!url) throw new Error('no_server');
+
+    const resp = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const data = await resp.json();
+
+    if (tapLbEl) {
+      const myEntry = { name: playerName, val: myTaps, isMe: true };
+      tapLbEl.innerHTML = buildLb(data.taps, myEntry, ' taps', (a, b) => a.val > b.val, 'player_name', 'best_taps_30s');
+    }
+    if (reactLbEl && myReact > 0) {
+      const myEntry = { name: playerName, val: myReact, isMe: true };
+      reactLbEl.innerHTML = buildLb(data.reaction, myEntry, 'ms', (a, b) => a.val < b.val, 'player_name', 'best_reaction_ms');
+    } else if (reactLbEl) {
+      reactLbEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">Play to set a reaction time</div>';
+    }
+  } catch (_e) {
+    // Server unreachable — show only the player's own score
+    if (tapLbEl && myTaps > 0) {
+      tapLbEl.innerHTML = buildLb([], { name: playerName, val: myTaps, isMe: true }, ' taps', (a, b) => a.val > b.val, 'player_name', 'best_taps_30s');
+    } else if (tapLbEl) {
+      tapLbEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">No scores yet</div>';
+    }
+    if (reactLbEl && myReact > 0) {
+      reactLbEl.innerHTML = buildLb([], { name: playerName, val: myReact, isMe: true }, 'ms', (a, b) => a.val < b.val, 'player_name', 'best_reaction_ms');
+    } else if (reactLbEl) {
+      reactLbEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">No scores yet</div>';
+    }
   }
 }
 
@@ -477,5 +271,27 @@ function endPractice() {
 
   showScreen('practiceResultScreen');
   playSound(grade === 'S' || grade === 'A' ? 'victory' : 'tap');
+
+  // Submit best scores to server leaderboard (fire-and-forget)
+  _submitPracticeScore(practiceTaps, avgReaction);
+}
+
+function _submitPracticeScore(taps, reactionMs) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    fetch(`${getActiveServer().http}/practice/score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerId:    PLAYER_ID,
+        playerName:  gameState.playerName || 'Player',
+        avatar:      (typeof getActiveAvatar === 'function' ? getActiveAvatar().icon : null) || '🔥',
+        taps30s:     taps,
+        reactionMs:  reactionMs,
+      }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => {});
+  } catch(e) {}
 }
 

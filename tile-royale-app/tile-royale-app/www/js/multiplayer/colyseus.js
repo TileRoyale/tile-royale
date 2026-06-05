@@ -484,9 +484,10 @@ function startGameFromServer() {
 const REACTION_FLOOR_MS = 80;
 
 function setupGameGrid() {
-  const GRID_SIZE = 25; // 5x5 grid
+  const GRID_SIZE = gameState.gridSize || 25;
+  const cols      = Math.round(Math.sqrt(GRID_SIZE));
   const grid = document.getElementById('tileGrid');
-  grid.style.gridTemplateColumns = 'repeat(5, 1fr)';
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   grid.innerHTML = '';
   tileStates = Array(GRID_SIZE).fill('idle');
   for (let i = 0; i < GRID_SIZE; i++) {
@@ -499,7 +500,7 @@ function setupGameGrid() {
 
 function clearAllTiles() {
   tileStates = tileStates.map(s => s !== 'idle' ? 'idle' : s);
-  for (let i = 0; i < GRID_SIZE; i++) {
+  for (let i = 0; i < tileStates.length; i++) {
     const el = document.getElementById('tile-' + i);
     if (el) { el.className = 'tile'; el.innerHTML = ''; }
   }

@@ -430,6 +430,8 @@ function salvageRing(rid) {
     // Award diamonds
     gameState.diamonds = (gameState.diamonds || 0) + DIAMONDS;
     saveState();
+    // Raise server trusted-diamond ceiling so cloud-save integrity check doesn't clamp this
+    _addTrustedDiamondsServer(DIAMONDS);
 
     // Refresh UIs
     try { renderRingInventory(); }       catch(e) {}
@@ -489,6 +491,7 @@ function checkRingAchievements() {
     if (cur >= ach.goal) {
       ra[ach.id] = true;
       gameState.diamonds = (gameState.diamonds||0) + ach.reward;
+      _addTrustedDiamondsServer(ach.reward, 'achievement');
       showToast(`🏅 ${ach.label} — +${ach.reward} 💎!`, 'var(--gold)');
       playSound('achieve');
       earned = true;
@@ -643,31 +646,54 @@ function _tradeChecksum(code, ringId) {
   return Math.abs(h).toString(36).toUpperCase().slice(0, 4);
 }
 
-function createTradeCode(ringId) {
+async function createTradeCode(ringId) {
   if ((gameState.level||1) < 10) { showToast('🔒 Unlocks at level 10!', 'var(--muted)'); return; }
   if (!gameState.ringInventory) gameState.ringInventory = [];
-  
-  // Verify ring is actually in inventory and not equipped
+
   const invIdx = gameState.ringInventory.indexOf(ringId);
   if (invIdx === -1) { showToast('❌ Ring not in inventory!', 'var(--red)'); return; }
   const equippedSlot = Object.values(gameState.gauntlet||{}).indexOf(ringId);
   if (equippedSlot !== -1) { showToast('❌ Unequip ring from gauntlet first!', 'var(--red)'); return; }
-  
-  const base = Math.random().toString(36).substr(2,6).toUpperCase();
-  const chk  = _tradeChecksum('TR-RING-' + base, ringId);
-  const code  = 'TR-RING-' + base + '-' + chk;
+
+  // Find server grantId for this ring if available
+  const grantId = Object.entries(gameState.ringGrantMap || {})
+    .find(([, rid]) => rid === ringId)?.[0] || null;
+
+  let code = null;
+
+  // Try server-backed trade when grantId exists
+  if (grantId && typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/ring/trade/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, grantId, ringId }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data?.ok && data.tradeCode) {
+        code = data.tradeCode;
+        // Remove grantId from map — ring is now in trade escrow on server
+        if (gameState.ringGrantMap) delete gameState.ringGrantMap[grantId];
+      }
+    } catch(e) { /* offline — fall through to local code */ }
+  }
+
+  // Fallback to local checksum-based code (works same-device or offline)
+  if (!code) {
+    const base = Math.random().toString(36).substr(2,6).toUpperCase();
+    const chk  = _tradeChecksum('TR-RING-' + base, ringId);
+    code = 'TR-RING-' + base + '-' + chk;
+  }
+
   if (!gameState.activeTrades) gameState.activeTrades = {};
-  
-  // REMOVE ring from inventory immediately (held in escrow)
   gameState.ringInventory.splice(invIdx, 1);
-  gameState.activeTrades[code] = { ringId, ts: Date.now(), owner: gameState.playerName||'Player' };
+  gameState.activeTrades[code] = { ringId, ts: Date.now(), owner: gameState.playerName||'Player', grantId: grantId || null };
   saveState();
   renderRingInventory();
   renderTradeScreen();
   copyToClipboard(code);
-  // Show prominent popup with the code
   showToast(`🔄 Code: ${code} — copied to clipboard! Share with friend.`, 'var(--diamond)');
-  // Also open trading screen so user can see the active code
   setTimeout(() => {
     if (document.getElementById('gauntletScreen')?.classList.contains('active')) {
       openTrading();
@@ -677,38 +703,69 @@ function createTradeCode(ringId) {
 
 let _isClaiming = false;
 
-function acceptTrade() {
+async function acceptTrade() {
   if (_isClaiming) { showToast('⏳ Processing...', 'var(--muted)'); return; }
   const code = (document.getElementById('tradeCodeInput').value||'').trim().toUpperCase();
   const msg  = document.getElementById('tradeMsg');
   if (!code) { msg.textContent='Enter a code'; msg.className='redeem-msg error'; return; }
 
-  const trades = gameState.activeTrades || {};
-  const trade  = trades[code];
-  if (!trade) { msg.textContent='❌ Code not found'; msg.className='redeem-msg error'; return; }
-
-  // Expired?
-  if (Date.now()-trade.ts > 4*3600*1000) {
-    msg.textContent='❌ Code expired';
-    msg.className='redeem-msg error';
-    // Return ring to inventory on expiry
-    if (trade.ringId) {
-      if (!gameState.ringInventory) gameState.ringInventory = [];
-      gameState.ringInventory.push(trade.ringId);
-    }
-    delete trades[code]; saveState(); renderTradeScreen(); return;
-  }
-
-  const ring = getRingDef(trade.ringId);
-  if (!ring) { msg.textContent='❌ Ring not found'; msg.className='redeem-msg error'; return; }
-
-  // Anti-dupe lock
   _isClaiming = true;
   const claimBtn = document.querySelector('.redeem-btn');
   if (claimBtn) claimBtn.disabled = true;
 
-  // Ring was already removed from sender's inventory at code creation (escrow)
-  // Just add to claimer's inventory
+  // Try server-backed trade first (for codes generated with server grantId)
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/ring/trade/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claimerPlayerId: PLAYER_ID, tradeCode: code }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data?.ok && data.ringId) {
+        if (!gameState.ringInventory) gameState.ringInventory = [];
+        gameState.ringInventory.push(data.ringId);
+        if (data.grantId) {
+          if (!gameState.ringGrantMap) gameState.ringGrantMap = {};
+          gameState.ringGrantMap[data.grantId] = data.ringId;
+        }
+        gameState.tradesDone = (gameState.tradesDone||0)+1;
+        const ring = getRingDef(data.ringId);
+        saveState();
+        msg.textContent = `✅ ${ring?.name || data.ringId} added to your inventory!`;
+        msg.className = 'redeem-msg success';
+        document.getElementById('tradeCodeInput').value = '';
+        renderRingInventory(); renderTradeScreen(); checkRingAchievements(); playSound('achieve');
+        setTimeout(() => { _isClaiming = false; if (claimBtn) claimBtn.disabled = false; }, 1000);
+        return;
+      }
+      if (data && !data.ok && data.error && data.error !== 'db_unavailable') {
+        const errMap = { code_not_found:'❌ Code not found', already_claimed:'❌ Code already used',
+                         code_expired:'❌ Code expired', cannot_trade_with_self:'❌ Cannot trade with yourself' };
+        msg.textContent = errMap[data.error] || '❌ Trade failed';
+        msg.className = 'redeem-msg error';
+        _isClaiming = false; if (claimBtn) claimBtn.disabled = false;
+        return;
+      }
+    } catch(e) { /* offline or non-server code — fall through to local */ }
+  }
+
+  // Local fallback for codes generated without a server grant (offline / legacy)
+  const trades = gameState.activeTrades || {};
+  const trade  = trades[code];
+  if (!trade) { msg.textContent='❌ Code not found'; msg.className='redeem-msg error'; _isClaiming=false; if(claimBtn)claimBtn.disabled=false; return; }
+
+  if (Date.now()-trade.ts > 4*3600*1000) {
+    msg.textContent='❌ Code expired'; msg.className='redeem-msg error';
+    if (trade.ringId) { if(!gameState.ringInventory)gameState.ringInventory=[]; gameState.ringInventory.push(trade.ringId); }
+    delete trades[code]; saveState(); renderTradeScreen();
+    _isClaiming=false; if(claimBtn)claimBtn.disabled=false; return;
+  }
+
+  const ring = getRingDef(trade.ringId);
+  if (!ring) { msg.textContent='❌ Ring not found'; msg.className='redeem-msg error'; _isClaiming=false; if(claimBtn)claimBtn.disabled=false; return; }
+
   if (!gameState.ringInventory) gameState.ringInventory = [];
   gameState.ringInventory.push(trade.ringId);
   gameState.tradesDone = (gameState.tradesDone||0)+1;
@@ -718,15 +775,9 @@ function acceptTrade() {
   msg.textContent = `✅ ${ring.name} added to your inventory!`;
   msg.className = 'redeem-msg success';
   document.getElementById('tradeCodeInput').value = '';
-  renderRingInventory();
-  renderTradeScreen();
-  checkRingAchievements();
-  playSound('achieve');
+  renderRingInventory(); renderTradeScreen(); checkRingAchievements(); playSound('achieve');
 
-  setTimeout(() => {
-    _isClaiming = false;
-    if (claimBtn) claimBtn.disabled = false;
-  }, 1000);
+  setTimeout(() => { _isClaiming = false; if (claimBtn) claimBtn.disabled = false; }, 1000);
 }
 
 function renderTradeScreen() {
@@ -814,22 +865,23 @@ function getAdSpinsUsedToday() {
   return gameState.adSpinsUsed || 0;
 }
 
-function claimWhaleFreeSpin() {
+async function claimWhaleFreeSpin() {
   const adUsed = getAdSpinsUsedToday();
   if (adUsed >= AD_SPINS_MAX) {
     showToast('🐋 No more free spins today (3/3 used)', 'var(--muted)');
     return;
   }
   if (wheelSpinning) return;
+
+  const { serverRing, serverRarityId, serverGrantId } = await _fetchServerSpin('whaleFreeSpin');
+
   gameState.adSpinsUsed  = (gameState.adSpinsUsed || 0) + 1;
   gameState.dailyAdSpins = gameState.adSpinsUsed;
-  // spinsToday NOT incremented here — _executeSpin() does not touch it,
-  // and spinWheel() would double-count. Increment once manually:
-  gameState.spinsToday = (gameState.spinsToday || 0) + 1;
+  gameState.spinsToday   = (gameState.spinsToday || 0) + 1;
   saveState();
   showToast('🐋 Whale perk — free spin!', 'var(--gold)');
   updateGauntletSpinUI();
-  _executeSpin(); // bypass cost-check entirely — whale earns this for free
+  _executeSpin(serverRing, serverRarityId, serverGrantId);
 }
 
 async function watchAdForSpin() {
@@ -843,13 +895,37 @@ async function watchAdForSpin() {
   const rewarded = await _watchRewardedAd();
   document.getElementById('adSpinBtn').disabled = false;
   if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
-  gameState.adSpinsUsed = (gameState.adSpinsUsed||0) + 1;
+
+  const { serverRing, serverRarityId, serverGrantId } = await _fetchServerSpin('ad');
+
+  gameState.adSpinsUsed  = (gameState.adSpinsUsed || 0) + 1;
   gameState.dailyAdSpins = gameState.adSpinsUsed;
-  gameState.spinsToday  = (gameState.spinsToday||0) + 1;
+  gameState.spinsToday   = (gameState.spinsToday || 0) + 1;
   saveState();
   showToast('📺 Ad watched — spinning! 🎡', 'var(--gold)');
   updateGauntletSpinUI();
-  _executeSpin();
+  _executeSpin(serverRing, serverRarityId, serverGrantId);
+}
+
+async function _fetchServerSpin(spinType) {
+  let serverRing = null, serverRarityId = null, serverGrantId = null;
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const resp = await fetch(`${getActiveServer().http}/ring/spin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, spinType }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const data = resp.ok ? await resp.json() : null;
+      if (data?.ok && data.ringId && data.rarityId) {
+        serverRing     = typeof getRingDef === 'function' ? getRingDef(data.ringId) : null;
+        serverRarityId = data.rarityId;
+        serverGrantId  = data.grantId || null;
+      }
+    } catch(e) { /* offline — client-side roll fallback */ }
+  }
+  return { serverRing, serverRarityId, serverGrantId };
 }
 
 let _freeSpinCdInterval = null;
@@ -1032,5 +1108,19 @@ function startLobbyCountdown() {
     document.getElementById('lobbyTimer').textContent = count;
     if (count <= 0) { clearInterval(lobbyInterval); lobbyInterval = null; startGame(); }
   }, 1000);
+}
+
+function _addTrustedDiamondsServer(amount, rewardType) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    if (!amount || amount <= 0) return;
+    fetch(`${getActiveServer().http}/ring/reward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, amount, rewardType: rewardType || 'salvage' }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => {});
+  } catch(e) {}
 }
 

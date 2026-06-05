@@ -4,7 +4,7 @@ const TICKET_REFILL_MS = 60 * 60 * 1000; // 1 hour
 let ticketRefillInterval = null;
 
 function getTickets() {
-  return gameState.tickets !== undefined ? gameState.tickets : _origGetTicketsMax();
+  return gameState.tickets !== undefined ? gameState.tickets : TICKETS_MAX;
 }
 
 function useTicket() {
@@ -14,7 +14,21 @@ function useTicket() {
   saveState();
   updateTicketUI();
   try { trackMissionEvent('ticket_used', {}); } catch(e) {}
+  _recordTicketSpendServer(gameState.tickets);
   return true;
+}
+
+function _recordTicketSpendServer(balance) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    fetch(`${getActiveServer().http}/tickets/spend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, balance: balance || 0 }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {});
+  } catch(e) {}
 }
 
 function checkTicketRefill() {

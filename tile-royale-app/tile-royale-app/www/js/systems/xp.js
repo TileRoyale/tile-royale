@@ -107,41 +107,49 @@ const ACH_REWARDS = {
   whale:   { diamonds: 500,  items: 5, exclusiveSkin: true, whaleBadge: true },
 };
 
+// Deterministic hash so the same achievement always yields the same items.
+// Prevents save-scumming: reloading before claim gives the same result.
+function _achHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+  return Math.abs(h);
+}
+
 function giveAchievementReward(ach) {
   const reward = ACH_REWARDS[ach.tier];
   if (!reward) return null;
 
-  // Diamonds
-  gameState.diamonds += reward.diamonds;
-
-  // Random items
   const itemKeys = Object.keys(ITEM_TYPES);
   const itemsGiven = [];
+  // Deterministic item selection keyed on achievementId + slot index.
+  // Same achievement always grants the same item regardless of when it is claimed.
   for (let i = 0; i < reward.items; i++) {
-    const itemId = itemKeys[Math.floor(Math.random() * itemKeys.length)];
-    addItemToInventory(itemId, 1);
-    itemsGiven.push(ITEM_TYPES[itemId]);
+    const itemId = itemKeys[_achHash(ach.id + '_item' + i) % itemKeys.length];
+    itemsGiven.push({ id: itemId, def: ITEM_TYPES[itemId] });
   }
 
-  // Exclusive skin for diamond tier
+  // Deterministic exclusive skin selection
   let exclusiveSkin = null;
   if (reward.exclusiveSkin) {
-    // Pick a random exclusive skin the player doesn't own yet
-    const unowned = DIAMOND_EXCLUSIVE_SKINS.filter(s => {
-      return !(gameState.ownedSkins && gameState.ownedSkins[s.id]);
-    });
+    const unowned = DIAMOND_EXCLUSIVE_SKINS.filter(s => !(gameState.ownedSkins && gameState.ownedSkins[s.id]));
     if (unowned.length > 0) {
-      exclusiveSkin = unowned[Math.floor(Math.random() * unowned.length)];
-      if (!gameState.ownedSkins) gameState.ownedSkins = {};
-      gameState.ownedSkins[exclusiveSkin.id] = true;
+      exclusiveSkin = unowned[_achHash(ach.id + '_skin') % unowned.length];
     }
+  }
+
+  // Apply everything at once then save once
+  gameState.diamonds += reward.diamonds;
+  itemsGiven.forEach(({ id }) => addItemToInventory(id, 1));
+  if (exclusiveSkin) {
+    if (!gameState.ownedSkins) gameState.ownedSkins = {};
+    gameState.ownedSkins[exclusiveSkin.id] = true;
   }
 
   saveState();
   updateMenuStats();
   updateInventoryUI();
 
-  return { diamonds: reward.diamonds, items: itemsGiven, exclusiveSkin };
+  return { diamonds: reward.diamonds, items: itemsGiven.map(x => x.def), exclusiveSkin };
 }
 
 async function unlockAchievement(id) {
