@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -67,12 +67,22 @@ async function sendPushToPlayer(playerId: string, title: string, body: string, d
   }
 }
 
+// ─── IAP Key Check ────────────────────────────────────────────────────────────
+// GOOGLE_PLAY_KEY_JSON must be set in production. Without it, verifyWithGooglePlay()
+// returns false and ALL new purchases are rejected with google_play_rejected.
+// Restore of existing tokens (already in purchase_receipts) still works.
+if (!process.env.GOOGLE_PLAY_KEY_JSON) {
+  console.error('[IAP] ❌ CRITICAL: GOOGLE_PLAY_KEY_JSON is not set.');
+  console.error('[IAP]    All new purchase verification will be rejected until this is configured.');
+  console.error('[IAP]    Set GOOGLE_PLAY_KEY_JSON in Railway environment variables before going live.');
+}
+
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
 const app    = express();
 
 // Bump this when releasing a client version that is required (breaks old clients)
-const MIN_CLIENT_VERSION = "v0.4.5";
+const MIN_CLIENT_VERSION = "v0.7.4";
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
@@ -752,6 +762,28 @@ app.delete("/admin/delete-player/:playerId", requireAdmin, async (req, res) => {
   res.json({ ok: true, playerId });
 });
 
+// POST /admin/player/reset-whale — revoke whale status from a player's save blob
+// Used when a whale badge was granted via refund, fraud, or fallback exploit.
+app.post("/admin/player/reset-whale", requireAdmin, async (req, res) => {
+  const { playerId } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  try {
+    await query(
+      `UPDATE player_saves
+       SET save_data = jsonb_set(save_data, '{whaleBadge}', 'false'::jsonb)
+       WHERE player_id = $1 AND save_data ? 'whaleBadge'`,
+      [playerId]
+    );
+    console.log(`[Admin] Whale badge revoked for ${playerId}`);
+    res.json({ ok: true, playerId });
+  } catch (e: any) {
+    console.error('[Admin] reset-whale error:', e?.message);
+    res.status(500).json({ ok: false, error: 'db_error' });
+  }
+});
+
 // POST /admin/notification — send a notification to a player
 // Body: { playerId, title, body, type?, reward_type?, reward_amount? }
 app.post("/admin/notification", requireAdmin, async (req, res) => {
@@ -769,10 +801,27 @@ app.post("/admin/notification", requireAdmin, async (req, res) => {
   res.status(201).json({ ok: true, notification: notif });
 });
 
+// POST /report/suspicious  { playerId, reason }
+// Client-submitted anti-cheat flag. Logged for review; does not auto-ban.
+app.post("/report/suspicious", async (req, res) => {
+  const { playerId, reason } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+  const safeReason = String(reason || 'unknown').substring(0, 120);
+  console.warn(`[AntiCheat] ⚠️ Suspicious player reported: ${playerId} — ${safeReason}`);
+  if (getDbStatus().available) {
+    await query(
+      `INSERT INTO suspicious_reports (player_id, reason) VALUES ($1, $2)`,
+      [playerId, safeReason]
+    ).catch(() => {}); // table created lazily below
+  }
+  res.json({ ok: true });
+});
+
 // ─── End-to-end validation endpoint ─────────────────────────────────────────
 // Inserts synthetic data, runs all queries, reports results, then cleans up.
-// Safe to call repeatedly.
-app.get("/validate", async (_req, res) => {
+// Safe to call repeatedly. Requires X-Admin-Key header to prevent public access.
+app.get("/validate", requireAdmin, async (_req, res) => {
   const TEST_ID   = "00000000-0000-4000-a000-000000000001";
   const TEST_NAME = "_validate_player_";
   const results: Record<string, any> = {};
@@ -860,7 +909,6 @@ const PROMO_CODES: Record<string, {
 }> = {
   'WELCOME2025':  { diamonds: 500,  items: { crystal: 2, caltrops: 2 },        desc: 'Welcome gift!',                       maxUses: 999999 },
   'TILEROYALE':   { diamonds: 1000, items: { crystal: 3 },                      desc: 'Official launch bonus!',              maxUses: 999999 },
-  'SUMMER2025':   { diamonds: 750,  items: { caltrops: 3 },                     desc: 'Summer campaign reward',              maxUses: 999999, expires: '2025-09-01' },
   'WILDMODE':     { diamonds: 300,  items: { shadow_tile: 3 },                  desc: 'Wild mode launch reward',             maxUses: 999999 },
   'KOTHWEEK1':    { diamonds: 500,  items: { crystal: 1, caltrops: 1 },         desc: 'King of the Hill launch!',            maxUses: 999999 },
   'WHALE4EVER':   { diamonds: 2000, items: { shadow_tile: 5 },                  desc: 'Whale appreciation gift 🐋',          maxUses: 999999 },
@@ -886,14 +934,14 @@ app.post("/promo/redeem", async (req, res) => {
     return res.json({ ok: false, error: 'invalid_code' });
   if (promo.expires && new Date() > new Date(promo.expires))
     return res.json({ ok: false, error: 'expired' });
-  // Dev codes skip redemption recording — reusable indefinitely for testing
-  if (!promo.dev) {
-    if (!getDbStatus().available)
-      return res.json({ ok: false, error: 'db_unavailable' });
-    const result = await checkAndRecordPromoRedemption(playerId, code);
-    if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
-    if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
-  }
+  // Dev codes must never appear in production — this path is a safety net only
+  if (promo.dev) return res.json({ ok: false, error: 'invalid_code' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+  const result = await checkAndRecordPromoRedemption(playerId, code, promo.maxUses);
+  if (result === 'already_redeemed')  return res.json({ ok: false, error: 'already_redeemed' });
+  if (result === 'max_uses_reached')  return res.json({ ok: false, error: 'expired' });
+  if (result === 'error')             return res.json({ ok: false, error: 'server_error' });
 
   const reward: Record<string, any> = {};
   if (promo.diamonds) reward.diamonds = promo.diamonds;
@@ -937,6 +985,58 @@ app.get("/admin/push/count", requireAdmin, async (_req, res) => {
   res.json({ totalTokens, dbAvailable: true });
 });
 
+// ─── Game End Rewards ─────────────────────────────────────────────────────────
+
+// POST /game/end-rewards  { playerId, placement, mode, isCustomLobby, xpBoostActive }
+// Returns server-authoritative diamond grant for the just-completed game.
+// Calculates daily cap from actual game_results (server-written by TileRoyaleRoom).
+// Also raises the trusted diamond ceiling so the cloud save accepts the grant.
+app.post("/game/end-rewards", async (req, res) => {
+  const { playerId, placement, mode, isCustomLobby, xpBoostActive } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.json({ ok: false, error: 'invalid_player' });
+
+  // Custom lobby games give no rewards
+  if (Boolean(isCustomLobby)) return res.json({ ok: true, diamonds: 0, xp: 0 });
+
+  const p = Math.max(1, Math.min(Number(placement) || 99, 99));
+
+  // Base diamond reward by placement
+  const baseDiamonds = p === 1 ? 6 : p === 2 ? 4 : p === 3 ? 2 : 1;
+
+  let diamonds = baseDiamonds;
+
+  if (getDbStatus().available) {
+    // Daily cap: sum diamonds earned from game_results today (server-written rows are authoritative)
+    const capRows = await query(
+      `SELECT COALESCE(SUM(
+         CASE WHEN placement = 1 THEN 6
+              WHEN placement = 2 THEN 4
+              WHEN placement = 3 THEN 2
+              ELSE 1 END
+       ), 0) AS earned_today
+       FROM game_results
+       WHERE player_id = $1
+         AND played_at >= date_trunc('day', now() AT TIME ZONE 'UTC')
+         AND (is_bot_match IS NULL OR is_bot_match = false)`,
+      [playerId]
+    );
+    const earnedToday = Number(capRows?.[0]?.earned_today ?? 0);
+    const dailyLeft   = Math.max(0, 80 - earnedToday);
+    diamonds = Math.min(baseDiamonds, dailyLeft);
+
+    // Raise server-trusted ceiling so the cloud save accepts the grant
+    if (diamonds > 0) await addTrustedDiamonds(playerId, diamonds);
+  }
+
+  // XP: server returns a cap — client must not exceed this.
+  // Includes base + streak bonus + survival bonus + optional 2× boost.
+  const baseXp    = p === 1 ? 150 : p === 2 ? 100 : p === 3 ? 85 : p <= 5 ? 65 : 40;
+  const xpCap     = baseXp * (Boolean(xpBoostActive) ? 2 : 1);
+
+  res.json({ ok: true, diamonds, xp: xpCap });
+});
+
 // ─── Cloud Save ────────────────────────────────────────────────────────────────
 
 // POST /save — upsert full game state for a player
@@ -971,7 +1071,7 @@ app.post("/save", async (req, res) => {
       // NOTE: once billing is server-validated, purchased amounts will be added via
       // addTrustedDiamonds() before this save arrives, making BASE_PURCHASE irrelevant
       // for that path. Until then, this cap must stay above the max single-session purchase.
-      const BASE_PURCHASE = 100_000;   // covers all realistic IAP stacks; still stops 999k+ exploits
+      const BASE_PURCHASE = 30_000;    // covers the largest single IAP package (bundle.whale2 = 26k); multi-package buyers have addTrustedDiamonds() called per purchase
       const PER_GAME_BOOTSTRAP = 80;
       const gameCountRows = await query(
         `SELECT COUNT(*)::INT AS cnt FROM game_results WHERE player_id = $1`,
@@ -1153,12 +1253,26 @@ function _serverRollRing(rarityId: string): string {
 // POST /ring/spin  { playerId, spinType }
 // Server rolls the rarity and ring, records in ring_grants, returns to client.
 // spinType: 'free' | 'freeSpin' | 'ad' | 'diamond'
+// Free/freeSpin spins are rate-limited to 20 per 24 hours to prevent direct-API abuse.
 app.post("/ring/spin", async (req, res) => {
   const { playerId, spinType = 'free' } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.json({ ok: false, error: 'invalid_player' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });
+
+  // Rate-limit free spins: max 20 per 24 hours per player
+  if (spinType === 'free' || spinType === 'freeSpin') {
+    const rows = await query(
+      `SELECT COUNT(*) AS cnt FROM ring_grants
+       WHERE player_id = $1
+         AND (spin_type = 'free' OR spin_type = 'freeSpin')
+         AND granted_at > now() - interval '24 hours'`,
+      [playerId]
+    );
+    const cnt = Number(rows?.[0]?.cnt ?? 0);
+    if (cnt >= 20) return res.json({ ok: false, error: 'free_spin_rate_limit' });
+  }
 
   const rarityId = _serverRollRarity();
   const ringId   = _serverRollRing(rarityId);
@@ -1376,8 +1490,8 @@ const PRODUCT_CATALOG: Record<string, {
 async function verifyWithGooglePlay(productId: string, purchaseToken: string): Promise<boolean> {
   const keyJson = process.env.GOOGLE_PLAY_KEY_JSON;
   if (!keyJson) {
-    console.log('[Purchase] GOOGLE_PLAY_KEY_JSON not set — skipping API verification (token deduplication only)');
-    return true;
+    console.error('[IAP] Purchase rejected — GOOGLE_PLAY_KEY_JSON not configured.');
+    return false;
   }
   try {
     const credentials = JSON.parse(keyJson);
@@ -1523,6 +1637,19 @@ app.post("/purchase/restore", async (req, res) => {
   }
 
   res.json({ ok: true, restored });
+});
+
+// GET /purchase/spend-stats/:playerId
+// Returns aggregated spend totals from purchase_receipts so the client can
+// re-hydrate whale achievement progress after a localStorage wipe.
+app.get("/purchase/spend-stats/:playerId", async (req, res) => {
+  const { playerId } = req.params;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ error: 'invalid_player' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+  const stats = await getPurchaseSpendStats(playerId);
+  res.json({ ok: true, stats: stats ?? { totalSpentCents: 0, singlePurchaseMax: 0, bundlesBought: 0, purchaseCount: 0 } });
 });
 
 app.use("/colyseus", monitor());

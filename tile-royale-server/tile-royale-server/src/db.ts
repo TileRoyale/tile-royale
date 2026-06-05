@@ -107,6 +107,7 @@ async function createTables(): Promise<void> {
     ALTER TABLE game_results ADD COLUMN IF NOT EXISTS tiles_tapped     INTEGER DEFAULT 0;
     ALTER TABLE game_results ADD COLUMN IF NOT EXISTS avg_reaction_ms  INTEGER DEFAULT 0;
     ALTER TABLE game_results ADD COLUMN IF NOT EXISTS best_reaction_ms INTEGER DEFAULT 0;
+    ALTER TABLE game_results ADD COLUMN IF NOT EXISTS is_bot_match     BOOLEAN DEFAULT false;
 
     -- Player tag: permanent 4-digit identifier (1000–9999), unique per player
     ALTER TABLE players ADD COLUMN IF NOT EXISTS player_tag INTEGER;
@@ -373,6 +374,15 @@ async function createTables(): Promise<void> {
       claimed_at     TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Anti-cheat reports: client-submitted suspicious-behaviour flags
+    CREATE TABLE IF NOT EXISTS suspicious_reports (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL,
+      reason      TEXT         NOT NULL,
+      reported_at TIMESTAMPTZ  DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_suspicious_reports_player ON suspicious_reports(player_id);
+
     -- Diamond spend audit log
     CREATE TABLE IF NOT EXISTS diamond_spends (
       id         BIGSERIAL    PRIMARY KEY,
@@ -546,17 +556,19 @@ export async function writeGameResult(
   placement: number,
   totalPlayers: number,
   mode: string,
-  tapStats?: { tilesTapped: number; avgReactionMs: number; bestReactionMs: number }
+  tapStats?: { tilesTapped: number; avgReactionMs: number; bestReactionMs: number },
+  isBotMatch?: boolean
 ): Promise<void> {
   await query(`
     INSERT INTO game_results
-      (player_id, placement, total_players, mode, tiles_tapped, avg_reaction_ms, best_reaction_ms)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (player_id, placement, total_players, mode, tiles_tapped, avg_reaction_ms, best_reaction_ms, is_bot_match)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
   `, [
     playerId, placement, totalPlayers, mode,
-    tapStats?.tilesTapped  ?? 0,
-    tapStats?.avgReactionMs  ?? 0,
+    tapStats?.tilesTapped   ?? 0,
+    tapStats?.avgReactionMs ?? 0,
     tapStats?.bestReactionMs ?? 0,
+    isBotMatch ?? false,
   ]);
 }
 
@@ -579,7 +591,7 @@ async function queryRankings(periodFilter: string): Promise<any[] | null> {
         ROUND(AVG(gr.placement)::NUMERIC, 2)               AS avg_placement
       FROM game_results gr
       JOIN players p ON gr.player_id = p.player_id
-      WHERE TRUE ${periodFilter}
+      WHERE (gr.is_bot_match IS NULL OR gr.is_bot_match = false) ${periodFilter}
       GROUP BY p.player_id, p.player_name, p.avatar, p.player_tag
     )
     SELECT
@@ -627,6 +639,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
         ROUND(AVG(NULLIF(avg_reaction_ms, 0))::NUMERIC, 0)  AS overall_avg_reaction_ms
       FROM game_results
       WHERE player_id = $1
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
     weekly_stats AS (
       SELECT
@@ -635,6 +648,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
       FROM game_results
       WHERE player_id = $1
         AND played_at >= date_trunc('week', now())
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
     mode_stats AS (
       SELECT
@@ -646,8 +660,9 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
         COUNT(*) FILTER (WHERE mode = 'wild'    AND placement = 1)   AS wild_wins
       FROM game_results
       WHERE player_id = $1
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
-    -- Compute best win streak from ordered game history
+    -- Compute best win streak from ordered real-player game history
     streaks AS (
       SELECT
         placement,
@@ -656,6 +671,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
           OVER (ORDER BY played_at ROWS UNBOUNDED PRECEDING) AS streak_group
       FROM game_results
       WHERE player_id = $1
+        AND (is_bot_match IS NULL OR is_bot_match = false)
     ),
     win_streaks AS (
       SELECT streak_group, COUNT(*) AS streak_len
@@ -672,6 +688,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
         ) AS rank
       FROM game_results gr2
       JOIN players p2 ON gr2.player_id = p2.player_id
+      WHERE (gr2.is_bot_match IS NULL OR gr2.is_bot_match = false)
       GROUP BY p2.player_id
     ),
     weekly_ranks AS (
@@ -683,6 +700,7 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
       FROM game_results gr2
       JOIN players p2 ON gr2.player_id = p2.player_id
       WHERE gr2.played_at >= date_trunc('week', now())
+        AND (gr2.is_bot_match IS NULL OR gr2.is_bot_match = false)
       GROUP BY p2.player_id
     )
     SELECT
@@ -1373,13 +1391,21 @@ export async function getPlayerPushToken(playerId: string): Promise<string | nul
 
 // ─── Promo Codes ───────────────────────────────────────────────────────────────
 
-// Returns 'ok' | 'already_redeemed' | 'error'
+// Returns 'ok' | 'already_redeemed' | 'max_uses_reached' | 'error'
 export async function checkAndRecordPromoRedemption(
   playerId: string,
-  code: string
-): Promise<'ok' | 'already_redeemed' | 'error'> {
+  code: string,
+  maxUses: number = 999999
+): Promise<'ok' | 'already_redeemed' | 'max_uses_reached' | 'error'> {
   if (!pool || !dbAvailable) return 'error';
   try {
+    if (maxUses < 999999) {
+      const countRow = await pool.query(
+        `SELECT COUNT(*)::INT AS n FROM promo_redemptions WHERE code = $1`,
+        [code]
+      );
+      if ((countRow.rows[0]?.n ?? 0) >= maxUses) return 'max_uses_reached';
+    }
     await pool.query(
       `INSERT INTO promo_redemptions (code, player_id) VALUES ($1, $2)`,
       [code, playerId]
@@ -1440,9 +1466,9 @@ export async function getKothWeeklyLeaderboard(
   period: 'current' | 'prev' = 'current'
 ): Promise<{ weekly: any[]; playerRank: number | null; playerWins: number } | null> {
   const timeFilter = period === 'prev'
-    ? `AND gr.played_at >= date_trunc('week', now() - interval '7 days')
-       AND gr.played_at <  date_trunc('week', now())`
-    : `AND gr.played_at >= date_trunc('week', now())`;
+    ? `AND played_at >= date_trunc('week', now() - interval '7 days')
+       AND played_at <  date_trunc('week', now())`
+    : `AND played_at >= date_trunc('week', now())`;
 
   const rows = await query(`
     WITH wins_cte AS (
@@ -1737,6 +1763,33 @@ export async function getProcessedTokens(playerId: string): Promise<Set<string>>
     [playerId]
   );
   return new Set((rows || []).map((r: any) => r.purchase_token));
+}
+
+// Returns aggregated spend stats derived from purchase_receipts — used to re-hydrate
+// whale achievement progress (totalSpentCents etc.) after a localStorage wipe.
+export async function getPurchaseSpendStats(playerId: string): Promise<{
+  totalSpentCents: number;
+  singlePurchaseMax: number;
+  bundlesBought: number;
+  purchaseCount: number;
+} | null> {
+  const rows = await query(
+    `SELECT
+       COUNT(*)::int                                                                    AS purchase_count,
+       COALESCE(SUM(ROUND((granted_json::jsonb->>'priceVal')::numeric * 100)), 0)::int AS total_spent_cents,
+       COALESCE(MAX(ROUND((granted_json::jsonb->>'priceVal')::numeric * 100)), 0)::int AS single_purchase_max,
+       COUNT(CASE WHEN granted_json::jsonb ? 'bundleId' THEN 1 END)::int              AS bundles_bought
+     FROM purchase_receipts
+     WHERE player_id = $1`,
+    [playerId]
+  );
+  if (!rows || rows.length === 0) return null;
+  return {
+    totalSpentCents:   Number(rows[0].total_spent_cents),
+    singlePurchaseMax: Number(rows[0].single_purchase_max),
+    bundlesBought:     Number(rows[0].bundles_bought),
+    purchaseCount:     Number(rows[0].purchase_count),
+  };
 }
 
 // ─── Ring Grants & Trades ─────────────────────────────────────────────────────
