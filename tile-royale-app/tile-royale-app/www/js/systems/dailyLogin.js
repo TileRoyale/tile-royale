@@ -47,11 +47,38 @@ function _canClaimToday(state) {
 
 // ─── Claim ───────────────────────────────────────────────────────────────────
 
+// ISO date string "YYYY-MM-DD" in local time — consistent with _canClaimToday comparison.
+function _dlTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 // Grants today's reward and advances the day counter.
 // Returns the reward object, or null if already claimed today.
-function claimDailyReward() {
+async function claimDailyReward() {
   const state = _loadDailyState();
   if (!_canClaimToday(state)) return null;
+
+  // Server-side idempotency check — prevents re-claiming after localStorage clear.
+  // Offline fallback: allow claim if server unreachable.
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID) {
+    try {
+      const r = await fetch(`${getActiveServer().http}/daily-login/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, day: state.day, claimDate: _dlTodayKey() }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline && data.error === 'already_claimed') {
+        // Server says already claimed today (localStorage was manipulated) — block it
+        _saveDailyState({ ...state, lastClaim: Date.now() });
+        return null;
+      }
+    } catch(e) {
+      // Network error → proceed with local claim
+    }
+  }
 
   const reward = DAILY_REWARDS[state.day - 1];
 
@@ -115,8 +142,8 @@ function renderDailyCalendar() {
   }).join('');
 }
 
-function onDailyClaimClick() {
-  const reward = claimDailyReward();
+async function onDailyClaimClick() {
+  const reward = await claimDailyReward();
   if (!reward) {
     try { showToast('Already claimed today — come back tomorrow!', 'var(--muted)'); } catch(e) {}
     return;

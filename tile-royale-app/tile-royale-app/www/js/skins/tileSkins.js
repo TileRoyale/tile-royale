@@ -177,6 +177,7 @@ function savePlayerName() {
       showToast('Not enough diamonds! Need 💎 500', 'var(--red)');
       return;
     }
+    _auditDiamondSpend('name_change', 500);
     gameState.diamonds -= 500;
   }
   gameState.playerName = newName;
@@ -506,6 +507,7 @@ function confirmBuy() {
     closeBuyDialog();
     return;
   }
+  _auditDiamondSpend(skin.id, skin.price);
   gameState.diamonds -= skin.price;
   if (!gameState.ownedSkins) gameState.ownedSkins = {};
   gameState.ownedSkins[skin.id] = true;

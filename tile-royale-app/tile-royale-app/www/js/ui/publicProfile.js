@@ -154,7 +154,8 @@ function _ppRender(d) {
   let achHtml = '';
   try {
     const unlocked = isOwn ? (gameState.unlockedAch || []).length : (d.achievement_count || 0);
-    const total    = isOwn ? ACHIEVEMENTS.length                  : (d.achievement_total || 108);
+    const total    = isOwn ? ACHIEVEMENTS.length
+                           : (d.achievement_total || (typeof ACHIEVEMENTS !== 'undefined' ? ACHIEVEMENTS.length : 0));
     const pct      = total > 0 ? Math.round(unlocked / total * 100) : 0;
     achHtml = `
       <div class="pp-section">

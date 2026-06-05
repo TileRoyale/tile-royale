@@ -400,6 +400,7 @@ function spinWheel() {
 
   // Deduct cost
   if (!isFree) {
+    _auditDiamondSpend('spin', cost);
     gameState.diamonds -= cost;
     gameState.gemSpinsToday = (gameState.gemSpinsToday || 0) + 1;
   } else if ((gameState.freeSpins||0) > 0) {
@@ -483,6 +484,138 @@ function _executeSpin() {
     }
   }
   requestAnimationFrame(animate);
+}
+
+function devCalibrate50() {
+  // Build a list of (rarity, angle) pairs — each sector repeated to reach ~50 total
+  const order = [];
+  for (const [rar, angles] of Object.entries(WHEEL_SECTOR_DEF)) {
+    for (const ang of angles) order.push({ rar, ang });
+  }
+  // Shuffle, then repeat until we have ≥50 entries
+  const full = [];
+  while (full.length < 50) {
+    const shuffled = [...order].sort(() => Math.random() - 0.5);
+    full.push(...shuffled);
+  }
+  const plan = full.slice(0, 50);
+
+  const log = [];
+  let idx = 0;
+
+  const rarColours = {
+    common:'#aaaaaa', uncommon:'#00ff88', rare:'#00e5ff',
+    epic:'#9b59b6', legendary:'#ffd700', secret:'#ff3355'
+  };
+
+  function showPrompt(entry) {
+    const ov = document.createElement('div');
+    ov.id = '_calibOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
+
+    const rarList = Object.keys(WHEEL_SECTOR_DEF);
+    ov.innerHTML = `
+      <div style="color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;">
+        SPIN ${idx}/${plan.length} — EXPECTED: <span style="color:${rarColours[entry.rar]}">${entry.rar.toUpperCase()}</span> (${entry.ang}°)
+      </div>
+      <div style="color:rgba(255,255,255,0.5);font-size:13px;">What colour does the pointer land on?</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:340px;">
+        ${rarList.map(r => `
+          <button onclick="window._calibAnswer('${r}')"
+            style="padding:10px 18px;border-radius:10px;border:2px solid ${rarColours[r]};
+                   background:transparent;color:${rarColours[r]};font-family:'Bebas Neue',sans-serif;
+                   font-size:16px;letter-spacing:2px;cursor:pointer;">
+            ${r.toUpperCase()}
+          </button>`).join('')}
+      </div>
+      <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-top:4px;">or type in console: window._calibAnswer('rarity')</div>`;
+    document.body.appendChild(ov);
+
+    window._calibAnswer = function(seen) {
+      document.getElementById('_calibOv')?.remove();
+      const match = seen.trim().toLowerCase() === entry.rar;
+      log.push({ spin: idx, expected: entry.rar, sector: entry.ang, seen: seen.trim().toLowerCase(), ok: match });
+      runNext();
+    };
+  }
+
+  function spinToSector(ang, onDone) {
+    if (wheelSpinning) { setTimeout(() => spinToSector(ang, onDone), 200); return; }
+    const startAngle = wheelAngle;
+    const current360 = ((startAngle % 360) + 360) % 360;
+    const diff       = (ang - current360 + 360) % 360;
+    const numSpins   = 4 + Math.floor(Math.random() * 2);
+    const finalAngle = startAngle + numSpins * 360 + diff;
+
+    wheelSpinning = true;
+    const img = document.getElementById('wheelImg');
+    if (img) img.style.transition = 'none';
+
+    const duration  = 3500;
+    const startTime = performance.now();
+    function animate(now) {
+      const t    = Math.min(1, (now - startTime) / duration);
+      const n    = (t - 0.07) / 0.93;
+      const ease = t < 0.07 ? (t / 0.07) * 0.05 : 0.05 + 0.95 * (1 - Math.pow(1 - Math.max(0, n), 4));
+      wheelAngle = startAngle + (finalAngle - startAngle) * ease;
+      if (img) img.style.transform = `rotate(${wheelAngle}deg)`;
+      if (t < 1) { requestAnimationFrame(animate); }
+      else {
+        wheelAngle = finalAngle;
+        wheelSpinning = false;
+        if (img) img.style.transform = `rotate(${wheelAngle}deg)`;
+        onDone();
+      }
+    }
+    requestAnimationFrame(animate);
+  }
+
+  function runNext() {
+    if (idx >= plan.length) {
+      showCalibReport(log);
+      return;
+    }
+    const entry = plan[idx];
+    idx++;
+    spinToSector(entry.ang, () => showPrompt(entry));
+  }
+
+  function showCalibReport(log) {
+    const mismatches = log.filter(l => !l.ok);
+    let html = `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;overflow:auto;padding:20px;box-sizing:border-box;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:#fff;letter-spacing:3px;margin-bottom:12px;">
+        CALIBRATION REPORT — ${log.length} spins, ${mismatches.length} mismatches
+      </div>`;
+
+    if (mismatches.length === 0) {
+      html += `<div style="color:#00ff88;font-size:16px;">✅ All sectors match! Wheel is correctly calibrated.</div>`;
+    } else {
+      html += `<div style="color:#ff4444;font-size:14px;margin-bottom:8px;">❌ Mismatches:</div>`;
+      mismatches.forEach(m => {
+        html += `<div style="color:#ffaaaa;font-size:13px;margin-bottom:4px;">
+          Sector ${m.sector}° — expected <b style="color:${rarColours[m.expected]}">${m.expected}</b>
+          but saw <b style="color:${rarColours[m.seen]||'#fff'}">${m.seen}</b>
+        </div>`;
+      });
+      html += `<div style="color:rgba(255,255,255,0.5);font-size:12px;margin-top:12px;">console.log(window._calibLog) for full data</div>`;
+    }
+
+    html += `<button onclick="this.parentElement.remove()"
+      style="margin-top:20px;padding:12px 32px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);
+             border-radius:10px;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:3px;cursor:pointer;">
+      CLOSE</button></div>`;
+
+    window._calibLog = log;
+    const el = document.createElement('div');
+    el.innerHTML = html;
+    document.body.appendChild(el.firstChild);
+    console.table(log);
+    console.log('Mismatches:', mismatches);
+  }
+
+  console.log(`[Calib] Starting 50-spin calibration — ${plan.length} spins planned`);
+  showToast('🎡 Calibration started — answer each prompt', '#00e5ff');
+  runNext();
 }
 
 function showSpinResult(ring, rarDef) {

@@ -511,67 +511,6 @@ function _renderSoloRankingRows(rankings) {
   return badge + rows;
 }
 
-// ─── Solo ranking builder (kept for reference, no longer used) ───────────────
-function _buildSoloRankingRows(myScore, myStars, myLevels) {
-  // Deterministic seeded random for consistent leaderboard
-  const seed = (PLAYER_ID || 'default').split('').reduce((h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0, 0);
-  let rng = Math.abs(seed);
-  const rand = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return (rng >>> 0) / 0xffffffff; };
-
-  const BOT_NAMES = ['SoloAce','StarHunter','VoidMaster','NightTapper','CrystalRun',
-    'SwiftFinger','ApexSolo','GhostTap','IronWill','LightSpeed','ShadowPlay',
-    'TileKing','FlashPoint','ZenTapper','QuickStar','NeonSolo','DarkEdge',
-    'StormSolo','BladeRun','PhantomAce'];
-
-  // Generate 19 simulated players with realistic scores
-  const bots = Array.from({length: 19}, (_, i) => {
-    const lvls  = Math.floor(rand() * 80 + 10);         // 10–90 levels
-    const stars  = Math.floor(lvls * (rand() * 2 + 0.5) * 3); // avg stars per level
-    const perf   = Math.floor(lvls * rand() * 0.6);
-    const score  = Math.min(stars * 10 + perf * 50 + lvls * 5, 38500); // cap at max
-    return { name: BOT_NAMES[i % BOT_NAMES.length], score, stars: Math.min(stars, 300), levels: Math.min(lvls, 100) };
-  });
-
-  // Add player entry
-  const myName = (gameState && gameState.playerName) ? gameState.playerName : 'You';
-  const allEntries = [...bots, { name: myName, score: myScore, stars: myStars, levels: myLevels, isYou: true }];
-  allEntries.sort((a, b) => b.score - a.score || b.stars - a.stars);
-  allEntries.forEach((e, i) => { e.place = i + 1; });
-
-  const myEntry = allEntries.find(e => e.isYou);
-  const myPlace = myEntry ? myEntry.place : allEntries.length;
-  const placeColors = { 1:'var(--gold)', 2:'#c0c0c0', 3:'#cd7f32' };
-
-  // Show top 10; if player outside top 10 add separator + player row
-  const topRows = allEntries.slice(0, 10).map(e => _soloRankRow(e, placeColors)).join('');
-  const playerOutside = myEntry && myEntry.place > 10;
-  const playerRow = playerOutside
-    ? `<div style="border-top:1px dashed var(--border);margin:6px 0;opacity:0.4;"></div>` + _soloRankRow(myEntry, placeColors)
-    : '';
-
-  // Player rank summary
-  const pctile = Math.round((1 - myPlace / allEntries.length) * 100);
-  const rankBadge = myScore === 0
-    ? '<div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-align:center;padding:8px 0;">Play Solo mode to earn your ranking!</div>'
-    : `<div style="text-align:center;padding:8px 0 4px;font-size:11px;color:var(--muted);letter-spacing:1px;">
-        You are in the <b style="color:var(--gold);">top ${Math.max(1, 100 - pctile)}%</b> — rank <b style="color:var(--text);">#${myPlace}</b> of ${allEntries.length}
-       </div>`;
-
-  return rankBadge + topRows + playerRow;
-}
-
-function _soloRankRow(e, placeColors) {
-  const isYou = !!e.isYou;
-  const pc    = placeColors[e.place] || 'var(--muted)';
-  return `<div class="lb-row${isYou ? ' you-row' : ''}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;margin-bottom:2px;${isYou ? 'background:rgba(0,229,255,0.07);border:1px solid rgba(0,229,255,0.2);' : ''}">
-    <div class="lb-place" style="color:${pc};min-width:26px;font-family:'Bebas Neue',sans-serif;font-size:15px;">${e.place}</div>
-    <div style="flex:1;font-size:13px;color:var(--text);">${e.name}${isYou ? ' <span style="color:var(--diamond);font-size:10px;">(YOU)</span>' : ''}</div>
-    <div style="text-align:right;">
-      <div style="font-size:12px;color:var(--gold);font-family:\'Bebas Neue\',sans-serif;letter-spacing:1px;">⭐ ${e.stars}</div>
-      <div style="font-size:9px;color:var(--muted);letter-spacing:1px;">${e.levels} levels</div>
-    </div>
-  </div>`;
-}
 
 // ─── Solo leaderboard renderer ────────────────────────────────────────────────
 
@@ -774,12 +713,11 @@ async function renderStats() {
   set('st-achCount', (gs.unlockedAch || []).length + ' / ' + ACHIEVEMENTS.length);
   set('st-spectate', fmt(s.spectateSessions || 0));
 
-  // Render initial percentile estimates while server fetch is in-flight
-  renderPercentile('pctWins',    'Wins',          fmt(wins),          computePct(wins,    [[0,50],[10,70],[50,85],[100,92],[200,96],[500,99],[999,100]]));
-  renderPercentile('pctWinRate', 'Win Rate',       wr(wins, games),    computePct(wins/Math.max(games,1)*100, [[0,20],[10,40],[20,55],[35,70],[50,82],[65,92],[80,97],[100,100]]), true);
-  renderPercentile('pctTaps',    'Taps',           fmt(taps),          computePct(taps,    [[0,40],[100,55],[500,65],[2000,75],[5000,85],[20000,93],[100000,99]]));
-  renderPercentile('pctLevel',   'Reaction Time',  '…',                50);
-  renderPercentile('pctDiamonds','Diamonds',       fmt(gs.diamonds||0),computePct(gs.diamonds||0, [[0,30],[500,50],[2000,65],[5000,75],[15000,85],[50000,94],[100000,99]]));
+  // Show loading skeletons — real percentiles arrive from server below
+  ['pctWins','pctWinRate','pctTaps','pctLevel','pctDiamonds'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="percentile-loading">Loading…</div>';
+  });
 
   // ── Live server data — replaces local estimates with real DB values ────────
   if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
@@ -797,6 +735,44 @@ async function renderStats() {
       set('st-streak',  fmt(sStats.best_win_streak  || 0));
       set('st-top3',    fmt(sStats.top3             || 0));
       set('st-top5',    fmt(sStats.top5             || 0));
+
+      // Sync server-derived stats into achStats so achievements reflect real gameplay data
+      try {
+        initAchStats();
+        const sa = gameState.achStats;
+        let dirty = false;
+        const syncStat = (key, serverVal) => {
+          if (serverVal != null && serverVal > (sa[key] || 0)) { sa[key] = serverVal; dirty = true; }
+        };
+        syncStat('totalTaps',      sStats.total_tiles_tapped);
+        syncStat('wins',           sStats.wins);
+        syncStat('games',          sStats.games);
+        syncStat('top3',           sStats.top3);
+        syncStat('top5',           sStats.top5);
+        syncStat('bestWinStreak',  sStats.best_win_streak);
+        syncStat('rushGames',      sStats.rush_games);
+        syncStat('rushWins',       sStats.rush_wins);
+        syncStat('buckshotGames',  sStats.buckshot_games);
+        syncStat('buckshotWins',   sStats.buckshot_wins);
+        syncStat('wildGames',      sStats.wild_games);
+        syncStat('wildWins',       sStats.wild_wins);
+        if (dirty) {
+          saveState();
+          // Re-run achievement check now that stats are server-authoritative
+          if (typeof checkAchievements === 'function') checkAchievements();
+          // Refresh mode stats display with server values
+          set('st-rushGames',    fmt(sa.rushGames     || 0));
+          set('st-rushWins',     fmt(sa.rushWins      || 0));
+          set('st-rushWr',       wr(sa.rushWins, sa.rushGames));
+          set('st-buckshotGames',fmt(sa.buckshotGames || 0));
+          set('st-buckshotWins', fmt(sa.buckshotWins  || 0));
+          set('st-buckshotWr',   wr(sa.buckshotWins, sa.buckshotGames));
+          set('st-wildGames',    fmt(sa.wildGames     || 0));
+          set('st-wildWins',     fmt(sa.wildWins      || 0));
+          set('st-wildWr',       wr(sa.wildWins, sa.wildGames));
+          set('st-taps',         fmt(sa.totalTaps     || 0));
+        }
+      } catch(e) {}
     }
 
     // Update percentile bars from real DB PERCENT_RANK() values.
@@ -817,19 +793,6 @@ async function renderStats() {
   } catch(e) {}
 }
 
-// Interpolate percentile from bracket table
-function computePct(val, brackets) {
-  for (let i = brackets.length - 1; i >= 0; i--) {
-    if (val >= brackets[i][0]) {
-      if (i === brackets.length - 1) return brackets[i][1];
-      const [v0, p0] = brackets[i];
-      const [v1, p1] = brackets[i + 1];
-      const t = Math.min(1, (val - v0) / (v1 - v0));
-      return Math.round(p0 + (p1 - p0) * t);
-    }
-  }
-  return brackets[0][1];
-}
 
 function renderPercentile(elId, label, displayVal, pct, isWinRate = false) {
   const el = document.getElementById(elId);
@@ -1053,14 +1016,17 @@ function closeFirstWeekOffer() {
 async function buyFirstWeekOffer() {
   const deliverOffer = () => {
     gameState.firstWeekClaimed = true;
-    gameState.diamonds = (gameState.diamonds || 0) + 300;
+    gameState.diamonds      = (gameState.diamonds      || 0) + 300;
     gameState.totalDiamonds = (gameState.totalDiamonds || 0) + 300;
     if (!gameState.ownedSkins) gameState.ownedSkins = {};
     gameState.ownedSkins['table_lava'] = true;
     addItemToInventory('crystal', 5);
     gameState.tickets = (gameState.tickets || 0) + 5;
     initAchStats();
-    gameState.achStats.totalSpentCents = (gameState.achStats.totalSpentCents || 0) + 199;
+    const priceCents = 199;
+    gameState.achStats.totalSpentCents   = (gameState.achStats.totalSpentCents   || 0) + priceCents;
+    gameState.achStats.singlePurchaseMax = Math.max(gameState.achStats.singlePurchaseMax || 0, priceCents);
+    gameState.achStats.diamondsPurchased = (gameState.achStats.diamondsPurchased || 0) + 1;
     checkAchievements();
     saveState(); updateMenuStats(); updateInventoryUI();
     closeFirstWeekOffer();
@@ -1071,7 +1037,18 @@ async function buyFirstWeekOffer() {
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Billing) {
     try {
       showToast('Opening store...', 'var(--blue)');
-      await nativePurchase('offer.firstweek');
+      const purchase = await nativePurchase('offer.firstweek');
+      // Verify with server (fire-and-forget; local delivery is the source of truth here
+      // because the server needs to record the token for duplicate-prevention only).
+      if (purchase?.purchaseToken && typeof PLAYER_ID !== 'undefined' && PLAYER_ID) {
+        fetch(`${getActiveServer().http}/purchase/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId: PLAYER_ID, productId: 'offer.firstweek',
+                                 purchaseToken: purchase.purchaseToken, orderId: purchase.orderId || '' }),
+          signal: AbortSignal.timeout(12000),
+        }).catch(() => {});
+      }
       deliverOffer();
     } catch (e) {
       const msg = (e && (e.message || e.code || e));

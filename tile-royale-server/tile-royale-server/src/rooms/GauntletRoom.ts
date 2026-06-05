@@ -67,8 +67,10 @@ export class GauntletRoom extends Room<GauntletRoomState> {
   // sessionId → MMR at the time of joining (for delta calculation)
   private playerMmrs   = new Map<string, number>();
 
-  private lobbyStarted = false;
-  private joinedSet    = new Set<string>();
+  private lobbyStarted  = false;
+  private joinedSet     = new Set<string>();
+  private realPlayerCount = 0;          // real (non-bot) players that joined
+  private isRanked      = false;        // true only if ≥5 real players
 
   private lobbyTimer!:    Delayed;
   private countdownTimer!: Delayed;
@@ -112,12 +114,20 @@ export class GauntletRoom extends Room<GauntletRoomState> {
     player.isBot    = false;
     this.state.players.set(client.sessionId, player);
     this.state.playerCount = this.state.players.size;
+    this.realPlayerCount++;
 
     const playerId: string = options?.playerId || "";
     if (playerId) {
       this.playerIds.set(client.sessionId, playerId);
-      this.playerMmrs.set(client.sessionId, player.mmr);
+      // Fetch authoritative MMR from DB; fall back to client-supplied value only if DB unavailable
       upsertPlayer(playerId, player.name, player.avatar).catch(() => {});
+      getGauntletMMR(playerId).then(row => {
+        const trueMmr = row ? row.mmr : player.mmr;
+        player.mmr = trueMmr;
+        this.playerMmrs.set(client.sessionId, trueMmr);
+      }).catch(() => {
+        this.playerMmrs.set(client.sessionId, player.mmr);
+      });
     }
 
     // Clamp and store ring effects
@@ -193,29 +203,11 @@ export class GauntletRoom extends Room<GauntletRoomState> {
     this.lobbyStarted = true;
     this.lock();
 
-    const realCount = this.state.playerCount;
-    const botsNeeded = MAX_PLAYERS - realCount;
+    const realCount  = this.realPlayerCount;
+    this.isRanked    = realCount >= 5;
 
-    for (let i = 0; i < botsNeeded; i++) {
-      const bot = new GauntletPlayer();
-      const botId = `bot_${i}_${this.roomId}`;
-      bot.sessionId = botId;
-      bot.name      = BOT_NAMES[i % BOT_NAMES.length];
-      bot.avatar    = BOT_AVATARS[i % BOT_AVATARS.length];
-      bot.isBot     = true;
-      bot.mmr       = Math.floor(Math.random() * 600);
-      this.state.players.set(botId, bot);
-    }
-    this.state.playerCount = MAX_PLAYERS;
-
-    // Pre-generate bot scores now (bots "play" offline)
-    this.state.players.forEach((p) => {
-      if (!p.isBot) return;
-      const taps = Math.floor(Math.random() * 25 + 10);
-      const acc  = 0.5 + Math.random() * 0.45;
-      p.score = Math.round(taps * acc * 10 - taps * (1 - acc) * 10);
-      p.taps  = taps;
-    });
+    // No bots — start with real players only
+    this.broadcast("ranked_status", { ranked: this.isRanked, realPlayers: realCount });
 
     this.startCountdown();
   }
@@ -294,16 +286,21 @@ export class GauntletRoom extends Room<GauntletRoomState> {
     } else if (data.correct) {
       delta = Math.round(10 * (1 + (effects.plusPoints || 0)));
     } else {
-      delta = Math.round(-10 * (1 - (effects.minusPenalty || 0)));
+      // Clamp to at least -1 so max-gear players still feel some penalty
+      delta = Math.min(-1, Math.round(-10 * (1 - (effects.minusPenalty || 0))));
     }
 
-    p.score = Math.min(MAX_POSSIBLE_SCORE, p.score + delta);
+    p.score = Math.max(0, Math.min(MAX_POSSIBLE_SCORE, p.score + delta));
     p.taps++;
   }
 
   // ── End game ──────────────────────────────────────────────────────────────
 
+  private gameEnded = false;
+
   private async endGame() {
+    if (this.gameEnded) return;
+    this.gameEnded = true;
     this.state.phase = "results";
 
     // Sort all players by score descending
@@ -319,28 +316,33 @@ export class GauntletRoom extends Room<GauntletRoomState> {
       if (p) p.placement = i + 1;
     });
 
-    // Compute results per real player and persist
+    // Compute results per real player and persist (only if ranked)
     const resultPromises: Promise<void>[] = [];
 
     for (const [sessionId, playerId] of this.playerIds) {
       const p = this.state.players.get(sessionId);
       if (!p) continue;
 
-      const mmrBefore  = this.playerMmrs.get(sessionId) || 0;
-      const effects    = this.playerEffects.get(sessionId) || {};
-      const baseDelta  = mmrDelta(p.placement);
-      const bonusMult  = 1 + (effects.bonusMmr || 0);
-      const delta      = Math.round(baseDelta * bonusMult);
-      const newMmr     = Math.max(0, mmrBefore + delta);
-      const isWin      = p.placement === 1;
+      const mmrBefore = this.playerMmrs.get(sessionId) || 0;
+      let delta   = 0;
+      let newMmr  = mmrBefore;
 
-      resultPromises.push(
-        upsertGauntletMMR(playerId, newMmr, isWin)
-          .then(() => recordGauntletResult(
-            this.roomId, playerId, p.placement, p.score, p.taps, mmrBefore, delta
-          ))
-          .catch(e => console.error("[Gauntlet] DB error:", e?.message))
-      );
+      if (this.isRanked) {
+        const effects   = this.playerEffects.get(sessionId) || {};
+        const baseDelta = mmrDelta(p.placement);
+        const bonusMult = 1 + (effects.bonusMmr || 0);
+        delta   = Math.round(baseDelta * bonusMult);
+        newMmr  = Math.max(0, mmrBefore + delta);
+        const isWin = p.placement === 1;
+
+        resultPromises.push(
+          upsertGauntletMMR(playerId, newMmr, isWin)
+            .then(() => recordGauntletResult(
+              this.roomId, playerId, p.placement, p.score, p.taps, mmrBefore, delta
+            ))
+            .catch(e => console.error("[Gauntlet] DB error:", e?.message))
+        );
+      }
 
       // Build leaderboard snapshot for this player's results screen
       const leaderboard = entries.map(e2 => {
@@ -360,6 +362,7 @@ export class GauntletRoom extends Room<GauntletRoomState> {
         placement:  p.placement,
         score:      p.score,
         taps:       p.taps,
+        ranked:     this.isRanked,
         mmrBefore,
         mmrDelta:   delta,
         newMmr,

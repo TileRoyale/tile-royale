@@ -89,11 +89,32 @@ function renderMenuDailyChallenge() {
   }
 }
 
-function openDailyChallenge() {
+async function openDailyChallenge() {
   const dc = getDcProgress();
   if (dc.claimed) return;
   if (dc.completed) {
     const ch = getTodayDc();
+    const challengeDate = new Date().toISOString().slice(0, 10);
+
+    // Server-side idempotency — blocks re-claim after localStorage wipe
+    if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+      try {
+        const r = await fetch(`${getActiveServer().http}/dc/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId: PLAYER_ID, challengeDate, challengeId: ch.id }),
+          signal: AbortSignal.timeout(6000),
+        });
+        const data = r.ok ? await r.json() : null;
+        if (data && !data.ok && !data.offline && data.error === 'already_claimed') {
+          dc.claimed = true;
+          saveState();
+          renderMenuDailyChallenge();
+          return;
+        }
+      } catch(e) { /* offline — allow local claim */ }
+    }
+
     dc.claimed = true;
     gameState.diamonds = (gameState.diamonds || 0) + ch.reward;
     saveState();
@@ -167,10 +188,30 @@ function checkOfflineReward() {
   saveState();
 }
 
-function claimOfflineReward() {
-  // Read from gameState mirror so the claimed amount always matches what the overlay displayed
+async function claimOfflineReward() {
   const earned = gameState._pendingOffline || pendingOfflineDiamonds;
   if (!earned) { document.getElementById('offlineRewardOverlay').classList.remove('show'); return; }
+
+  const claimDate = new Date().toISOString().slice(0, 10);
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/offline-reward/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, claimDate, amount: earned }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline) {
+        gameState._pendingOffline = 0;
+        pendingOfflineDiamonds = 0;
+        saveState();
+        document.getElementById('offlineRewardOverlay').classList.remove('show');
+        return;
+      }
+    } catch(e) { /* offline — allow local claim */ }
+  }
+
   gameState.diamonds = (gameState.diamonds || 0) + earned;
   gameState._pendingOffline = 0;
   pendingOfflineDiamonds = 0;
@@ -184,10 +225,24 @@ function claimOfflineReward() {
 const SURPRISE_CHANCE = 0.001; // 0.1% per game
 let surpriseShown = false;
 
-function maybeTriggerSurprise() {
+async function maybeTriggerSurprise() {
   if (surpriseShown) return;
   if (Math.random() > SURPRISE_CHANCE) return;
   surpriseShown = true;
+
+  const grantDate = new Date().toISOString().slice(0, 10);
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/surprise/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, grantDate }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline) return; // already_claimed or db_error — skip
+    } catch(e) { /* offline — allow */ }
+  }
 
   const surprises = [
     { text:'Found hidden gem!', reward: () => { gameState.diamonds += 15; return '+💎 15'; } },
@@ -199,10 +254,22 @@ function maybeTriggerSurprise() {
   const rewardText = s.reward();
   saveState(); updateMenuStats(); updateInventoryUI();
 
-  // Non-intrusive — toast only, no overlay
   showToast(`🎁 ${s.text} ${rewardText}`, 'var(--gold)');
   vibrate([30, 30, 60]);
   playSound('achieve');
+}
+
+// ===== DIAMOND SPEND AUDIT =====
+// Fire-and-forget: records every diamond spend in the server audit log.
+// Does not block the local transaction — purely for server-side integrity monitoring.
+function _auditDiamondSpend(itemId, amount) {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID || typeof getActiveServer !== 'function') return;
+  fetch(`${getActiveServer().http}/diamonds/spend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playerId: PLAYER_ID, itemId: String(itemId), amount: Number(amount) }),
+    signal: AbortSignal.timeout(5000),
+  }).catch(() => {});
 }
 
 // ===== PROMO CODE SYSTEM =====
@@ -574,11 +641,52 @@ function closeModeRewardPopup() {
   if (popup) popup.style.display = 'none';
 }
 
-function claimModeDailyReward() {
+// Helper: UTC ISO date string for period boundaries
+function _modeUtcIso(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+
+async function claimModeDailyReward() {
   const mode = _modePopupMode;
   const data = _getModeRewardsData(mode);
   const pending = data.pendingDaily;
   if (!pending || pending.claimed) { showToast('No daily reward to claim!', 'var(--muted)'); return; }
+
+  // Server validates actual win count from game_results
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID) {
+    const periodStart = pending.date + 'T00:00:00Z';
+    const d = new Date(pending.date + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
+    const periodEnd = _modeUtcIso(d) + 'T00:00:00Z';
+    try {
+      const r = await fetch(`${getActiveServer().http}/mode-rewards/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, mode, period: 'daily',
+                               periodKey: pending.date, periodStart, periodEnd }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const resp = r.ok ? await r.json() : null;
+      if (resp && !resp.ok) {
+        if (resp.error === 'already_claimed') { pending.claimed = true; saveState(); openModeRewardPopup(mode); return; }
+        if (resp.error === 'no_reward') { showToast('Not enough wins for a reward!', 'var(--muted)'); return; }
+        if (resp.error !== 'db_unavailable') { showToast('Claim failed — try again', 'var(--red)'); return; }
+        // db_unavailable → fall through to local claim
+      } else if (resp?.ok) {
+        // Server granted — use server-authoritative tier
+        pending.claimed = true;
+        const tickets = resp.tickets;
+        gameState.tickets = Math.min((gameState.tickets || 0) + tickets, 99);
+        saveState(); updateMenuStats(); updateTicketUI();
+        openModeRewardPopup(mode);
+        showToast(`🎟️ ${resp.tier} Daily! +${tickets} Tickets`, 'var(--gold)');
+        playSound('achieve'); vibrate([50, 50, 200]);
+        return;
+      }
+    } catch(e) { /* offline fallback */ }
+  }
+
+  // Offline fallback: trust client win count
   const tier = MODE_DAILY_TIERS.find(t => pending.wins >= t.minWins);
   if (!tier) { showToast('No daily reward to claim!', 'var(--muted)'); return; }
   pending.claimed = true;
@@ -589,11 +697,46 @@ function claimModeDailyReward() {
   playSound('achieve'); vibrate([50, 50, 200]);
 }
 
-function claimModeWeeklyReward() {
+async function claimModeWeeklyReward() {
   const mode = _modePopupMode;
   const data = _getModeRewardsData(mode);
   const pending = data.pendingWeekly;
   if (!pending || pending.claimed) { showToast('No weekly reward to claim!', 'var(--muted)'); return; }
+
+  // Server validates actual win count from game_results
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID) {
+    const periodStart = pending.week + 'T00:00:00Z';
+    // Weekly period ends 7 days later (Wednesday to Wednesday)
+    const d = new Date(pending.week + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 7);
+    const periodEnd = _modeUtcIso(d) + 'T00:00:00Z';
+    try {
+      const r = await fetch(`${getActiveServer().http}/mode-rewards/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, mode, period: 'weekly',
+                               periodKey: pending.week, periodStart, periodEnd }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const resp = r.ok ? await r.json() : null;
+      if (resp && !resp.ok) {
+        if (resp.error === 'already_claimed') { pending.claimed = true; saveState(); openModeRewardPopup(mode); return; }
+        if (resp.error === 'no_reward') { showToast('Not enough wins for a reward!', 'var(--muted)'); return; }
+        if (resp.error !== 'db_unavailable') { showToast('Claim failed — try again', 'var(--red)'); return; }
+      } else if (resp?.ok) {
+        pending.claimed = true;
+        const tickets = resp.tickets;
+        gameState.tickets = Math.min((gameState.tickets || 0) + tickets, 99);
+        saveState(); updateMenuStats(); updateTicketUI();
+        openModeRewardPopup(mode);
+        showToast(`🎟️ ${resp.tier} Weekly! +${tickets} Tickets`, 'var(--gold)');
+        playSound('achieve'); vibrate([50, 50, 200]);
+        return;
+      }
+    } catch(e) { /* offline fallback */ }
+  }
+
+  // Offline fallback
   const tier = MODE_WEEKLY_TIERS.find(t => pending.wins >= t.minWins);
   if (!tier) { showToast('No weekly reward to claim!', 'var(--muted)'); return; }
   pending.claimed = true;

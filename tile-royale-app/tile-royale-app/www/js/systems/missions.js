@@ -133,7 +133,7 @@ function trackMissionEvent(type, data) {
 
 // ─── Reward claiming ──────────────────────────────────────────────────────────
 
-function claimMissionReward(period, missionId) {
+async function claimMissionReward(period, missionId) {
   try {
     const s      = _getOrCreateMissions();
     const group  = period === 'daily' ? s.daily  : s.weekly;
@@ -141,6 +141,46 @@ function claimMissionReward(period, missionId) {
     const mState = group.missions.find(m => m.id === missionId);
     const def    = pool.find(m => m.id === missionId);
     if (!mState || !def || mState.claimed || (mState.progress || 0) < def.target) return;
+
+    // Server-side idempotency + progress re-validation for game-based missions
+    const periodKey = period === 'daily' ? s.daily.key : s.weekly.key;
+    if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID) {
+      try {
+        // Build period boundaries so server can recount game_results
+        const now   = new Date();
+        let periodStart, periodEnd;
+        if (period === 'daily') {
+          const d = new Date(s.daily.key);
+          periodStart = d.toISOString();
+          periodEnd   = new Date(d.getTime() + 86400000).toISOString();
+        } else {
+          const d = new Date(s.weekly.key);
+          periodStart = d.toISOString();
+          periodEnd   = new Date(d.getTime() + 7 * 86400000).toISOString();
+        }
+        const r = await fetch(`${getActiveServer().http}/missions/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            playerId: PLAYER_ID, missionId, periodKey,
+            missionType: def.type, target: def.target,
+            periodStart, periodEnd,
+          }),
+          signal: AbortSignal.timeout(6000),
+        });
+        const data = r.ok ? await r.json() : null;
+        if (data && !data.ok && !data.offline) {
+          if (data.error === 'already_claimed' || data.error === 'not_completed') {
+            if (data.error === 'already_claimed') {
+              mState.claimed = true;
+              _msSave(s);
+            }
+            renderMissionsPopup(); updateMissionsBadge();
+            return;
+          }
+        }
+      } catch(e) { /* offline fallback — allow local claim */ }
+    }
 
     mState.claimed = true;
     _msSave(s);
