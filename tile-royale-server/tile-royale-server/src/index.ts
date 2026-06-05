@@ -789,7 +789,9 @@ app.post("/offline-reward/claim", async (req, res) => {
   if (!lastSeen || (Date.now() - lastSeen.getTime()) < OFFLINE_RATE_MS)
     return res.json({ ok: false, error: 'not_eligible' });
 
-  const result = await recordOfflineRewardClaim(String(playerId), claimDate, Number(amount) || 0);
+  // Cap amount: OFFLINE_DIAMONDS=3 per 8h period, max 3 periods = 9 diamonds
+  const safeAmount = Math.min(Number(amount) || 0, 9);
+  const result = await recordOfflineRewardClaim(String(playerId), claimDate, safeAmount);
   if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
   if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
   res.json({ ok: true });

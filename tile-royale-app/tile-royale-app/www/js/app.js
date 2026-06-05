@@ -22,9 +22,9 @@ if (!localStorage.getItem('tr_player_id')) {
   localStorage.setItem('tr_player_id', uuid);
 }
 const _googleId = localStorage.getItem('tr_google_id');
-let PLAYER_ID = _googleId
-  ? `google_${_googleId}`
-  : localStorage.getItem('tr_player_id');
+// Always use the anonymous UUID for server calls — Google IDs fail the server UUID regex.
+// Google ID is kept only for account-binding display purposes.
+let PLAYER_ID = localStorage.getItem('tr_player_id');
 
 // ===== STATE =====
 

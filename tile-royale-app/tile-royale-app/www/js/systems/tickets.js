@@ -4,7 +4,7 @@ const TICKET_REFILL_MS = 60 * 60 * 1000; // 1 hour
 let ticketRefillInterval = null;
 
 function getTickets() {
-  return gameState.tickets !== undefined ? gameState.tickets : _origGetTicketsMax();
+  return gameState.tickets !== undefined ? gameState.tickets : TICKETS_MAX;
 }
 
 function useTicket() {

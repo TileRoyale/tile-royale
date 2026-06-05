@@ -500,10 +500,10 @@ function _executeSpin(serverRing, serverRarityId, serverGrantId) {
       wheelAngle    = finalAngle;
       if (!gameState.ringInventory) gameState.ringInventory = [];
       gameState.ringInventory.push(ring.id);
-      // Track server grant IDs for trading: map most-recent spin index to grantId
+      // Track server grant IDs by grantId key (not by index — indices shift on salvage)
       if (serverGrantId) {
-        if (!gameState.ringGrantIds) gameState.ringGrantIds = {};
-        gameState.ringGrantIds[gameState.ringInventory.length - 1] = serverGrantId;
+        if (!gameState.ringGrantMap) gameState.ringGrantMap = {};
+        gameState.ringGrantMap[serverGrantId] = ring.id;
       }
       saveState();
       showSpinResult(ring, rarDef);
@@ -518,6 +518,7 @@ function _executeSpin(serverRing, serverRarityId, serverGrantId) {
 }
 
 function devCalibrate50() {
+  if (!window.TILE_ROYALE_DEV) return;
   // Build a list of (rarity, angle) pairs — each sector repeated to reach ~50 total
   const order = [];
   for (const [rar, angles] of Object.entries(WHEEL_SECTOR_DEF)) {

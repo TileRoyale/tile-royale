@@ -183,6 +183,8 @@ async function watchAdsForTickets(count) {
     showToast(`Available in ${m}:${s.toString().padStart(2,'0')}`, 'var(--muted)');
     return;
   }
+  // Also check global cooldown (shared with random item ads) before showing the ad
+  if (!canWatchAd()) { showToast(getAdCooldownText(), 'var(--muted)'); return; }
 
   adWatchInProgress = true;
 

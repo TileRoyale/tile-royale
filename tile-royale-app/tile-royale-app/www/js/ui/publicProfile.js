@@ -253,8 +253,8 @@ function _ppRender(d) {
         <div class="pp-avatar">${d.avatar || '🎮'}</div>
       </div>
       <div class="pp-name-col">
-        <div class="pp-name">${d.player_name || 'Player'}</div>
-        ${d.player_tag ? `<div class="pp-tag">#${d.player_tag}</div>` : ''}
+        <div class="pp-name">${(d.player_name||'Player').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+        ${d.player_tag ? `<div class="pp-tag">#${String(d.player_tag).replace(/[^0-9]/g,'')}</div>` : ''}
         ${rankBadges.length ? `<div class="pp-rank-badges">${rankBadges.join('')}</div>` : ''}
       </div>
     </div>

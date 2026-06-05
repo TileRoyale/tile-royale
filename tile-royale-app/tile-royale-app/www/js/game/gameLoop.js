@@ -242,7 +242,6 @@ function scheduleBotTaps() {
   (activeBots||[]).forEach((bot, i) => {
     const delay = _speed.min + Math.random() * (_speed.max - _speed.min);
 
-    console.log('[BOT SPEED]', { bot: bot.name, min: _speed.min, max: _speed.max, delay: Math.round(delay) });
     const t = setTimeout(() => {
       if (!roundActive) return;
       recordTap(allPlayers.indexOf(bot), bot.avatar + ' ' + bot.name);
@@ -697,7 +696,7 @@ async function endGame(playerWon = false) {
   const activeBots = allPlayers.filter(p => p.isBot && !p.eliminated);
   let placeNum = playerEliminated && !playerWon ? 2 : 2;
   activeBots.slice(0, 4).forEach(bot => {
-    showPlaces.push({ place: placeNum++, name: bot.name, avatar: bot.avatar, isYou: false, diamonds: Math.max(5, 150 - (placeNum * 20)) });
+    showPlaces.push({ place: placeNum++, name: bot.name, avatar: bot.avatar, isYou: false, diamonds: 0 });
   });
 
   if (playerEliminated && !playerWon) {

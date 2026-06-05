@@ -89,18 +89,19 @@ function _inboxRenderFeed(notifications) {
     const canClaim = rewardMeta && !n.claimed_at;
     const wasClaimed = rewardMeta && n.claimed_at;
 
+    const _esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     return `
       <div class="inbox-card${isUnread ? ' inbox-card--unread' : ''}" id="inbox-card-${n.id}"
            onclick="markNotificationRead(${n.id})">
         <div class="inbox-card-header">
           <span class="inbox-type-icon">${meta.icon}</span>
           <div class="inbox-card-titles">
-            <div class="inbox-card-title">${n.title}</div>
+            <div class="inbox-card-title">${_esc(n.title)}</div>
             <div class="inbox-card-time">${_inboxRelTime(n.created_at)}</div>
           </div>
           ${isUnread ? '<div class="inbox-unread-dot"></div>' : ''}
         </div>
-        <div class="inbox-card-body">${(n.body || '').replace(/\n/g, '<br>')}</div>
+        <div class="inbox-card-body">${_esc(n.body || '').replace(/\n/g, '<br>')}</div>
         ${canClaim ? `
           <div class="inbox-reward-row">
             <span class="inbox-reward-label">${rewardMeta.icon} ${n.reward_amount} ${rewardMeta.label}</span>
