@@ -410,6 +410,26 @@ async function createTables(): Promise<void> {
       created_at  TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- KOTH fastest-clicker claims: one per player per claim_date per type ('daily'|'weekly')
+    CREATE TABLE IF NOT EXISTS koth_fastest_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      claim_date  DATE         NOT NULL,
+      claim_type  TEXT         NOT NULL,
+      reaction_ms INTEGER      NOT NULL DEFAULT 0,
+      diamonds    INTEGER      NOT NULL DEFAULT 0,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Solo milestone claims: one per player per milestone star threshold
+    CREATE TABLE IF NOT EXISTS solo_milestone_claims (
+      id           BIGSERIAL    PRIMARY KEY,
+      player_id    UUID         NOT NULL REFERENCES players(player_id),
+      milestone_pts INTEGER     NOT NULL,
+      gems         INTEGER      NOT NULL DEFAULT 0,
+      claimed_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
     -- Daily challenge swap records: one swap allowed per player per calendar date
     CREATE TABLE IF NOT EXISTS dc_swap_records (
       id           BIGSERIAL    PRIMARY KEY,
@@ -468,6 +488,8 @@ async function createTables(): Promise<void> {
     CREATE        INDEX IF NOT EXISTS idx_diamond_spends_player    ON diamond_spends(player_id, spent_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_grants           ON surprise_grants(player_id, grant_date);
     CREATE        INDEX IF NOT EXISTS idx_ticket_events_player      ON ticket_events(player_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_koth_fastest_claims       ON koth_fastest_claims(player_id, claim_date, claim_type);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_milestone_claims     ON solo_milestone_claims(player_id, milestone_pts);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_swap_records           ON dc_swap_records(player_id, swap_date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_level_up_claims           ON level_up_claims(player_id, level);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_level_claims         ON solo_level_claims(player_id, level_num);
@@ -2331,6 +2353,45 @@ export async function getMissionServerCount(
   }
   const rows = await query(sql, [playerId, periodStart, periodEnd]);
   return rows && rows.length > 0 ? (rows[0].cnt ?? 0) : 0;
+}
+
+// ─── KOTH Fastest Claims ──────────────────────────────────────────────────────
+
+export async function recordKothFastestClaim(
+  playerId: string, claimDate: string, claimType: string, reactionMs: number, diamonds: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO koth_fastest_claims (player_id, claim_date, claim_type, reaction_ms, diamonds)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [playerId, claimDate, claimType, reactionMs, diamonds]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordKothFastestClaim error:', err);
+    return 'error';
+  }
+}
+
+// ─── Solo Milestone Claims ────────────────────────────────────────────────────
+
+export async function recordSoloMilestoneClaim(
+  playerId: string, milestonePts: number, gems: number
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO solo_milestone_claims (player_id, milestone_pts, gems) VALUES ($1, $2, $3)`,
+      [playerId, milestonePts, gems]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_claimed';
+    console.error('[DB] recordSoloMilestoneClaim error:', err);
+    return 'error';
+  }
 }
 
 // ─── Ticket Events ────────────────────────────────────────────────────────────

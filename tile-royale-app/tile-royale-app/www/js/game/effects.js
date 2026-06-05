@@ -229,6 +229,7 @@ function updateFeatureLocks() {
 
 // ── VIP SYSTEM ──────────────────────────────────────────────────────
 function toggleVipTest() {
+  if (!window.TILE_ROYALE_DEV) return;
   gameState.isVip = !gameState.isVip;
   saveState();
   updateFeatureLocks();

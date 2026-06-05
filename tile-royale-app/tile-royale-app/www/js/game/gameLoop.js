@@ -689,7 +689,7 @@ async function endGame(playerWon = false) {
   // Top 5 results
   const showPlaces = [
     { place: 1, name: winnerName, avatar: winnerAv,
-      isYou: !playerEliminated || playerWon, diamonds: playerEliminated && !playerWon ? 150 : diamonds },
+      isYou: !playerEliminated || playerWon, diamonds: diamonds },
   ];
 
   // Fill in some bots
@@ -703,14 +703,15 @@ async function endGame(playerWon = false) {
     showPlaces.push({ place: playerPlace, name: 'YOU', avatar: '🎮', isYou: true, diamonds });
   }
 
+  const _escLb = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   showPlaces.sort((a, b) => a.place - b.place).forEach(p => {
     const placeColors = { 1: 'var(--gold)', 2: '#c0c0c0', 3: '#cd7f32' };
     const row = document.createElement('div');
     row.className = 'lb-row' + (p.isYou ? ' you-row' : '');
     row.innerHTML = `
       <div class="lb-place" style="color:${placeColors[p.place] || 'var(--muted)'}">${p.place}</div>
-      <div class="lb-avatar">${p.avatar}</div>
-      <div class="lb-name">${p.name}${p.isYou ? ' <span style="color:var(--gold);font-size:11px">(YOU)</span>' : ''}</div>
+      <div class="lb-avatar">${_escLb(p.avatar)}</div>
+      <div class="lb-name">${_escLb(p.name)}${p.isYou ? ' <span style="color:var(--gold);font-size:11px">(YOU)</span>' : ''}</div>
       <div class="lb-diamond">💎 ${p.diamonds}</div>
     `;
     lb.appendChild(row);

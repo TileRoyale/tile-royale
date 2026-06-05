@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -85,7 +85,7 @@ const app    = express();
 const MIN_CLIENT_VERSION = "v0.7.4";
 
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Privacy Policy page
 app.get("/privacy", (_req, res) => {
@@ -711,7 +711,7 @@ app.post("/solo/complete", async (req, res) => {
   const lvl = Number(levelNum);
   const gems = Number(gemReward);
   if (!lvl || lvl < 1 || lvl > 100) return res.status(400).json({ ok: false, error: 'invalid_level' });
-  if (isNaN(gems) || gems < 0 || gems > 50) return res.status(400).json({ ok: false, error: 'invalid_reward' });
+  if (isNaN(gems) || gems < 0 || gems > 100) return res.status(400).json({ ok: false, error: 'invalid_reward' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true });
 
   const result = await recordSoloLevelClaim(String(playerId), lvl, gems);
@@ -1339,6 +1339,43 @@ app.post("/koth/prizes/claim", async (req, res) => {
   res.json(result);
 });
 
+// POST /koth/fastest/claim  { playerId, claimDate, claimType, reactionMs, amount }
+// Records KOTH fastest-clicker reward claim (daily or weekly), idempotent.
+app.post("/koth/fastest/claim", async (req, res) => {
+  const { playerId, claimDate, claimType, reactionMs, amount } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!claimDate || !/^\d{4}-\d{2}-\d{2}$/.test(claimDate))
+    return res.status(400).json({ ok: false, error: 'invalid_date' });
+  if (!['daily', 'weekly'].includes(String(claimType)))
+    return res.status(400).json({ ok: false, error: 'invalid_type' });
+  const ms  = Math.max(0, Number(reactionMs) || 0);
+  const amt = Math.min(500, Math.max(0, Number(amount) || 0));
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordKothFastestClaim(String(playerId), claimDate, String(claimType), ms, amt);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  if (amt > 0) await addTrustedDiamonds(String(playerId), amt).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /solo/milestone/claim  { playerId, milestonePts, gems }
+// Records a solo milestone reward claim, idempotent per player per milestone threshold.
+app.post("/solo/milestone/claim", async (req, res) => {
+  const { playerId, milestonePts, gems } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  const pts = Number(milestonePts);
+  const g   = Math.min(1000, Math.max(0, Number(gems) || 0));
+  if (!pts || pts < 1) return res.status(400).json({ ok: false, error: 'invalid_milestone' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordSoloMilestoneClaim(String(playerId), pts, g);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  if (g > 0) await addTrustedDiamonds(String(playerId), g).catch(() => {});
+  res.json({ ok: true });
+});
+
 // POST /ring/reward  { playerId, amount, rewardType }
 // Raises the trusted-diamond ceiling for ring salvage and ring achievement rewards.
 // rewardType: 'salvage' | 'achievement'
@@ -1353,14 +1390,20 @@ app.post("/ring/reward", async (req, res) => {
     return res.status(400).json({ ok: false, error: 'invalid_type' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true });
 
-  // Rate-limit: max 50 ring reward claims per 24 hours per player
+  // Rate-limit: max 50 ring reward grants per 24 hours per player
   const rows = await query(
-    `SELECT COUNT(*)::int AS cnt FROM diamond_spends
-     WHERE player_id = $1 AND item_id LIKE 'ring_%' AND spent_at > now() - interval '24 hours'`,
+    `SELECT COUNT(*)::int AS cnt FROM ticket_events
+     WHERE player_id = $1 AND source = 'ring_reward' AND created_at > now() - interval '24 hours'`,
     [playerId]
   );
   const cnt = Number(rows?.[0]?.cnt ?? 0);
   if (cnt >= 50) return res.json({ ok: false, error: 'rate_limit' });
+
+  // Record the grant so rate limit works on subsequent calls
+  await query(
+    `INSERT INTO ticket_events (player_id, delta, source, balance) VALUES ($1, 0, 'ring_reward', $2)`,
+    [playerId, amt]
+  ).catch(() => {});
 
   await addTrustedDiamonds(String(playerId), amt).catch(() => {});
   res.json({ ok: true });
@@ -1438,7 +1481,9 @@ app.post("/ring/spin", async (req, res) => {
 // Validates the grant and creates a trade code.
 app.post("/ring/trade/create", async (req, res) => {
   const { playerId, grantId, ringId } = req.body;
-  if (!playerId || !grantId || !ringId)
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!grantId || !ringId)
     return res.json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });
@@ -1456,7 +1501,9 @@ app.post("/ring/trade/create", async (req, res) => {
 // Validates the trade code and transfers the ring + new grant to the claimer.
 app.post("/ring/trade/accept", async (req, res) => {
   const { claimerPlayerId, tradeCode } = req.body;
-  if (!claimerPlayerId || !tradeCode)
+  if (!claimerPlayerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(claimerPlayerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!tradeCode)
     return res.json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });
@@ -1474,7 +1521,9 @@ app.post("/ring/trade/accept", async (req, res) => {
 // Cancels a trade — returns the grant to 'held' status.
 app.post("/ring/trade/cancel", async (req, res) => {
   const { playerId, tradeCode } = req.body;
-  if (!playerId || !tradeCode)
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!tradeCode)
     return res.json({ ok: false, error: 'missing_params' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'db_unavailable' });

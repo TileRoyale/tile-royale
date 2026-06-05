@@ -356,10 +356,24 @@ function renderKothFastestSection() {
     weeklyBtn.innerHTML = `🏆 CLAIM WEEKLY FASTEST — ${pendingWeeklyMs}ms · 💎 <span id="kothFastestWeeklyClaimAmt">${pendingWeeklyPrize}</span>`;
 }
 
-function claimKothFastestDaily() {
+async function claimKothFastestDaily() {
   const yData = gameState.kothDaily?.[_kothYesterdayKey()];
   if (!yData || !yData.bestReactionMs || yData.fastestClaimed) {
     showToast('No daily fastest clicker reward to claim!', 'var(--muted)'); return;
+  }
+  const claimDate = _kothYesterdayKey().replace('koth_', '').replace(/_/g, '-') || new Date(Date.now() - 86400000).toISOString().slice(0,10);
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/koth/fastest/claim`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, claimDate, claimType: 'daily', reactionMs: yData.bestReactionMs, amount: 50 }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline && data.error === 'already_claimed') {
+        yData.fastestClaimed = true; saveState(); renderKothFastestSection(); return;
+      }
+    } catch(e) { /* offline — allow */ }
   }
   yData.fastestClaimed = true;
   gameState.diamonds = (gameState.diamonds || 0) + 50;
@@ -368,13 +382,27 @@ function claimKothFastestDaily() {
   playSound('achieve'); vibrate([50, 50, 200]);
 }
 
-function claimKothFastestWeekly() {
+async function claimKothFastestWeekly() {
   const pwData = gameState.koth?.[_kothPrevWeekKey()];
   if (!pwData || !pwData.bestReactionMs || pwData.fastestClaimed) {
     showToast('No weekly fastest reward!', 'var(--muted)'); return;
   }
   const prize = Math.floor((pwData.pool || 0) * 0.10);
   if (prize <= 0) { showToast('No weekly fastest reward!', 'var(--muted)'); return; }
+  const claimDate = new Date().toISOString().slice(0,10);
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/koth/fastest/claim`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, claimDate, claimType: 'weekly', reactionMs: pwData.bestReactionMs, amount: prize }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline && data.error === 'already_claimed') {
+        pwData.fastestClaimed = true; saveState(); renderKothFastestSection(); return;
+      }
+    } catch(e) { /* offline — allow */ }
+  }
   pwData.fastestClaimed = true;
   gameState.diamonds = (gameState.diamonds || 0) + prize;
   saveState(); updateMenuStats(); renderKothFastestSection();
@@ -448,6 +476,7 @@ function renderKothLeaderboard(playerWins, serverRows) {
     const medalMap     = { 1: '🥇', 2: '🥈', 3: '🥉' };
     const playerInList = serverRows.some(e => e.player_id === pid);
 
+    const _esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     serverRows.forEach(entry => {
       const isYou    = entry.player_id === pid;
       const rankLabel = medalMap[entry.rank] || `#${entry.rank}`;
@@ -455,11 +484,11 @@ function renderKothLeaderboard(playerWins, serverRows) {
       row.className = 'lb-entry' + (isYou ? ' is-you' : '');
       row.innerHTML =
         `<div class="lb-entry-rank">${rankLabel}</div>` +
-        `<div class="lb-entry-avatar">${entry.avatar}</div>` +
-        `<div class="lb-entry-name">${entry.player_name}` +
+        `<div class="lb-entry-avatar">${_esc(entry.avatar)}</div>` +
+        `<div class="lb-entry-name">${_esc(entry.player_name)}` +
           (isYou ? ' <span style="font-size:10px;color:var(--fire)">(YOU)</span>' : '') +
         `</div>` +
-        `<div class="lb-entry-val">${entry.wins} win${entry.wins !== 1 ? 's' : ''}</div>`;
+        `<div class="lb-entry-val">${Number(entry.wins)||0} win${entry.wins !== 1 ? 's' : ''}</div>`;
       lb.appendChild(row);
     });
 
@@ -474,8 +503,8 @@ function renderKothLeaderboard(playerWins, serverRows) {
       row.className = 'lb-entry is-you';
       row.innerHTML =
         `<div class="lb-entry-rank">${myRank ? `#${myRank}` : '—'}</div>` +
-        `<div class="lb-entry-avatar">${playerAvatar}</div>` +
-        `<div class="lb-entry-name">${playerName} <span style="font-size:10px;color:var(--fire)">(YOU)</span></div>` +
+        `<div class="lb-entry-avatar">${_esc(playerAvatar)}</div>` +
+        `<div class="lb-entry-name">${_esc(playerName)} <span style="font-size:10px;color:var(--fire)">(YOU)</span></div>` +
         `<div class="lb-entry-val">${playerWins} win${playerWins !== 1 ? 's' : ''}</div>`;
       lb.appendChild(row);
     }

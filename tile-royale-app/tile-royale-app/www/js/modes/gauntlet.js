@@ -741,8 +741,8 @@ async function acceptTrade() {
         return;
       }
       if (data && !data.ok && data.error && data.error !== 'db_unavailable') {
-        const errMap = { trade_not_found:'❌ Code not found', already_claimed:'❌ Code already used',
-                         trade_expired:'❌ Code expired', self_trade:'❌ Cannot trade with yourself' };
+        const errMap = { code_not_found:'❌ Code not found', already_claimed:'❌ Code already used',
+                         code_expired:'❌ Code expired', cannot_trade_with_self:'❌ Cannot trade with yourself' };
         msg.textContent = errMap[data.error] || '❌ Trade failed';
         msg.className = 'redeem-msg error';
         _isClaiming = false; if (claimBtn) claimBtn.disabled = false;

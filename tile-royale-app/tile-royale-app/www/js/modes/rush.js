@@ -271,5 +271,27 @@ function endPractice() {
 
   showScreen('practiceResultScreen');
   playSound(grade === 'S' || grade === 'A' ? 'victory' : 'tap');
+
+  // Submit best scores to server leaderboard (fire-and-forget)
+  _submitPracticeScore(practiceTaps, avgReaction);
+}
+
+function _submitPracticeScore(taps, reactionMs) {
+  try {
+    if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+    if (typeof getActiveServer !== 'function') return;
+    fetch(`${getActiveServer().http}/practice/score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerId:    PLAYER_ID,
+        playerName:  gameState.playerName || 'Player',
+        avatar:      (typeof getActiveAvatar === 'function' ? getActiveAvatar().icon : null) || '🔥',
+        taps30s:     taps,
+        reactionMs:  reactionMs,
+      }),
+      signal: AbortSignal.timeout(8000),
+    }).catch(() => {});
+  } catch(e) {}
 }
 
