@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -722,17 +722,55 @@ app.post("/solo/complete", async (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /ads/reward/claim  { playerId, rewardType }
-// Server enforces 1-hour cooldown to prevent localStorage bypass.
-app.post("/ads/reward/claim", async (req, res) => {
-  const { playerId, rewardType = 'tickets' } = req.body;
+// POST /tickets/spend  { playerId, balance }
+// Fire-and-forget audit record of a ticket spend. Not authoritative (client still controls
+// balance) but provides a server-side audit trail for detecting impossible ticket counts.
+app.post("/tickets/spend", async (req, res) => {
+  const { playerId, balance } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  await recordTicketEvent(String(playerId), -1, 'match', Number(balance) || 0).catch(() => {});
+  res.json({ ok: true });
+});
+
+// POST /dc/swap  { playerId, swapDate }
+// Records a daily-challenge swap (one allowed per UTC calendar day per player).
+app.post("/dc/swap", async (req, res) => {
+  const { playerId, swapDate } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!swapDate || !/^\d{4}-\d{2}-\d{2}$/.test(swapDate))
+    return res.status(400).json({ ok: false, error: 'invalid_date' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const result = await recordDcSwap(String(playerId), swapDate);
+  if (result === 'already_swapped') return res.json({ ok: false, error: 'already_swapped' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+  res.json({ ok: true });
+});
+
+// POST /ads/reward/claim  { playerId }
+// Server enforces 1-hour cooldown and determines the reward type.
+// Returns { ok: true, rewardIndex: 0-3 } so client uses a deterministic table.
+function _serverRollAdReward(): number {
+  const roll = Math.random() * 100;
+  if (roll < 80) return 0; // tickets ×1
+  if (roll < 90) return 1; // crystal ×1
+  if (roll < 97) return 2; // caltrops ×1
+  return 3;                 // shadow_tile ×1
+}
+const AD_REWARD_TYPES = ['tickets', 'crystal', 'caltrops', 'shadow_tile'];
+
+app.post("/ads/reward/claim", async (req, res) => {
+  const { playerId } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true, rewardIndex: 0 });
   const canClaim = await checkAdRewardCooldown(String(playerId));
   if (!canClaim) return res.json({ ok: false, error: 'cooldown_active' });
-  await recordAdRewardClaim(String(playerId), String(rewardType));
-  res.json({ ok: true });
+  const rewardIndex = _serverRollAdReward();
+  await recordAdRewardClaim(String(playerId), AD_REWARD_TYPES[rewardIndex]);
+  res.json({ ok: true, rewardIndex });
 });
 
 // POST /offline-reward/claim  { playerId, claimDate, amount }
@@ -774,17 +812,27 @@ app.post("/dc/claim", async (req, res) => {
 
 // POST /surprise/claim  { playerId, grantDate }
 // One surprise bonus per player per UTC calendar day.
+// Server determines the reward deterministically (playerId + grantDate hash) and
+// returns rewardIndex so the client doesn't roll its own random.
+function _serverRollSurpriseReward(playerId: string, grantDate: string): number {
+  const seed = playerId + grantDate;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+  return Math.abs(h) % 4;
+}
+
 app.post("/surprise/claim", async (req, res) => {
   const { playerId, grantDate } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   if (!grantDate || !/^\d{4}-\d{2}-\d{2}$/.test(grantDate))
     return res.status(400).json({ ok: false, error: 'invalid_date' });
-  if (!getDbStatus().available) return res.json({ ok: true, offline: true });
+  const rewardIndex = _serverRollSurpriseReward(String(playerId), String(grantDate));
+  if (!getDbStatus().available) return res.json({ ok: true, offline: true, rewardIndex });
   const result = await recordSurpriseGrant(String(playerId), grantDate);
   if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
   if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
-  res.json({ ok: true });
+  res.json({ ok: true, rewardIndex });
 });
 
 // POST /diamonds/spend  { playerId, itemId, amount }

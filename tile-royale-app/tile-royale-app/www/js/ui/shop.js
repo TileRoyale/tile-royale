@@ -469,7 +469,7 @@ async function _verifyAndDeliverPurchase(purchase) {
 
   if (!grant) {
     // Server unreachable: build grant from local catalog so the player still gets their items.
-    // The purchase will be re-verified on the next /purchase/restore call.
+    // Also store in pendingPurchases queue so billing.js retries on next startup.
     const pkg = DIAMOND_PACKAGES.find(p => p.id === productId);
     const bundle = STORE_BUNDLES.find(b => b.id === productId);
     if (pkg) {
@@ -482,6 +482,22 @@ async function _verifyAndDeliverPurchase(purchase) {
       console.error('[Purchase] Unknown productId:', productId);
       return;
     }
+    // Queue for retry on next startup — survives even if Google Play token is already consumed
+    try {
+      const pending = JSON.parse(localStorage.getItem('_pendingPurchases') || '[]');
+      const alreadyQueued = pending.some(p => p.purchaseToken === purchaseToken);
+      if (!alreadyQueued) {
+        pending.push({ productId, purchaseToken, orderId, queuedAt: Date.now() });
+        localStorage.setItem('_pendingPurchases', JSON.stringify(pending));
+      }
+    } catch(e) {}
+  } else {
+    // Server verified successfully — remove from pending queue if it was there
+    try {
+      const pending = JSON.parse(localStorage.getItem('_pendingPurchases') || '[]');
+      const filtered = pending.filter(p => p.purchaseToken !== purchaseToken);
+      if (filtered.length !== pending.length) localStorage.setItem('_pendingPurchases', JSON.stringify(filtered));
+    } catch(e) {}
   }
 
   _applyPurchaseGrant(grant);

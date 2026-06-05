@@ -400,6 +400,24 @@ async function createTables(): Promise<void> {
       granted_at   TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Ticket events: audit log of every ticket spend (source = 'match') and earn
+    CREATE TABLE IF NOT EXISTS ticket_events (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      delta       INTEGER      NOT NULL,
+      source      TEXT         NOT NULL,
+      balance     INTEGER,
+      created_at  TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Daily challenge swap records: one swap allowed per player per calendar date
+    CREATE TABLE IF NOT EXISTS dc_swap_records (
+      id           BIGSERIAL    PRIMARY KEY,
+      player_id    UUID         NOT NULL REFERENCES players(player_id),
+      swap_date    DATE         NOT NULL,
+      swapped_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
     -- Level-up reward claims: one per player per level (prevents re-claiming after save wipe)
     CREATE TABLE IF NOT EXISTS level_up_claims (
       id         BIGSERIAL    PRIMARY KEY,
@@ -449,6 +467,8 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_claims                ON dc_claims(player_id, challenge_date);
     CREATE        INDEX IF NOT EXISTS idx_diamond_spends_player    ON diamond_spends(player_id, spent_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_grants           ON surprise_grants(player_id, grant_date);
+    CREATE        INDEX IF NOT EXISTS idx_ticket_events_player      ON ticket_events(player_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_swap_records           ON dc_swap_records(player_id, swap_date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_level_up_claims           ON level_up_claims(player_id, level);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_level_claims         ON solo_level_claims(player_id, level_num);
   `);
@@ -2311,6 +2331,43 @@ export async function getMissionServerCount(
   }
   const rows = await query(sql, [playerId, periodStart, periodEnd]);
   return rows && rows.length > 0 ? (rows[0].cnt ?? 0) : 0;
+}
+
+// ─── Ticket Events ────────────────────────────────────────────────────────────
+
+export async function recordTicketEvent(
+  playerId: string, delta: number, source: string, balance?: number
+): Promise<boolean> {
+  if (!pool) return false;
+  try {
+    await pool.query(
+      `INSERT INTO ticket_events (player_id, delta, source, balance) VALUES ($1, $2, $3, $4)`,
+      [playerId, delta, source, balance ?? null]
+    );
+    return true;
+  } catch (err) {
+    console.error('[DB] recordTicketEvent error:', err);
+    return false;
+  }
+}
+
+// ─── DC Swap Records ─────────────────────────────────────────────────────────
+
+export async function recordDcSwap(
+  playerId: string, swapDate: string
+): Promise<'ok' | 'already_swapped' | 'error'> {
+  if (!pool) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO dc_swap_records (player_id, swap_date) VALUES ($1, $2)`,
+      [playerId, swapDate]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err?.code === '23505') return 'already_swapped';
+    console.error('[DB] recordDcSwap error:', err);
+    return 'error';
+  }
 }
 
 // ─── Level-up Claims ──────────────────────────────────────────────────────────

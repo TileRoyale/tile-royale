@@ -24,12 +24,49 @@ async function queryPurchasesForRestore() {
   }
 }
 
+// Retry purchases that were delivered locally during a server outage.
+// These are stored in localStorage._pendingPurchases so they survive even if
+// Google Play no longer returns them via queryPurchases() (already consumed).
+async function _retryPendingPurchases() {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
+  if (typeof getActiveServer !== 'function') return;
+  let pending;
+  try { pending = JSON.parse(localStorage.getItem('_pendingPurchases') || '[]'); } catch(e) { return; }
+  if (!pending.length) return;
+
+  const stillPending = [];
+  for (const p of pending) {
+    try {
+      const r = await fetch(`${getActiveServer().http}/purchase/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, productId: p.productId,
+                               purchaseToken: p.purchaseToken, orderId: p.orderId || '' }),
+        signal: AbortSignal.timeout(12000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data?.ok || data?.error === 'already_processed') {
+        // Successfully recorded — remove from queue (grant already applied locally at purchase time)
+        console.log('[Billing] Pending purchase verified:', p.productId);
+      } else {
+        stillPending.push(p); // keep for next attempt
+      }
+    } catch(e) {
+      stillPending.push(p); // network error — keep for next attempt
+    }
+  }
+  try { localStorage.setItem('_pendingPurchases', JSON.stringify(stillPending)); } catch(e) {}
+}
+
 // Called once on app startup after cloud save loads.
 // Sends any unacknowledged purchases to the server for verification and re-delivery.
 // Handles the case where a purchase was granted locally during a server outage.
 async function restorePurchasesOnStartup() {
   if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
   if (typeof getActiveServer !== 'function') return;
+
+  // First: retry any purchases that failed verification at purchase time
+  await _retryPendingPurchases();
 
   const purchases = await queryPurchasesForRestore();
   if (!purchases.length) return;

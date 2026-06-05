@@ -33,6 +33,7 @@ function _csUrl() {
 // ─── Save ──────────────────────────────────────────────────────────────────────
 
 // Bundle separate localStorage keys into the save blob so they survive reinstall.
+// Each value is validated as parseable JSON before being included — corrupted keys are skipped.
 function _csCollectExtras() {
   const keys = {
     _tr_missions:    'tr_missions',
@@ -43,12 +44,21 @@ function _csCollectExtras() {
   };
   const out = {};
   for (const [field, lsKey] of Object.entries(keys)) {
-    try { const v = localStorage.getItem(lsKey); if (v) out[field] = v; } catch(e) {}
+    try {
+      const v = localStorage.getItem(lsKey);
+      if (v) {
+        JSON.parse(v); // validate — throws if corrupted
+        out[field] = v;
+      }
+    } catch(e) {
+      console.warn('[CloudSave] Skipping corrupted key:', lsKey);
+    }
   }
   return out;
 }
 
 // Restore bundled keys back to localStorage after a cloud load.
+// Each value is validated before writing — corrupted cloud data is skipped.
 function _csRestoreExtras(saveData) {
   const keys = {
     _tr_missions:    'tr_missions',
@@ -58,7 +68,14 @@ function _csRestoreExtras(saveData) {
     _gauntlet_data:  'gauntletData',
   };
   for (const [field, lsKey] of Object.entries(keys)) {
-    try { if (saveData[field]) localStorage.setItem(lsKey, saveData[field]); } catch(e) {}
+    try {
+      if (saveData[field]) {
+        JSON.parse(saveData[field]); // validate before writing
+        localStorage.setItem(lsKey, saveData[field]);
+      }
+    } catch(e) {
+      console.warn('[CloudSave] Skipping corrupted cloud extra:', field);
+    }
   }
 }
 
