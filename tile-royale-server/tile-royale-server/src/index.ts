@@ -6,8 +6,66 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward } from "./db";
 import { google } from "googleapis";
+import * as firebaseAdmin from "firebase-admin";
+
+// ─── Firebase Cloud Messaging ─────────────────────────────────────────────────
+// Set FIREBASE_SERVICE_ACCOUNT env var to the JSON content of a Firebase
+// service account key (from Firebase Console → Project Settings → Service Accounts).
+// When the var is absent the server runs normally but push notifications are skipped.
+
+let _fcmReady = false;
+
+(function initFirebase() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw) {
+    console.log('[FCM] FIREBASE_SERVICE_ACCOUNT not set — push notifications disabled');
+    return;
+  }
+  try {
+    const serviceAccount = JSON.parse(raw);
+    firebaseAdmin.initializeApp({
+      credential: firebaseAdmin.credential.cert(serviceAccount),
+    });
+    _fcmReady = true;
+    console.log('[FCM] ✅ Firebase Admin initialized');
+  } catch(e: any) {
+    console.error('[FCM] Failed to initialize Firebase Admin:', e?.message);
+  }
+})();
+
+// Send a push notification to a single FCM token.
+// Silently swips invalid/expired tokens — caller does not need to handle errors.
+async function _sendFcm(token: string, title: string, body: string, data?: Record<string, string>): Promise<void> {
+  if (!_fcmReady) return;
+  try {
+    await firebaseAdmin.messaging().send({
+      token,
+      notification: { title, body },
+      data,
+      android: { priority: 'high' },
+    });
+  } catch(e: any) {
+    // messaging/registration-token-not-registered → stale token, ignore silently
+    if (e?.errorInfo?.code !== 'messaging/registration-token-not-registered') {
+      console.warn('[FCM] send error:', e?.errorInfo?.code || e?.message);
+    }
+  }
+}
+
+// Send a push notification to a player by their player_id.
+// Looks up the FCM token from the database and fires the message.
+async function sendPushToPlayer(playerId: string, title: string, body: string, data?: Record<string, string>): Promise<void> {
+  if (!_fcmReady) return;
+  try {
+    const token = await getPlayerPushToken(playerId);
+    if (!token) return;
+    await _sendFcm(token, title, body, data);
+  } catch(e: any) {
+    console.warn('[FCM] sendPushToPlayer error:', e?.message);
+  }
+}
 
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
@@ -378,6 +436,17 @@ app.post("/friends/request", async (req, res) => {
   if (!target) return res.json({ ok: false, status: 'not_found' });
 
   const status = await sendFriendRequest(requesterId, target.player_id);
+  if (status === 'sent') {
+    const requesterStats = await getPlayerStats(requesterId);
+    const requesterName  = requesterStats?.player_name || 'A player';
+    createPlayerNotification(
+      target.player_id,
+      '👋 Friend Request',
+      `${requesterName} wants to be your friend!`,
+      'friend', null, null
+    ).catch(() => {});
+    sendPushToPlayer(target.player_id, '👋 Friend Request', `${requesterName} wants to be your friend!`).catch(() => {});
+  }
   res.json({ ok: status === 'sent', status, targetName: target.player_name, targetTag: target.player_tag });
 });
 
@@ -407,6 +476,7 @@ app.post("/friends/respond", async (req, res) => {
       'diamonds',
       REFERRAL_REWARD
     ).catch(() => {});
+    sendPushToPlayer(requesterId, '🤝 Friend Added!', `${targetName} accepted your friend request. You earned 💎 ${REFERRAL_REWARD}!`).catch(() => {});
 
     // Reward the accepter
     createPlayerNotification(
@@ -417,6 +487,7 @@ app.post("/friends/respond", async (req, res) => {
       'diamonds',
       REFERRAL_REWARD
     ).catch(() => {});
+    sendPushToPlayer(targetId, '🤝 New Friend!', `You and ${requesterName} are now friends. You earned 💎 ${REFERRAL_REWARD}!`).catch(() => {});
   }
 
   res.json({ ok });
@@ -494,6 +565,8 @@ app.post("/admin/notification", requireAdmin, async (req, res) => {
     reward_amount != null ? Number(reward_amount) : null
   );
   if (!notif) return res.status(500).json({ error: 'insert failed' });
+  // Fire push notification alongside the inbox entry
+  sendPushToPlayer(String(playerId), String(title), String(body)).catch(() => {});
   res.status(201).json({ ok: true, notification: notif });
 });
 
@@ -594,9 +667,6 @@ const PROMO_CODES: Record<string, {
   'WHALE4EVER':   { diamonds: 2000, items: { shadow_tile: 5 },                  desc: 'Whale appreciation gift 🐋',          maxUses: 999999 },
   'BUGFIX':       { diamonds: 200,                                               desc: 'Thanks for your patience!',           maxUses: 999999 },
   'RAZ4WIN':      { action: 'koth_top3',                                        desc: 'KOTH Top 3 status + Custom Lobby unlock', maxUses: 999999 },
-  'DEV-GEMS':     { diamonds: 10000,                                             desc: 'Dev: +10 000 diamonds',               maxUses: 999999, dev: true },
-  'DEV-LEVEL10':  { action: 'level10',                                          desc: 'Dev: Set Level 10',                   maxUses: 999999, dev: true },
-  'DEV-GAUNTLET': { action: 'gauntlet',                                         desc: 'Dev: Open Gauntlet',                  maxUses: 999999, dev: true },
 };
 
 // POST /promo/redeem  { playerId, code }
@@ -990,6 +1060,50 @@ app.get("/gauntlet/leaderboard", async (req, res) => {
   res.json({ dbAvailable: true, rankings });
 });
 
+// POST /gauntlet/weekly/claim  { playerId, weekStart }
+// weekStart: ISO Monday date "YYYY-MM-DD" of the PREVIOUS week.
+// Server re-derives the player's rank from the live leaderboard and grants the reward.
+// Idempotent: returns ok:false with error 'already_claimed' on duplicate.
+app.post("/gauntlet/weekly/claim", async (req, res) => {
+  const { playerId, weekStart } = req.body;
+  if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
+    return res.status(400).json({ ok: false, error: 'invalid_player' });
+  if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart))
+    return res.status(400).json({ ok: false, error: 'invalid_week_start' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'db_unavailable' });
+
+  // Derive rank from current leaderboard snapshot
+  const rankings = await getGauntletLeaderboard(playerId);
+  if (!rankings) return res.json({ ok: false, error: 'db_error' });
+
+  const total   = rankings.length;
+  const myEntry = rankings.find((r: any) => r.is_me);
+  const rank    = myEntry ? Number(myEntry.rank) : total + 1;
+
+  // Map rank → reward tiers (mirrors client _gmPlacementInfo)
+  const pct = total > 0 ? (rank / total) * 100 : 100;
+  let spins = 1, diamonds = 10;
+  if (rank === 1)    { spins = 40; diamonds = 400; }
+  else if (pct <= 2) { spins = 25; diamonds = 250; }
+  else if (pct <= 3) { spins = 20; diamonds = 200; }
+  else if (pct <= 5) { spins = 15; diamonds = 150; }
+  else if (pct <= 10){ spins = 10; diamonds = 100; }
+  else if (pct <= 25){ spins = 7;  diamonds = 70;  }
+  else if (pct <= 50){ spins = 5;  diamonds = 50;  }
+  else if (pct <= 75){ spins = 3;  diamonds = 30;  }
+
+  const result = await claimGauntletWeeklyReward(playerId, weekStart, rank, total, spins, diamonds);
+  if (result === 'already_claimed') return res.json({ ok: false, error: 'already_claimed' });
+  if (result === 'error')           return res.json({ ok: false, error: 'db_error' });
+
+  // Raise trusted-diamond ceiling for the legitimate gain
+  if (diamonds > 0) await addTrustedDiamonds(playerId, diamonds).catch(() => {});
+
+  console.log(`[Gauntlet] Weekly claim ${playerId} rank ${rank}/${total} → ${spins} spins ${diamonds}💎`);
+  res.json({ ok: true, rank, total, spins, diamonds });
+});
+
 // ─── Practice Mode Leaderboard ───────────────────────────────────────────────
 
 // POST /practice/score  { playerId, playerName, avatar, taps30s, reactionMs }
@@ -1047,6 +1161,7 @@ const PRODUCT_CATALOG: Record<string, {
   'bundle.mobydick': { type:'bundle', bundleId:'bundle.mobydick', diamonds:7500,  items:{crystal:10,caltrops:10,shadow_tile:5}, skins:['vic_mobydick'], tickets:20, whaleBadge:true, priceVal:49.99 },
   'bundle.whale1':   { type:'bundle', bundleId:'bundle.whale1',   diamonds:16000, items:{shadow_tile:20},                   skins:['table_obsidian','tile_obsidian','tile_diamond'], tickets:100, whaleBadge:true, priceVal:79.99  },
   'bundle.whale2':   { type:'bundle', bundleId:'bundle.whale2',   diamonds:26000, items:{shadow_tile:50},                   skins:['fx_godray','fx_blackhole','tap_shockwave','tap_goldcrack','table_aurora','table_obsidian','tile_obsidian','tile_diamond'], whaleBadge:true, priceVal:129.99 },
+  'offer.firstweek': { type:'bundle', bundleId:'offer.firstweek', diamonds:300,   items:{crystal:5}, skins:['table_lava'], tickets:5, priceVal:1.99 },
 };
 
 // Verify purchase with Google Play Developer API.

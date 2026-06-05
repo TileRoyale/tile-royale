@@ -285,6 +285,18 @@ async function createTables(): Promise<void> {
       mmr_delta   INTEGER      NOT NULL DEFAULT 0,
       played_at   TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Gauntlet weekly prize claims: one per player per ISO week-start (Monday)
+    CREATE TABLE IF NOT EXISTS gauntlet_weekly_claims (
+      id          BIGSERIAL    PRIMARY KEY,
+      player_id   UUID         NOT NULL REFERENCES players(player_id),
+      week_start  DATE         NOT NULL,
+      rank        INTEGER      NOT NULL,
+      total       INTEGER      NOT NULL,
+      spins       INTEGER      NOT NULL DEFAULT 0,
+      diamonds    INTEGER      NOT NULL DEFAULT 0,
+      claimed_at  TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -307,6 +319,7 @@ async function createTables(): Promise<void> {
     CREATE        INDEX IF NOT EXISTS idx_gauntlet_mmr_mmr        ON gauntlet_mmr(mmr DESC);
     CREATE        INDEX IF NOT EXISTS idx_gauntlet_results_player ON gauntlet_results(player_id, played_at DESC);
     CREATE        INDEX IF NOT EXISTS idx_gauntlet_results_sess   ON gauntlet_results(session_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_gauntlet_weekly_claims  ON gauntlet_weekly_claims(player_id, week_start);
   `);
   console.log("[DB] Tables ready");
 }
@@ -1058,6 +1071,14 @@ export async function getPushTokenCount(): Promise<number> {
   return rows?.[0]?.total ?? 0;
 }
 
+export async function getPlayerPushToken(playerId: string): Promise<string | null> {
+  const rows = await query(
+    `SELECT token FROM push_tokens WHERE player_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+    [playerId]
+  );
+  return rows?.[0]?.token ?? null;
+}
+
 // ─── Promo Codes ───────────────────────────────────────────────────────────────
 
 // Returns 'ok' | 'already_redeemed' | 'error'
@@ -1697,5 +1718,29 @@ export async function getGauntletLeaderboard(playerId?: string): Promise<any[] |
   } catch (e: any) {
     console.error('[DB] getGauntletLeaderboard error:', e?.message);
     return null;
+  }
+}
+
+// Returns 'ok' | 'already_claimed' | 'not_eligible' | 'error'
+export async function claimGauntletWeeklyReward(
+  playerId: string,
+  weekStart: string,
+  rank: number,
+  total: number,
+  spins: number,
+  diamonds: number
+): Promise<'ok' | 'already_claimed' | 'not_eligible' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO gauntlet_weekly_claims (player_id, week_start, rank, total, spins, diamonds)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [playerId, weekStart, rank, total, spins, diamonds]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] gauntlet weekly claim error:', err?.message);
+    return 'error';
   }
 }
