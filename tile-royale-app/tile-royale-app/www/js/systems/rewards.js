@@ -225,10 +225,24 @@ async function claimOfflineReward() {
 const SURPRISE_CHANCE = 0.001; // 0.1% per game
 let surpriseShown = false;
 
-function maybeTriggerSurprise() {
+async function maybeTriggerSurprise() {
   if (surpriseShown) return;
   if (Math.random() > SURPRISE_CHANCE) return;
   surpriseShown = true;
+
+  const grantDate = new Date().toISOString().slice(0, 10);
+  if (typeof PLAYER_ID !== 'undefined' && PLAYER_ID && typeof getActiveServer === 'function') {
+    try {
+      const r = await fetch(`${getActiveServer().http}/surprise/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID, grantDate }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = r.ok ? await r.json() : null;
+      if (data && !data.ok && !data.offline) return; // already_claimed or db_error — skip
+    } catch(e) { /* offline — allow */ }
+  }
 
   const surprises = [
     { text:'Found hidden gem!', reward: () => { gameState.diamonds += 15; return '+💎 15'; } },
@@ -240,7 +254,6 @@ function maybeTriggerSurprise() {
   const rewardText = s.reward();
   saveState(); updateMenuStats(); updateInventoryUI();
 
-  // Non-intrusive — toast only, no overlay
   showToast(`🎁 ${s.text} ${rewardText}`, 'var(--gold)');
   vibrate([30, 30, 60]);
   playSound('achieve');

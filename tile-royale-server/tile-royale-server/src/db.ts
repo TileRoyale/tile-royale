@@ -381,6 +381,14 @@ async function createTables(): Promise<void> {
       amount     INTEGER      NOT NULL,
       spent_at   TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Surprise bonus grants: one per player per UTC calendar day
+    CREATE TABLE IF NOT EXISTS surprise_grants (
+      id           BIGSERIAL    PRIMARY KEY,
+      player_id    UUID         NOT NULL REFERENCES players(player_id),
+      grant_date   DATE         NOT NULL,
+      granted_at   TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -413,6 +421,7 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_offline_reward_claims    ON offline_reward_claims(player_id, claim_date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_claims                ON dc_claims(player_id, challenge_date);
     CREATE        INDEX IF NOT EXISTS idx_diamond_spends_player    ON diamond_spends(player_id, spent_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_grants           ON surprise_grants(player_id, grant_date);
   `);
   console.log("[DB] Tables ready");
 }
@@ -627,6 +636,17 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
       WHERE player_id = $1
         AND played_at >= date_trunc('week', now())
     ),
+    mode_stats AS (
+      SELECT
+        COUNT(*) FILTER (WHERE mode = 'rush')                        AS rush_games,
+        COUNT(*) FILTER (WHERE mode = 'rush'    AND placement = 1)   AS rush_wins,
+        COUNT(*) FILTER (WHERE mode = 'buckshot')                    AS buckshot_games,
+        COUNT(*) FILTER (WHERE mode = 'buckshot' AND placement = 1)  AS buckshot_wins,
+        COUNT(*) FILTER (WHERE mode = 'wild')                        AS wild_games,
+        COUNT(*) FILTER (WHERE mode = 'wild'    AND placement = 1)   AS wild_wins
+      FROM game_results
+      WHERE player_id = $1
+    ),
     -- Compute best win streak from ordered game history
     streaks AS (
       SELECT
@@ -690,10 +710,17 @@ export async function getPlayerStats(playerId: string): Promise<any | null> {
       COALESCE(wr.weekly_rank, 9999)                           AS weekly_rank,
       COALESCE(p.trophy_points, 0)                             AS trophy_points,
       COALESCE(p.achievement_count, 0)                         AS achievement_count,
-      COALESCE(p.achievement_total, 108)                       AS achievement_total
+      COALESCE(p.achievement_total, 108)                       AS achievement_total,
+      COALESCE(ms.rush_games,     0)::INT                      AS rush_games,
+      COALESCE(ms.rush_wins,      0)::INT                      AS rush_wins,
+      COALESCE(ms.buckshot_games, 0)::INT                      AS buckshot_games,
+      COALESCE(ms.buckshot_wins,  0)::INT                      AS buckshot_wins,
+      COALESCE(ms.wild_games,     0)::INT                      AS wild_games,
+      COALESCE(ms.wild_wins,      0)::INT                      AS wild_wins
     FROM players p
     CROSS JOIN player_stats ps
     CROSS JOIN weekly_stats ws
+    CROSS JOIN mode_stats ms
     LEFT JOIN all_ranks    ar ON ar.player_id = p.player_id
     LEFT JOIN weekly_ranks wr ON wr.player_id = p.player_id
     WHERE p.player_id = $1
@@ -2126,6 +2153,25 @@ export async function recordDcClaim(
   } catch (err: any) {
     if (err.code === '23505') return 'already_claimed';
     console.error('[DB] dc claim error:', err?.message);
+    return 'error';
+  }
+}
+
+// ─── Surprise Grants ──────────────────────────────────────────────────────────
+
+export async function recordSurpriseGrant(
+  playerId: string, grantDate: string
+): Promise<'ok' | 'already_claimed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO surprise_grants (player_id, grant_date) VALUES ($1, $2::date)`,
+      [playerId, grantDate]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_claimed';
+    console.error('[DB] surprise grant error:', err?.message);
     return 'error';
   }
 }

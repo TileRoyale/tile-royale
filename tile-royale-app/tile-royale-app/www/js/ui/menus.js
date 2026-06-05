@@ -713,12 +713,11 @@ async function renderStats() {
   set('st-achCount', (gs.unlockedAch || []).length + ' / ' + ACHIEVEMENTS.length);
   set('st-spectate', fmt(s.spectateSessions || 0));
 
-  // Render initial percentile estimates while server fetch is in-flight
-  renderPercentile('pctWins',    'Wins',          fmt(wins),          computePct(wins,    [[0,50],[10,70],[50,85],[100,92],[200,96],[500,99],[999,100]]));
-  renderPercentile('pctWinRate', 'Win Rate',       wr(wins, games),    computePct(wins/Math.max(games,1)*100, [[0,20],[10,40],[20,55],[35,70],[50,82],[65,92],[80,97],[100,100]]), true);
-  renderPercentile('pctTaps',    'Taps',           fmt(taps),          computePct(taps,    [[0,40],[100,55],[500,65],[2000,75],[5000,85],[20000,93],[100000,99]]));
-  renderPercentile('pctLevel',   'Reaction Time',  '…',                50);
-  renderPercentile('pctDiamonds','Diamonds',       fmt(gs.diamonds||0),computePct(gs.diamonds||0, [[0,30],[500,50],[2000,65],[5000,75],[15000,85],[50000,94],[100000,99]]));
+  // Show loading skeletons — real percentiles arrive from server below
+  ['pctWins','pctWinRate','pctTaps','pctLevel','pctDiamonds'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="percentile-loading">Loading…</div>';
+  });
 
   // ── Live server data — replaces local estimates with real DB values ────────
   if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID) return;
@@ -736,6 +735,44 @@ async function renderStats() {
       set('st-streak',  fmt(sStats.best_win_streak  || 0));
       set('st-top3',    fmt(sStats.top3             || 0));
       set('st-top5',    fmt(sStats.top5             || 0));
+
+      // Sync server-derived stats into achStats so achievements reflect real gameplay data
+      try {
+        initAchStats();
+        const sa = gameState.achStats;
+        let dirty = false;
+        const syncStat = (key, serverVal) => {
+          if (serverVal != null && serverVal > (sa[key] || 0)) { sa[key] = serverVal; dirty = true; }
+        };
+        syncStat('totalTaps',      sStats.total_tiles_tapped);
+        syncStat('wins',           sStats.wins);
+        syncStat('games',          sStats.games);
+        syncStat('top3',           sStats.top3);
+        syncStat('top5',           sStats.top5);
+        syncStat('bestWinStreak',  sStats.best_win_streak);
+        syncStat('rushGames',      sStats.rush_games);
+        syncStat('rushWins',       sStats.rush_wins);
+        syncStat('buckshotGames',  sStats.buckshot_games);
+        syncStat('buckshotWins',   sStats.buckshot_wins);
+        syncStat('wildGames',      sStats.wild_games);
+        syncStat('wildWins',       sStats.wild_wins);
+        if (dirty) {
+          saveState();
+          // Re-run achievement check now that stats are server-authoritative
+          if (typeof checkAchievements === 'function') checkAchievements();
+          // Refresh mode stats display with server values
+          set('st-rushGames',    fmt(sa.rushGames     || 0));
+          set('st-rushWins',     fmt(sa.rushWins      || 0));
+          set('st-rushWr',       wr(sa.rushWins, sa.rushGames));
+          set('st-buckshotGames',fmt(sa.buckshotGames || 0));
+          set('st-buckshotWins', fmt(sa.buckshotWins  || 0));
+          set('st-buckshotWr',   wr(sa.buckshotWins, sa.buckshotGames));
+          set('st-wildGames',    fmt(sa.wildGames     || 0));
+          set('st-wildWins',     fmt(sa.wildWins      || 0));
+          set('st-wildWr',       wr(sa.wildWins, sa.wildGames));
+          set('st-taps',         fmt(sa.totalTaps     || 0));
+        }
+      } catch(e) {}
     }
 
     // Update percentile bars from real DB PERCENT_RANK() values.
@@ -756,19 +793,6 @@ async function renderStats() {
   } catch(e) {}
 }
 
-// Interpolate percentile from bracket table
-function computePct(val, brackets) {
-  for (let i = brackets.length - 1; i >= 0; i--) {
-    if (val >= brackets[i][0]) {
-      if (i === brackets.length - 1) return brackets[i][1];
-      const [v0, p0] = brackets[i];
-      const [v1, p1] = brackets[i + 1];
-      const t = Math.min(1, (val - v0) / (v1 - v0));
-      return Math.round(p0 + (p1 - p0) * t);
-    }
-  }
-  return brackets[0][1];
-}
 
 function renderPercentile(elId, label, displayVal, pct, isWinRate = false) {
   const el = document.getElementById(elId);
