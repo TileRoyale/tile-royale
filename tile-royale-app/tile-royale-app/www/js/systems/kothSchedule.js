@@ -82,7 +82,7 @@ function updateKothScheduleUI() {
     card.style.opacity = '';
     if (icon)    { icon.textContent = '👑'; icon.style.filter = ''; }
     if (name)    { name.textContent = 'King of the Hill'; name.style.color = 'var(--gold)'; }
-    if (subtext) { subtext.textContent = '💎 50 entry · OPEN NOW'; subtext.style.color = 'var(--gold)'; }
+    if (subtext) { subtext.textContent = '💎 20 entry · OPEN NOW'; subtext.style.color = 'var(--gold)'; }
   } else {
     // Closed state — locked, no title, timer only
     card.classList.add('koth-locked');

@@ -553,7 +553,7 @@ function openModeRewardPopup(mode) {
   const isRewardMode = ['rush','buckshot','wild'].includes(mode);
   if (descEl) {
     if (mode === 'koth') {
-      descEl.textContent = '💎 50 diamond entry fee · compete for top 3 position';
+      descEl.textContent = '💎 20 diamond entry fee · compete for top 3 position';
       descEl.style.display = 'block';
     } else if (mode === 'practice') {
       descEl.textContent = 'No tickets required · speed training · solo play';

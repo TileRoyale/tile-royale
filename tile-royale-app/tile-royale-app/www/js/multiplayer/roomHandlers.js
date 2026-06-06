@@ -626,7 +626,7 @@ async function startLobby() {
   allPlayers.push({ name: gameState.playerName || 'YOU', avatar: av.icon, isBot: false, eliminated: false, place: 0, tapCount: 0, totalReactionMs: 0 });
 
   const modeTitles = { rush:'RUSH MODE', buckshot:'BUCKSHOT MODE', wild:'WILD MODE', koth:'KING OF THE HILL' };
-  const modeTimes  = { rush:'', buckshot:'', wild:'', koth:'💎 50 entry' };
+  const modeTimes  = { rush:'', buckshot:'', wild:'', koth:'💎 20 entry' };
   const gridLabels = { 4:'2×2', 9:'3×3', 16:'4×4', 25:'5×5', 36:'6×6', 49:'7×7', 64:'8×8', 81:'9×9', 100:'10×10' };
   document.getElementById('lobbyModeTitle').textContent = modeTitles[gameState.mode] || 'RUSH MODE';
   const modeTimeStr = modeTimes[gameState.mode] || '';

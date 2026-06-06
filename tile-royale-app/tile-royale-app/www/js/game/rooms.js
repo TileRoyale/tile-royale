@@ -1,5 +1,5 @@
 // ===== KING OF THE HILL SYSTEM =====
-const KOTH_ENTRY_FEE = 50;
+const KOTH_ENTRY_FEE = 20;
 const KOTH_POOL_PCT  = 0.5; // 50% to prize pool
 const KOTH_PRIZES    = [0.60, 0.25, 0.15]; // 1st, 2nd, 3rd
 
