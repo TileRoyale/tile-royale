@@ -82,7 +82,7 @@ const region = process.env.REGION || "EU";   // EU | NA | ASIA
 const app    = express();
 
 // Bump this when releasing a client version that is required (breaks old clients)
-const MIN_CLIENT_VERSION = "v0.8.0";
+const MIN_CLIENT_VERSION = "v0.8.1";
 
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
