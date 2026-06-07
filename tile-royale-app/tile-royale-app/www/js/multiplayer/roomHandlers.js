@@ -731,9 +731,10 @@ function startMatchmakingCountdown(playerCount, grid) {
       clearInterval(countTimer);
 
       // Countdown done — show message then fill bots rapidly
-      statusEl.textContent = '🤖 Filling lobby with bots...';
+      statusEl.textContent = '🤖 Filling lobby with AI opponents...';
       statusEl.style.color = 'var(--fire2)';
       if (barEl) { barEl.style.transition = 'none'; barEl.style.width = '100%'; }
+      showToast('🤖 No real players found — filling with AI opponents', 'var(--muted)');
 
       let filledSlots = 1, botIdx = 0;
       const fillTimer = setInterval(() => {
@@ -768,9 +769,10 @@ function startBotLobby(playerCount, grid) {
     botPool.push({ name, avatar, isBot: true, eliminated: false, place: 0, tapCount: 0, totalReactionMs: 0 });
   }
 
-  document.getElementById('lobbyStatusText').textContent = '🤖 Filling lobby with AI players...';
+  document.getElementById('lobbyStatusText').textContent = '🤖 Filling lobby with AI opponents...';
   document.getElementById('lobbyStatusText').style.color = 'var(--fire2)';
   document.getElementById('lobbySearchBar').style.width = '100%';
+  showToast('🤖 No real players found — filling with AI opponents', 'var(--muted)');
 
   let filledSlots = 1, botIdx = 0;
   lobbyFillInterval = setInterval(() => {
