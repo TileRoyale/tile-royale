@@ -185,8 +185,7 @@ function finishOnboarding() {
     playSound('achieve');
   }, 800);
 
-  // Show first week offer after 2s
-  setTimeout(showFirstWeekOffer, 2500);
+  // First week offer shown when player opens the store, not at startup
 }
 
 // ===== FIRST GAME HINT =====
