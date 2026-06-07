@@ -698,7 +698,7 @@ function startMatchmakingCountdown(playerCount, grid) {
 
   // Show searching UI — no bots yet
   statusEl.style.color = 'var(--diamond)';
-  statusEl.textContent = '🔍 Finding players... ' + secondsLeft + 's';
+  statusEl.textContent = '🔍 Finding players... ' + secondsLeft + 's · AI fills if no one found';
 
   // Progress bar depletes over 15s
   if (barEl) {
@@ -726,7 +726,7 @@ function startMatchmakingCountdown(playerCount, grid) {
   const countTimer = setInterval(() => {
     secondsLeft--;
     if (secondsLeft > 0) {
-      statusEl.textContent = '🔍 Finding players... ' + secondsLeft + 's';
+      statusEl.textContent = '🔍 Finding players... ' + secondsLeft + 's · AI fills if no one found';
     } else {
       clearInterval(countTimer);
 

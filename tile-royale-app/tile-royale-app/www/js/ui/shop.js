@@ -111,7 +111,9 @@ function openStore() {
   document.querySelectorAll('.store-tab').forEach((t,i) => t.classList.toggle('active', i===0));
   renderStore('featured');
   window.scrollTo(0, 0);
-  try { checkFirstWeekOnMenu(); } catch(e) {}
+  if (typeof isFirstWeekActive === 'function' && isFirstWeekActive()) {
+    setTimeout(showFirstWeekOffer, 800);
+  }
 }
 
 function switchStoreTab(tab, el) {
