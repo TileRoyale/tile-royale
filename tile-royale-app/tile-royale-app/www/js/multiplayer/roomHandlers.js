@@ -659,7 +659,7 @@ async function startLobby() {
   ]);
 
   if (mpFound && isMultiplayer) {
-    document.getElementById('lobbyStatusText').textContent = '✅ Connected! Waiting for players...';
+    document.getElementById('lobbyStatusText').textContent = '✅ Connected! Waiting for players… AI fills if no one joins';
     document.getElementById('lobbyStatusText').style.color = 'var(--green)';
 
     // Animate the progress bar over 15s
