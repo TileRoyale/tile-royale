@@ -84,14 +84,14 @@ function updateKothScheduleUI() {
     if (name)    { name.textContent = 'King of the Hill'; name.style.color = 'var(--gold)'; }
     if (subtext) { subtext.textContent = '💎 20 entry · OPEN NOW'; subtext.style.color = 'var(--gold)'; }
   } else {
-    // Closed state — locked, no title, timer only
+    // Closed state — locked, show entry fee + timer
     card.classList.add('koth-locked');
     card.style.opacity = '0.6';
     if (icon)    { icon.textContent = '🔒'; icon.style.filter = 'grayscale(1)'; }
-    if (name)    { name.textContent = ''; }
+    if (name)    { name.textContent = 'King of the Hill'; name.style.color = 'var(--muted)'; }
     if (subtext) {
       const ms = getNextKothOpenMs();
-      subtext.textContent = `Opens in ${_kothFormatCountdown(ms)}`;
+      subtext.textContent = `💎 20 entry · Opens in ${_kothFormatCountdown(ms)}`;
       subtext.style.color = 'var(--muted)';
     }
   }
