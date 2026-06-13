@@ -944,6 +944,15 @@ function _gmHandleServerResults(data) {
     if (_gm.finalPlace === 1) gd.totalWins = (gd.totalWins || 0) + 1;
     gmSaveData(gd);
     gameState.gauntletMmr = gd.mmr;
+
+    // XP reward based on placement
+    const gmXpBase = _gm.finalPlace === 1 ? 100 : _gm.finalPlace <= 3 ? 75 : _gm.finalPlace <= 5 ? 55 : 35;
+    const gmXpBoosted = (gameState.xpBoostGames || 0) > 0 ? gmXpBase * 2 : gmXpBase;
+    if ((gameState.xpBoostGames || 0) > 0) gameState.xpBoostGames = Math.max(0, gameState.xpBoostGames - 1);
+    gameState.xp = (gameState.xp || 0) + gmXpBoosted;
+    if (typeof awardLevelUp === 'function') awardLevelUp();
+    try { trackMissionEvent('match_end', { placement: _gm.finalPlace, taps: _gm.correctTaps || 0, xp: gmXpBoosted, mode: 'gauntlet' }); } catch(e) {}
+
     saveState();
   } else {
     // Unranked — refund the key that was consumed at lobby entry
