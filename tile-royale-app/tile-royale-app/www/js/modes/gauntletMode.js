@@ -3,7 +3,7 @@
 // ── Constants ──
 const GM_GRID_SIZE      = 25;       // 5×5
 const GM_ROUND_SECS     = 35;
-const GM_BASE_SPAWN_MS  = 600;
+const GM_BASE_SPAWN_MS  = 450;
 const GM_TILE_LIFE_MS   = 4500;     // regular tiles vanish after this
 const GM_VOID_DURATION  = 1.2;      // seconds
 const GM_MAX_VOID_BOMBS = 2;
@@ -277,10 +277,11 @@ function gmRankLabel(mmr) {
 
 // ── Season timer ──
 function gmSeasonDaysLeft() {
-  const now    = new Date();
-  const end    = new Date(now.getFullYear(), now.getMonth() + 1, 1); // 1st of next month
-  const diff   = end - now;
-  return Math.max(0, Math.ceil(diff / 86400000));
+  const now = new Date();
+  // Season 1 exception: runs until Aug 1 2026, then reverts to monthly cycle
+  const seasonOneEnd = new Date(2026, 7, 1); // month is 0-indexed: 7 = August
+  const end = now < seasonOneEnd ? seasonOneEnd : new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return Math.max(0, Math.ceil((end - now) / 86400000));
 }
 
 // ── Hub screen ──

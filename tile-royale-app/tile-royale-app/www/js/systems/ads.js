@@ -66,7 +66,9 @@ async function _showRewardedAd() {
     } else {
       result = await cap.nativePromise('AdMob', 'showRewardVideoAd', {});
     }
-    return !!(result?.type);
+    // If the plugin resolves (no exception), the reward was earned.
+    // Newer plugin versions return void; older return { type, amount }. Either way: rewarded.
+    return result?.type !== undefined ? !!(result.type) : true;
   } catch(e) {
     console.warn('[AdMob] dismissed or failed:', e?.message || e);
     return false;
