@@ -1249,6 +1249,63 @@ export async function deletePlayerData(playerId: string): Promise<boolean> {
   }
 }
 
+// Wipe ALL player data except identity (name, avatar, tag) and push tokens.
+// Used for major version resets (e.g. v1.0.0 launch).
+export async function resetAllPlayerData(): Promise<{ ok: boolean; error?: string }> {
+  if (!pool || !dbAvailable) return { ok: false, error: 'db_unavailable' };
+  try {
+    // FK-safe order: children before parents; ring_trades → ring_grants → players
+    await pool.query(`DELETE FROM ring_trades`);
+    await pool.query(`DELETE FROM ring_grants`);
+    await pool.query(`DELETE FROM friends`);
+    await pool.query(`DELETE FROM game_results`);
+    await pool.query(`DELETE FROM gauntlet_results`);
+    await pool.query(`DELETE FROM gauntlet_mmr`);
+    await pool.query(`DELETE FROM gauntlet_weekly_claims`);
+    await pool.query(`DELETE FROM solo_scores`);
+    await pool.query(`DELETE FROM solo_level_claims`);
+    await pool.query(`DELETE FROM solo_milestone_claims`);
+    await pool.query(`DELETE FROM practice_scores`);
+    await pool.query(`DELETE FROM purchase_receipts`);
+    await pool.query(`DELETE FROM promo_redemptions`);
+    await pool.query(`DELETE FROM suspicious_reports`);
+    await pool.query(`DELETE FROM player_notifications`);
+    await pool.query(`DELETE FROM player_save_data`);
+    await pool.query(`DELETE FROM daily_login_claims`);
+    await pool.query(`DELETE FROM mission_claims`);
+    await pool.query(`DELETE FROM mode_reward_claims`);
+    await pool.query(`DELETE FROM koth_daily_claims`);
+    await pool.query(`DELETE FROM koth_prize_claims`);
+    await pool.query(`DELETE FROM koth_fastest_claims`);
+    await pool.query(`DELETE FROM trophy_milestone_claims`);
+    await pool.query(`DELETE FROM achievement_unlocks`);
+    await pool.query(`DELETE FROM level_up_claims`);
+    await pool.query(`DELETE FROM ad_reward_claims`);
+    await pool.query(`DELETE FROM offline_reward_claims`);
+    await pool.query(`DELETE FROM dc_claims`);
+    await pool.query(`DELETE FROM dc_swap_records`);
+    await pool.query(`DELETE FROM surprise_grants`);
+    await pool.query(`DELETE FROM ticket_events`);
+    await pool.query(`DELETE FROM diamond_spends`);
+    // Reset stats on players but keep identity (name, avatar, player_tag, player_id)
+    await pool.query(`
+      UPDATE players SET
+        mmr                  = 1000,
+        peak_mmr             = 1000,
+        trophy_points        = 0,
+        achievement_count    = 0,
+        achievement_total    = 108,
+        unlocked_achievements = '{}',
+        diamonds             = 0,
+        trusted_diamonds     = NULL
+    `);
+    return { ok: true };
+  } catch (err: any) {
+    console.error('[DB] resetAllPlayerData error:', err?.message);
+    return { ok: false, error: err?.message };
+  }
+}
+
 // Returns the most-played mode string for a player, or null.
 export async function getFavoriteMode(playerId: string): Promise<string | null> {
   const rows = await query(`

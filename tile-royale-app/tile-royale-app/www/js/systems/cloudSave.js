@@ -143,6 +143,23 @@ async function loadFromCloud() {
 
     const data = await r.json();
 
+    // Server-side data reset: wipe local progress if reset version changed
+    const serverResetVer = data.dataResetVersion || null;
+    const localResetVer  = (typeof gameState !== 'undefined' && gameState._dataResetVersion)
+                           || localStorage.getItem('_dataResetVersion')
+                           || null;
+    if (serverResetVer && serverResetVer !== localResetVer) {
+      console.log('[CloudSave] Data reset detected — wiping local progress and reloading');
+      const keepKeys = ['tr_player_id','tr_google_id','tr_google_name','tr_google_email'];
+      const kept = {};
+      keepKeys.forEach(k => { kept[k] = localStorage.getItem(k); });
+      localStorage.clear();
+      keepKeys.forEach(k => { if (kept[k] != null) localStorage.setItem(k, kept[k]); });
+      localStorage.setItem('_dataResetVersion', serverResetVer);
+      window.location.reload();
+      return false;
+    }
+
     if (!data.found || !data.saveData) {
       // No cloud save exists yet — first launch after update. Upload local save.
       console.log('[CloudSave] No cloud save — uploading local (migration)');

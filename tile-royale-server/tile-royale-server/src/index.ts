@@ -6,9 +6,24 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
+
+// Server-side mirror of the solo level gem rewards (levels with no reward = 0).
+// Rewards only exist at every 10th level; pattern: 50 at most, 200 at x50, 400 at x100, 600 at Lv1000.
+const SOLO_GEM_REWARDS: Record<number, number> = {
+  10:50,20:50,30:50,40:50,50:200,60:50,70:50,80:50,90:50,100:400,
+  110:50,120:50,130:50,140:50,150:200,160:50,170:50,180:50,190:50,200:400,
+  210:50,220:50,230:50,240:50,250:200,260:50,270:50,280:50,290:50,300:400,
+  310:50,320:50,330:50,340:50,350:200,360:50,370:50,380:50,390:50,400:400,
+  410:50,420:50,430:50,440:50,450:200,460:50,470:50,480:50,490:50,500:400,
+  510:50,520:50,530:50,540:50,550:200,560:50,570:50,580:50,590:50,600:400,
+  610:50,620:50,630:50,640:50,650:200,660:50,670:50,680:50,690:50,700:400,
+  710:50,720:50,730:50,740:50,750:200,760:50,770:50,780:50,790:50,800:400,
+  810:50,820:50,830:50,840:50,850:200,860:50,870:50,880:50,890:50,900:400,
+  910:50,920:50,930:50,940:50,950:200,960:50,970:50,980:50,990:50,1000:600,
+};
 
 // ─── Firebase Cloud Messaging ─────────────────────────────────────────────────
 // Set FIREBASE_SERVICE_ACCOUNT env var to the JSON content of a Firebase
@@ -214,6 +229,11 @@ app.get("/delete-data", (_req, res) => {
 <footer>© 2026 Henly Games · Tile Royale</footer>
 </body>
 </html>`);
+});
+
+// AdMob app-ads.txt — must be served from the developer website registered in Play Console
+app.get("/app-ads.txt", (_req, res) => {
+  res.type('text/plain').send('google.com, pub-2005005437331878, DIRECT, f08c47fec0942fa0');
 });
 
 // Health check + region info (clients ping this to measure latency)
@@ -710,8 +730,9 @@ app.post("/solo/complete", async (req, res) => {
     return res.status(400).json({ ok: false, error: 'invalid_player' });
   const lvl = Number(levelNum);
   const gems = Number(gemReward);
-  if (!lvl || lvl < 1 || lvl > 100) return res.status(400).json({ ok: false, error: 'invalid_level' });
-  if (isNaN(gems) || gems < 0 || gems > 100) return res.status(400).json({ ok: false, error: 'invalid_reward' });
+  if (!lvl || lvl < 1 || lvl > 1000) return res.status(400).json({ ok: false, error: 'invalid_level' });
+  const expectedGems = SOLO_GEM_REWARDS[lvl] ?? 0;
+  if (gems !== expectedGems) return res.status(400).json({ ok: false, error: 'invalid_reward' });
   if (!getDbStatus().available) return res.json({ ok: true, offline: true });
 
   const result = await recordSoloLevelClaim(String(playerId), lvl, gems);
@@ -887,6 +908,27 @@ app.delete("/admin/delete-player/:playerId", requireAdmin, async (req, res) => {
   res.json({ ok: true, playerId });
 });
 
+// POST /admin/grant-welcome-diamonds — grant 500 diamonds to all players with trusted_diamonds < 500
+app.post("/admin/grant-welcome-diamonds", requireAdmin, async (_req, res) => {
+  if (!getDbStatus().available) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const before = await query(`SELECT COUNT(*)::INT AS cnt FROM players WHERE trusted_diamonds IS NULL OR trusted_diamonds < 500`);
+  await query(`UPDATE players SET trusted_diamonds = 500 WHERE trusted_diamonds IS NULL OR trusted_diamonds < 500`);
+  const updated = before?.[0]?.cnt ?? 0;
+  console.log(`[Admin] grant-welcome-diamonds: updated ${updated} players`);
+  res.json({ ok: true, updated });
+});
+
+// POST /admin/reset-all-data — wipe all player data except name/avatar/tag and push tokens
+// One-time use for major version resets (e.g. v1.0.0 launch).
+app.post("/admin/reset-all-data", requireAdmin, async (_req, res) => {
+  if (!getDbStatus().available) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  console.log('[Admin] RESET ALL PLAYER DATA initiated');
+  const result = await resetAllPlayerData();
+  if (!result.ok) return res.status(500).json({ ok: false, error: result.error });
+  console.log('[Admin] RESET ALL PLAYER DATA complete');
+  res.json({ ok: true });
+});
+
 // POST /admin/player/reset-whale — revoke whale status from a player's save blob
 // Used when a whale badge was granted via refund, fraud, or fallback exploit.
 app.post("/admin/player/reset-whale", requireAdmin, async (req, res) => {
@@ -924,6 +966,59 @@ app.post("/admin/notification", requireAdmin, async (req, res) => {
   // Fire push notification alongside the inbox entry
   sendPushToPlayer(String(playerId), String(title), String(body)).catch(() => {});
   res.status(201).json({ ok: true, notification: notif });
+});
+
+// POST /admin/broadcast-notification — send an inbox notification + FCM push to ALL players
+// Body: { title, body, type?, reward_type?, reward_amount? }
+app.post("/admin/broadcast-notification", requireAdmin, async (req, res) => {
+  const { title, body, type = 'message', reward_type = null, reward_amount = null } = req.body;
+  if (!title || !body) return res.status(400).json({ error: 'title and body are required' });
+  if (!getDbStatus().available) return res.status(503).json({ error: 'db_unavailable' });
+
+  // Get all player IDs
+  const rows = await query(`SELECT player_id FROM players`);
+  if (!rows) return res.status(500).json({ error: 'failed to fetch players' });
+
+  // Bulk-insert inbox notifications
+  let sent = 0;
+  for (const row of rows) {
+    const pid = row.player_id;
+    await createPlayerNotification(
+      pid, String(title), String(body), String(type),
+      reward_type ? String(reward_type) : null,
+      reward_amount != null ? Number(reward_amount) : null
+    ).catch(() => {});
+    sent++;
+  }
+
+  // Bulk FCM push — query all tokens directly
+  const tokenRows = await query(`SELECT DISTINCT token FROM push_tokens`);
+  let pushed = 0;
+  if (tokenRows && _fcmReady) {
+    for (const t of tokenRows) {
+      await _sendFcm(t.token, String(title), String(body)).catch(() => {});
+      pushed++;
+    }
+  }
+
+  res.json({ ok: true, notified: sent, pushed });
+});
+
+// POST /admin/news/clear — delete ALL news posts (for clean slate before posting new ones)
+app.delete("/admin/news/clear", requireAdmin, async (_req, res) => {
+  if (!getDbStatus().available) return res.status(503).json({ error: 'db_unavailable' });
+  const rows = await query(`DELETE FROM news_posts RETURNING id`);
+  res.json({ ok: true, deleted: rows?.length ?? 0 });
+});
+
+// DELETE /admin/notifications/broadcast — delete all inbox notifications of a given type from all players
+// Body: { type } — e.g. { type: 'announcement' }
+app.delete("/admin/notifications/broadcast", requireAdmin, async (req, res) => {
+  const { type } = req.body;
+  if (!type) return res.status(400).json({ error: 'type is required' });
+  if (!getDbStatus().available) return res.status(503).json({ error: 'db_unavailable' });
+  const rows = await query(`DELETE FROM player_notifications WHERE type = $1 RETURNING id`, [type]);
+  res.json({ ok: true, deleted: rows?.length ?? 0 });
 });
 
 // POST /report/suspicious  { playerId, reason }
@@ -1033,6 +1128,7 @@ const PROMO_CODES: Record<string, {
   dev?: boolean;
 }> = {
   'WELCOME2025':  { diamonds: 500,  items: { crystal: 2, caltrops: 2 },        desc: 'Welcome gift!',                       maxUses: 999999 },
+  'WELCOME':      { diamonds: 100,  items: { crystal: 1, caltrops: 2 },        desc: 'Welcome to Tile Royale!',             maxUses: 999999 },
   'TILEROYALE':   { diamonds: 1000, items: { crystal: 3 },                      desc: 'Official launch bonus!',              maxUses: 999999 },
   'WILDMODE':     { diamonds: 300,  items: { shadow_tile: 3 },                  desc: 'Wild mode launch reward',             maxUses: 999999 },
   'KOTHWEEK1':    { diamonds: 500,  items: { crystal: 1, caltrops: 1 },         desc: 'King of the Hill launch!',            maxUses: 999999 },
@@ -1196,14 +1292,21 @@ app.post("/save", async (req, res) => {
       // NOTE: once billing is server-validated, purchased amounts will be added via
       // addTrustedDiamonds() before this save arrives, making BASE_PURCHASE irrelevant
       // for that path. Until then, this cap must stay above the max single-session purchase.
-      const BASE_PURCHASE = 30_000;    // covers the largest single IAP package (bundle.whale2 = 26k); multi-package buyers have addTrustedDiamonds() called per purchase
+      // BASE_PURCHASE is only allowed if the player has at least one verified IAP receipt.
+      // Without verified purchases, fresh installs cannot anchor a 30k ceiling by editing localStorage.
+      const purchaseRows = await query(
+        `SELECT COUNT(*)::INT AS cnt FROM purchase_receipts WHERE player_id = $1`,
+        [playerId]
+      );
+      const hasPurchases = (purchaseRows?.[0]?.cnt ?? 0) > 0;
+      const BASE_PURCHASE = hasPurchases ? 30_000 : 0;
       const PER_GAME_BOOTSTRAP = 80;
       const gameCountRows = await query(
         `SELECT COUNT(*)::INT AS cnt FROM game_results WHERE player_id = $1`,
         [playerId]
       );
       const gamesOnRecord = gameCountRows?.[0]?.cnt ?? 0;
-      const allowedMax = BASE_PURCHASE + gamesOnRecord * PER_GAME_BOOTSTRAP;
+      const allowedMax = Math.max(500, BASE_PURCHASE + gamesOnRecord * PER_GAME_BOOTSTRAP);
 
       const cappedIncoming = Math.min(incoming, allowedMax);
       if (incoming > allowedMax) {
@@ -1253,12 +1356,12 @@ app.get("/save/:playerId", async (req, res) => {
     res.json({ found: false }); return;
   }
   const result = await loadPlayerData(playerId);
-  if (!result) { res.json({ found: false }); return; }
+  if (!result) { res.json({ found: false, dataResetVersion: '1.0.0' }); return; }
   try {
     const saveData = JSON.parse(result.saveJson);
     // Return the server-trusted diamond value so the client can apply it as override
     const trusted = getDbStatus().available ? await getTrustedDiamonds(playerId) : null;
-    const resp: Record<string, any> = { found: true, saveData, updatedAt: result.updatedAt, saveVersion: result.saveVersion };
+    const resp: Record<string, any> = { found: true, saveData, updatedAt: result.updatedAt, saveVersion: result.saveVersion, dataResetVersion: '1.0.0' };
     if (trusted !== null) resp.trustedDiamonds = trusted;
     res.json(resp);
   } catch {

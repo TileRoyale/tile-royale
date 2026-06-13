@@ -835,11 +835,14 @@ function set(id, val) {
 
 // ===== ABOUT & LEGAL =====
 function openAbout() { showScreen('aboutScreen'); }
-function openLink(url) { if (typeof Capacitor !== 'undefined') Capacitor.Plugins.Browser?.open({url}); else window.open(url,'_blank'); }
-function contactSupport() { openLink('mailto:TileRoyaleGame@gmail.com?subject=Tile Royale Support'); }
+function openLink(url) {
+  if (url.startsWith('mailto:')) { window.open(url, '_system'); return; }
+  if (typeof Capacitor !== 'undefined') Capacitor.Plugins.Browser?.open({url}); else window.open(url,'_blank');
+}
+function contactSupport() { openLink('mailto:TileRoyaleGame@gmail.com?subject=Tile%20Royale%20Support'); }
 function rateApp() {
   showToast('⭐ Thank you! Redirecting to store...', 'var(--gold)');
-  setTimeout(() => openLink('https://play.google.com/store/apps/details?id=com.tileroyale'), 1000);
+  setTimeout(() => openLink('https://play.google.com/store/apps/details?id=com.tileroyale.game'), 1000);
 }
 
 const LEGAL_CONTENT = {

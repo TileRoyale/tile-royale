@@ -198,19 +198,16 @@ function updateFeatureLocks() {
   const feats = [
     // vipMenuBtn removed (production cleanup)
     // gauntletMenuBtn removed — now a widget, not a button
-    { id:'adTicketMenuBtn', minLvl:3, lockLabel:'🔒 +1 TICKET (Lvl 3)' },
+    // adTicketMenuBtn removed — always visible in stats-bar
     { id:'tradingMenuBtn',  minLvl:10,lockLabel:'🔒 TRADING (Lvl 10)' },
   ];
   (feats||[]).forEach(f => {
     const btn = document.getElementById(f.id);
     if (!btn) return;
     const locked = lvl < f.minLvl;
+    btn.style.display = locked ? 'none' : 'flex';
     btn.classList.toggle('locked', locked);
     btn.disabled = locked;
-    if (locked && f.lockLabel) {
-      const lbl = btn.querySelector('span:last-child');
-      if (lbl) lbl.textContent = f.lockLabel;
-    }
   });
 
   // Gauntlet label restore if unlocked
