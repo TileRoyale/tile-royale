@@ -1,4 +1,4 @@
-window.onerror = function(msg, src, line, col, err) {
+﻿window.onerror = function(msg, src, line, col, err) {
   const toast = document.getElementById('toastMsg') || document.body;
   const text = msg + ' | L' + line + ':' + col;
   console.error('[CRASH]', text, err);
@@ -390,6 +390,8 @@ let caltropsPrimed = false;   // player has toggled caltrops ON for next tap
 let shadowTilePrimed = false; // player has toggled shadow tile ON for next round
 
 // ===== SOLO MODE =====
+// NEW: SOLO_LEVELS (1000 taseme, 30s taimer) on laetud eraldi failist www/js/solo_levels_data.js
+/* OLD SOLO_LEVELS (100 taset, kiiruspõhine) — hoitud viiteks
 const SOLO_LEVELS = [
   { level:  1, grid:'2x2', speed:1500, bombs:0, difficulty: 1, tiles:18 },
   { level:  2, grid:'2x2', speed:1400, bombs:0, difficulty: 1, tiles:20 },
@@ -492,4 +494,5 @@ const SOLO_LEVELS = [
   { level: 99, grid:'6x6', speed: 448, bombs:7, difficulty:10, tiles:61 },
   { level:100, grid:'6x6', speed: 420, bombs:8, difficulty:10, tiles:65 },
 ];
+*/
 

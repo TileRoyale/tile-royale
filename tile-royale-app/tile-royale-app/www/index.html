@@ -2241,6 +2241,7 @@
   <!-- ===== JavaScript — load order matters (global scope, no bundler) ===== -->
 
   <!-- Foundation: state, save/load, avatars, XP, gameState -->
+  <script src="js/solo_levels_data.js"></script>
   <script src="js/app.js"></script>
 
   <!-- Skin data (SKINS object, applySkins, whale tap) -->
@@ -2322,11 +2323,11 @@
   <div class="solo-lives-timer" id="soloHubLivesTimer">Lives full</div>
 
   <div class="solo-progress-wrap">
-    <div class="solo-progress-label" id="soloHubStars">0 / 300 ⭐</div>
+    <div class="solo-progress-label" id="soloHubStars">Lv 1 / 1000</div>
     <div class="solo-progress-bar-bg">
       <div class="solo-progress-bar-fill" id="soloHubProgressBar" style="width:0%;"></div>
     </div>
-    <div class="solo-progress-sub" id="soloHubLevelLabel">Level 1 of 100</div>
+    <div class="solo-progress-sub" id="soloHubLevelLabel">Level 1 of 1000</div>
   </div>
 
   <button class="btn-play" id="soloContinueBtn" onclick="soloContinue()" style="margin-bottom:10px;">
@@ -2373,8 +2374,8 @@
       <span class="solo-prelevel-val" id="soloPreSpeed">1.5s</span>
     </div>
     <div class="solo-prelevel-row">
-      <span>Taps needed</span>
-      <span class="solo-prelevel-val" id="soloPreTiles">18</span>
+      <span>NEEDED</span>
+      <span class="solo-prelevel-val" id="soloPreRequired">12 / 30s</span>
     </div>
     <div class="solo-prelevel-row" id="soloPreBestRow" style="display:none;">
       <span>Best result</span>
@@ -2384,6 +2385,9 @@
 
   <div class="solo-bomb-warning" id="soloPreBombWarning" style="display:none;">
     ⚠️ <span id="soloPreBombCount">0</span> BOMBS ACTIVE
+  </div>
+  <div class="solo-bomb-warning" id="soloPreVoidWarning" style="display:none;">
+    💜 <span id="soloPreVoidCount">0</span> VOID BOMBS — defuse within 1.2s!
   </div>
 
   <div style="font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;" id="soloPreLivesInfo">❤️ 5 / 5 lives</div>
@@ -2416,7 +2420,7 @@
 <div id="soloLevelCompleteOverlay">
   <div class="solo-overlay-card">
     <div class="solo-complete-title" id="soloCompleteTitle">LEVEL COMPLETE!</div>
-    <div class="solo-stars-row" id="soloCompleteStars">⭐⭐⭐</div>
+    <div class="solo-stars-row" id="soloCompleteStars" style="display:none;"></div>
     <div class="solo-complete-reward" id="soloCompleteReward">+1❤️ +60💎</div>
     <div class="solo-milestone-box" id="soloMilestoneBox">
       <div class="solo-milestone-title" id="soloMilestoneTitle">MILESTONE!</div>

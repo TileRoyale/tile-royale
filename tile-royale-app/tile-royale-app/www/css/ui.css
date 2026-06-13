@@ -3772,3 +3772,149 @@
   color: #fff;
 }
 
+/* ── Solo 1000-level mechanics ─────────────────────────────────────────── */
+
+/* Multi-color tiles */
+.tile.color-0 { background: rgba(220, 50, 50, 0.85) !important; }
+.tile.color-1 { background: rgba(50, 120, 220, 0.85) !important; }
+.tile.color-2 { background: rgba(220, 200, 30, 0.85) !important; }
+.tile.color-3 { background: rgba(50, 200, 80, 0.85) !important; }
+
+/* Decoy tile */
+.tile.decoy-tile::after {
+  content: '✗';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  color: rgba(0,0,0,0.4);
+  pointer-events: none;
+}
+
+/* Ghost tile */
+.tile.ghost-tile { opacity: 0.55 !important; }
+
+/* Double-tap tile */
+.tile.double-tap-tile::before {
+  content: '⚡';
+  position: absolute;
+  top: 2px; right: 4px;
+  font-size: 11px;
+  pointer-events: none;
+}
+.tile.double-tap-first { outline: 2px solid #f0c040; }
+
+/* Life tile */
+.tile.life-tile::before {
+  content: '❤️';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  pointer-events: none;
+}
+
+/* Slow tile */
+.tile.slow-tile::before {
+  content: '⏰';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  pointer-events: none;
+}
+
+/* Void bomb tile */
+.tile.void-bomb {
+  background: rgba(155, 89, 182, 0.9) !important;
+  box-shadow: 0 0 12px rgba(155, 89, 182, 0.8);
+  animation: void-pulse 0.4s infinite alternate;
+}
+@keyframes void-pulse {
+  from { box-shadow: 0 0 8px rgba(155,89,182,0.6); }
+  to   { box-shadow: 0 0 20px rgba(155,89,182,1.0); }
+}
+
+/* Void fuse timer bar */
+.void-fuse-overlay {
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 4px;
+  border-radius: 0 0 6px 6px;
+  transition: width 0.05s linear;
+  pointer-events: none;
+}
+
+/* Wrong color tap flash */
+.tile.wrong-tap { background: rgba(255,60,60,0.7) !important; }
+
+/* Floating text feedback */
+.solo-float-text {
+  position: fixed;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: #fff;
+  text-shadow: 0 0 8px rgba(0,0,0,0.8);
+  pointer-events: none;
+  animation: solo-float-up 0.7s ease-out forwards;
+  z-index: 9999;
+  transform: translateX(-50%);
+}
+@keyframes solo-float-up {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(-40px); }
+}
+
+/* ── Solo reward window ──────────────────────────────────────────────────── */
+.solo-reward-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 62px;
+  max-width: 72px;
+  flex: 1;
+  padding: 8px 5px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-align: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.solo-reward-passed {
+  border-color: rgba(0,255,136,0.3);
+  background: rgba(0,255,136,0.04);
+  color: var(--muted);
+}
+.solo-reward-current {
+  border-color: #f0c040 !important;
+  background: rgba(240,192,64,0.12) !important;
+  color: var(--text) !important;
+  transform: scale(1.08);
+  box-shadow: 0 0 14px rgba(240,192,64,0.35);
+}
+.solo-reward-locked {
+  border-color: var(--border);
+  color: var(--muted);
+  opacity: 0.7;
+}
+.solo-reward-lvl   { font-size: 12px; color: inherit; letter-spacing: 1px; }
+.solo-reward-gems  { font-size: 13px; color: var(--diamond); }
+.solo-reward-extras { font-size: 11px; color: var(--text); }
+.solo-reward-status { font-size: 13px; margin-top: 2px; }
+.solo-reward-hint {
+  width: 100%;
+  text-align: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+

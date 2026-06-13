@@ -2,5 +2,8 @@
   "dependencies": {
     "googleapis": "^173.0.0",
     "jimp": "^1.6.1"
+  },
+  "devDependencies": {
+    "xlsx": "^0.18.5"
   }
 }
