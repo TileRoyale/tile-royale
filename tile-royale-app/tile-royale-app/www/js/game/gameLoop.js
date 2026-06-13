@@ -826,7 +826,11 @@ async function endGame(playerWon = false) {
 }
 
 function playAgain() {
-  startLobby();
+  if (gameState.mode === 'koth') {
+    openKothScreen();
+  } else {
+    tryFindMatch();
+  }
 }
 
 function leaveSpectate() {
@@ -836,7 +840,11 @@ function leaveSpectate() {
   checkAchievements();
   saveState();
   _fullGameCleanup();
-  startLobby();
+  if (gameState.mode === 'koth') {
+    openKothScreen();
+  } else {
+    tryFindMatch();
+  }
 }
 
 function leaveToMenu() {

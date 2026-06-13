@@ -63,7 +63,9 @@ export class GauntletRoom extends Room<GauntletRoomState> {
   // sessionId → computed ring effects
   private playerEffects = new Map<string, Record<string, number>>();
   // sessionId → tap timestamps for rate limiting
-  private tapHistory   = new Map<string, number[]>();
+  private tapHistory        = new Map<string, number[]>();
+  // sessionId → correct-tap timestamps (separate rate limit to prevent all-correct cheating)
+  private correctTapHistory = new Map<string, number[]>();
   // sessionId → MMR at the time of joining (for delta calculation)
   private playerMmrs   = new Map<string, number>();
 
@@ -280,7 +282,24 @@ export class GauntletRoom extends Room<GauntletRoomState> {
 
     const effects = this.playerEffects.get(client.sessionId) || {};
 
+    // Separate rate limit for correct/void taps: max 3/s (tiles spawn ~2.4/s at most)
+    // Prevents a client from sending correct:true on every tap regardless of grid state
     let delta = 0;
+    const isPositive = data.isVoid || data.correct;
+    if (isPositive) {
+      const cHist = this.correctTapHistory.get(client.sessionId) || [];
+      const cRecent = cHist.filter(t => now - t < 1000);
+      if (cRecent.length >= MAX_TAPS_PER_SEC) {
+        // Over limit for correct taps — treat as incorrect
+        delta = Math.min(-1, Math.round(-10 * (1 - (effects.minusPenalty || 0))));
+        p.score = Math.max(0, Math.min(MAX_POSSIBLE_SCORE, p.score + delta));
+        p.taps++;
+        return;
+      }
+      cRecent.push(now);
+      this.correctTapHistory.set(client.sessionId, cRecent);
+    }
+
     if (data.isVoid) {
       delta = 20;
     } else if (data.correct) {

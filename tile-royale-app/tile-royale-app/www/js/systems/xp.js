@@ -40,6 +40,7 @@ const ACHIEVEMENTS = [
   { id:'lucky_seven',     tier:'secret', icon:'🍀', name:'Lucky Seven',        desc:'??????', secret:true, goal:1, stat:'_secret' },
   { id:'phantom',         tier:'secret', icon:'🌀', name:'Phantom',            desc:'??????', secret:true, goal:1, stat:'_secret' },
   // SOLO
+  /* OLD solo achievements — max 100 levels, max 300 stars
   { id:'solo_first',    tier:'bronze',  icon:'🎯', name:'First Solo',        desc:'Complete your first Solo level',             goal:1,   stat:'soloLevels' },
   { id:'solo_rookie',   tier:'bronze',  icon:'🏃', name:'Solo Rookie',        desc:'Complete 10 Solo levels',                   goal:10,  stat:'soloLevels' },
   { id:'solo_warrior',  tier:'silver',  icon:'⚔️', name:'Solo Warrior',       desc:'Complete 25 Solo levels',                   goal:25,  stat:'soloLevels' },
@@ -50,6 +51,26 @@ const ACHIEVEMENTS = [
   { id:'solo_stars200', tier:'silver',  icon:'💫', name:'Star Collector',      desc:'Collect 200 Solo stars',                    goal:200, stat:'soloStars'  },
   { id:'solo_perfect',  tier:'diamond', icon:'💎', name:'Perfectionist',       desc:'Collect all 300 Solo stars',                goal:300, stat:'soloStars'  },
   { id:'solo_flawless', tier:'silver',  icon:'✨', name:'Flawless',             desc:'Complete 10 levels with 3 stars each',      goal:10,  stat:'solo3Stars' },
+  */
+  // NEW solo achievements — 1000 levels
+  { id:'solo_first',       tier:'bronze',  icon:'🎯', name:'First Solo',         desc:'Complete your first Solo level',             goal:1,    stat:'soloLevels'       },
+  { id:'solo_rookie',      tier:'bronze',  icon:'🏃', name:'Solo Rookie',         desc:'Complete 10 Solo levels',                   goal:10,   stat:'soloLevels'       },
+  { id:'solo_warrior',     tier:'silver',  icon:'⚔️', name:'Solo Warrior',        desc:'Complete 25 Solo levels',                   goal:25,   stat:'soloLevels'       },
+  { id:'solo_veteran',     tier:'silver',  icon:'🎖️', name:'Solo Veteran',        desc:'Complete 50 Solo levels',                   goal:50,   stat:'soloLevels'       },
+  { id:'solo_master',      tier:'gold',    icon:'🏆', name:'Solo Master',          desc:'Complete 100 Solo levels',                  goal:100,  stat:'soloLevels'       },
+  { id:'solo_explorer',    tier:'gold',    icon:'🗺️', name:'Solo Explorer',        desc:'Complete 250 Solo levels',                  goal:250,  stat:'soloLevels'       },
+  { id:'solo_champion',    tier:'gold',    icon:'🥇', name:'Solo Champion',        desc:'Complete 500 Solo levels — halfway there!', goal:500,  stat:'soloLevels'       },
+  { id:'solo_legend',      tier:'diamond', icon:'👑', name:'Solo Legend',          desc:'Complete all 1000 Solo levels',             goal:1000, stat:'soloLevels'       },
+  { id:'solo_void10',      tier:'bronze',  icon:'💜', name:'Void Rookie',           desc:'Defuse 10 void bombs',                      goal:10,   stat:'soloVoidDefused'  },
+  { id:'solo_void100',     tier:'silver',  icon:'🟣', name:'Void Hunter',           desc:'Defuse 100 void bombs',                     goal:100,  stat:'soloVoidDefused'  },
+  { id:'solo_void500',     tier:'gold',    icon:'💜', name:'Void Master',           desc:'Defuse 500 void bombs',                     goal:500,  stat:'soloVoidDefused'  },
+  { id:'solo_dbl25',       tier:'bronze',  icon:'⚡', name:'Quick Tap',             desc:'Land 25 double-taps',                       goal:25,   stat:'soloDoubleTaps'   },
+  { id:'solo_dbl200',      tier:'silver',  icon:'⚡', name:'Double Trouble',        desc:'Land 200 double-taps',                      goal:200,  stat:'soloDoubleTaps'   },
+  { id:'solo_chain10',     tier:'bronze',  icon:'🔗', name:'Chainer',               desc:'Complete 10 colour chains',                 goal:10,   stat:'soloChains'       },
+  { id:'solo_chain100',    tier:'silver',  icon:'🔗', name:'Chain Reaction',        desc:'Complete 100 colour chains',                goal:100,  stat:'soloChains'       },
+  { id:'solo_nodmg1',      tier:'bronze',  icon:'🛡️', name:'Unscathed',             desc:'Complete a level without losing a life',    goal:1,    stat:'soloNoLifeLevels' },
+  { id:'solo_nodmg25',     tier:'silver',  icon:'🛡️', name:'Ironclad',              desc:'Complete 25 levels without losing a life',  goal:25,   stat:'soloNoLifeLevels' },
+  { id:'solo_nodmg100',    tier:'gold',    icon:'💎', name:'Invincible',            desc:'Complete 100 levels without losing a life', goal:100,  stat:'soloNoLifeLevels' },
   // WHALE — only for big spenders
   { id:'whale_1',    tier:'whale', icon:'🐋', name:'First Splash',      desc:'Purchase any diamond package',             goal:1,   stat:'diamondsPurchased' },
   { id:'whale_2',    tier:'whale', icon:'💸', name:'High Roller',       desc:'Spend 9.99€ or more in a single purchase', goal:999, stat:'singlePurchaseMax' },
@@ -71,9 +92,9 @@ function initAchStats() {
   ['games','wins','totalTaps','top5','top3','rushWins','buckshotGames','buckshotWins',
    'wildGames','wildWins','totalDiamonds','skinsBought','winStreak','bestWinStreak',
    'diamondsPurchased','totalSpentCents',
-   'soloLevels','soloStars','solo3Stars'].forEach(k => {
-    if (s[k] === undefined) s[k] = 0;
-  });
+   'soloLevels','soloVoidDefused','soloDoubleTaps','soloChains','soloNoLifeLevels',
+   'soloHighestLevel'
+  ].forEach(k => { if (s[k] === undefined) s[k] = 0; });
 }
 
 // Diamond exclusive skins (only earnable via achievements)
@@ -268,7 +289,11 @@ const ACH_CATEGORIES = {
   whale_1:'special', whale_2:'special', whale_3:'special', whale_4:'special', whale_5:'special',
   whale_6:'special', whale_7:'special', whale_8:'special', whale_song:'special', moby_dick:'special',
   solo_first:'solo', solo_rookie:'solo', solo_warrior:'solo', solo_veteran:'solo', solo_master:'solo',
-  solo_stars30:'solo', solo_stars100:'solo', solo_stars200:'solo', solo_perfect:'solo', solo_flawless:'solo',
+  solo_explorer:'solo', solo_champion:'solo', solo_legend:'solo',
+  solo_void10:'solo', solo_void100:'solo', solo_void500:'solo',
+  solo_dbl25:'solo', solo_dbl200:'solo',
+  solo_chain10:'solo', solo_chain100:'solo',
+  solo_nodmg1:'solo', solo_nodmg25:'solo', solo_nodmg100:'solo',
 };
 
 const TROPHY_POINTS_PER_TIER = { bronze:10, silver:25, gold:50, diamond:100, secret:25, whale:150 };

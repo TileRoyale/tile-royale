@@ -454,7 +454,7 @@ function openKothScreen() {
     insuffEl.style.color = 'var(--muted)';
   } else if (!canPlay) {
     insuffEl.style.display = 'block';
-    insuffEl.textContent = 'Not enough diamonds! Need 💎 50';
+    insuffEl.textContent = `Not enough diamonds! Need 💎 ${KOTH_ENTRY_FEE}`;
     insuffEl.style.color = 'var(--red)';
   } else {
     insuffEl.style.display = 'none';
@@ -529,7 +529,7 @@ function renderKothLeaderboard(playerWins, serverRows) {
 
 function startKoth() {
   if ((gameState.diamonds || 0) < KOTH_ENTRY_FEE) {
-    showToast('Not enough diamonds! Need 💎 50', 'var(--red)');
+    showToast(`Not enough diamonds! Need 💎 ${KOTH_ENTRY_FEE}`, 'var(--red)');
     return;
   }
   // Require 5 games before KOTH

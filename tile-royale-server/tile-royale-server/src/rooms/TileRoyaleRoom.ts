@@ -104,8 +104,11 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
       // Verify whale status from the DB — prevents clients from spoofing isWhale
       loadPlayerData(playerId).then(saveData => {
         const p = this.state.players.get(client.sessionId);
-        if (p && saveData?.whaleBadge === true) {
-          (p as any).isWhale = true;
+        if (p && saveData?.saveJson) {
+          try {
+            const parsed = JSON.parse(saveData.saveJson);
+            (p as any).isWhale = parsed?.whaleBadge === true;
+          } catch {}
         }
       }).catch(() => {});
     }
