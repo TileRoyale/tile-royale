@@ -174,17 +174,16 @@ function renderGauntletHand() {
     const ring   = ringId ? getRingDef(ringId) : null;
     const rar    = ring ? getRarityDef(ring.rarityId) : null;
     const eff    = (ring && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(ringId) : null;
-    const stateClass = ring ? 'hs-equipped' : 'hs-empty';
-    const colorStyle  = rar ? `style="--hs-clr:${rar.color};"` : '';
+    const stateClass  = ring ? 'hs-equipped' : 'hs-empty';
+    const inlineStyle = rar  ? `style="--hs-clr:${rar.color};"` : '';
     const iconHtml    = ring ? ringImgHtml(ring.rarityId, 36) : '';
     const effLabel    = eff
       ? `<div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:8px;letter-spacing:0.5px;color:${rar.color};background:rgba(0,0,0,0.75);padding:1px 4px;border-radius:4px;">${eff.label} ${eff.pct}</div>`
       : '';
-    return `<div class="gv2-hs gv2-hs-${i} ${stateClass}" ${colorStyle}
+    return `<div class="gv2-hs gv2-hs-${i} ${stateClass}" ${inlineStyle}
                  id="gv2-slot-${i}"
                  onclick="equipRingToFinger(${i})"
-                 title="${fname}${ring ? ': ' + ring.name + (eff ? ' — ' + eff.label + ' ' + eff.pct : '') : ' — tap to equip'}"
-                 style="position:relative;${rar ? '--hs-clr:' + rar.color + ';' : ''}">
+                 title="${fname}${ring ? ': ' + ring.name + (eff ? ' — ' + eff.label + ' ' + eff.pct : '') : ' — tap to equip'}">
               ${iconHtml}${effLabel}
             </div>`;
   }).join('');

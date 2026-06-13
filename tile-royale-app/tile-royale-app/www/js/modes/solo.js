@@ -985,6 +985,15 @@ function soloLevelComplete() {
 
   const gemReward = soloParseGemReward(cfg.reward);
   gameState.diamonds = (gameState.diamonds || 0) + gemReward;
+
+  // XP: scales slightly with level (20 base → up to 60 at lv1000)
+  const soloXp = Math.min(60, 20 + Math.floor(levelNum / 25));
+  const soloXpBoosted = (gameState.xpBoostGames || 0) > 0 ? soloXp * 2 : soloXp;
+  if ((gameState.xpBoostGames || 0) > 0) gameState.xpBoostGames = Math.max(0, gameState.xpBoostGames - 1);
+  gameState.xp = (gameState.xp || 0) + soloXpBoosted;
+  if (typeof awardLevelUp === 'function') awardLevelUp();
+  try { trackMissionEvent('match_end', { placement: 1, taps: 0, xp: soloXpBoosted, mode: 'solo' }); } catch(e) {}
+
   saveState();
   _recordSoloCompleteServer(levelNum, gemReward);
 
@@ -1011,7 +1020,7 @@ function soloLevelComplete() {
   /* OLD: document.getElementById('soloCompleteReward').textContent = `+1❤️   +${gemReward}💎`; */
   // NEW:
   document.getElementById('soloCompleteReward').textContent =
-    '+1❤️' + (gemReward > 0 ? `   +${gemReward}💎` : '') + soloParseCosmetic(cfg.reward);
+    '+1❤️' + (gemReward > 0 ? `   +${gemReward}💎` : '') + `   +${soloXpBoosted}XP` + soloParseCosmetic(cfg.reward);
 
   // Hide old milestone box (replaced by reward window)
   const mBox = document.getElementById('soloMilestoneBox');

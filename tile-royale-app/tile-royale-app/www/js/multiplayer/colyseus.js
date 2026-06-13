@@ -458,6 +458,8 @@ function startGameFromServer() {
   previousPlayersLeft = playersLeft;
   matchStarted        = true;  // multiplayer: game is already live when this is called
   roundActive = true;
+  if (!gameState.achStats) gameState.achStats = {};
+  gameState.achStats.roundTapsThisGame = 0;
   updateKothGameBanner();
 
   // Apply burning tile after everything is settled
@@ -649,7 +651,7 @@ function endGameFromServer(data) {
     } catch(e) { console.warn('[endGameFromServer] DC progress:', e); }
 
     // ── Mission progress ──────────────────────────────────────────────────────
-    try { trackMissionEvent('match_end', { placement: place, taps: 0, xp, mode: gameState.mode }); } catch(e) {}
+    try { trackMissionEvent('match_end', { placement: place, taps: gameState.achStats?.roundTapsThisGame || 0, xp, mode: gameState.mode }); } catch(e) {}
 
     // ── Reward UI ────────────────────────────────────────────────────────────
     document.getElementById('rewardDiamonds').textContent  = `+${diamonds}`;
@@ -742,6 +744,12 @@ function tapTile(idx) {
         setTimeout(() => r.remove(), 800);
       }
       playSound('tap'); vibrate(25);
+      if (!isCustomLobbyGame) {
+        updateDcProgress('streakTaps', 1);
+        updateDcProgress('tapsToday', 1);
+        if (!gameState.achStats) gameState.achStats = {};
+        gameState.achStats.roundTapsThisGame = (gameState.achStats.roundTapsThisGame || 0) + 1;
+      }
       hideFirstGameHint();
       // Buckshot: check if player cleared all tiles locally
       if (gameState.mode === 'buckshot') {

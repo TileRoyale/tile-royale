@@ -307,7 +307,7 @@ const WHEEL_SECTOR_DEF = {
   legendary: [180, 320],
   secret:    [280],
 };
-const WHEEL_SECTOR_HALF = 8; // max jitter within a sector (keeps landing visually inside correct color)
+const WHEEL_SECTOR_HALF = 4; // max jitter — tight to avoid visual bleed near rare/secret boundaries
 
 
 const WHEEL_COLORS = {

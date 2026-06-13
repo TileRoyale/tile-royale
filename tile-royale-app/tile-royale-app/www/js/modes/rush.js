@@ -225,6 +225,7 @@ function endPractice() {
 
   // Reset game timer display
   const timerEl = document.getElementById('gameTimer');
+  timerEl.textContent = '';
   timerEl.style.fontSize = '';
   timerEl.style.color = '';
 

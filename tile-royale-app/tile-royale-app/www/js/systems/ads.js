@@ -23,6 +23,32 @@ function _adMob() {
   return window.Capacitor?.Plugins?.AdMob ?? null;
 }
 
+// Ad preload state — keeps one ad loaded in memory so it shows instantly
+let _adPreloaded = false;
+let _adPreloading = false;
+
+async function _preloadRewardedAd() {
+  if (_adPreloaded || _adPreloading || !_isNative()) return;
+  _adPreloading = true;
+  const cap = window.Capacitor;
+  const admob = _adMob();
+  try {
+    if (admob) {
+      await admob.prepareRewardVideoAd({ adId: ADMOB_REWARDED_ID });
+    } else if (cap?.nativePromise) {
+      await cap.nativePromise('AdMob', 'prepareRewardVideoAd', { adId: ADMOB_REWARDED_ID });
+    } else {
+      _adPreloading = false;
+      return;
+    }
+    _adPreloaded = true;
+    console.log('[AdMob] ad pre-loaded');
+  } catch(e) {
+    console.warn('[AdMob] preload failed:', e?.message || e);
+  }
+  _adPreloading = false;
+}
+
 // Initialize AdMob — called once on app load
 async function initAdMob() {
   if (!_isNative()) return;
@@ -36,6 +62,8 @@ async function initAdMob() {
       await cap.nativePromise('AdMob', 'initialize', { requestTrackingAuthorization: false, initializeForTesting: false });
     }
     console.log('[AdMob] initialized');
+    // Pre-load first ad in background — eliminates loading delay for user
+    setTimeout(() => _preloadRewardedAd(), 1000);
   } catch(e) {
     console.warn('[AdMob] init error:', e?.message || e);
   }
@@ -45,19 +73,24 @@ async function initAdMob() {
 async function _showRewardedAd() {
   const cap = window.Capacitor;
   const admob = _adMob();
-  // Prepare (load) the ad
-  try {
-    if (admob) {
-      await admob.prepareRewardVideoAd({ adId: ADMOB_REWARDED_ID });
-    } else if (cap?.nativePromise) {
-      await cap.nativePromise('AdMob', 'prepareRewardVideoAd', { adId: ADMOB_REWARDED_ID });
-    } else {
+
+  if (!_adPreloaded) {
+    // Fallback: load now if pre-load hasn't finished yet
+    try {
+      if (admob) {
+        await admob.prepareRewardVideoAd({ adId: ADMOB_REWARDED_ID });
+      } else if (cap?.nativePromise) {
+        await cap.nativePromise('AdMob', 'prepareRewardVideoAd', { adId: ADMOB_REWARDED_ID });
+      } else {
+        return false;
+      }
+    } catch(e) {
+      console.warn('[AdMob] load failed:', e?.message || e);
       return false;
     }
-  } catch(e) {
-    console.warn('[AdMob] load failed:', e?.message || e);
-    return false;
   }
+  _adPreloaded = false; // consumed — will reload after show
+
   // Show and wait for reward
   try {
     let result;
@@ -66,11 +99,13 @@ async function _showRewardedAd() {
     } else {
       result = await cap.nativePromise('AdMob', 'showRewardVideoAd', {});
     }
-    // If the plugin resolves (no exception), the reward was earned.
+    // Pre-load next ad in background for zero delay next time
+    setTimeout(() => _preloadRewardedAd(), 2000);
     // Newer plugin versions return void; older return { type, amount }. Either way: rewarded.
     return result?.type !== undefined ? !!(result.type) : true;
   } catch(e) {
     console.warn('[AdMob] dismissed or failed:', e?.message || e);
+    setTimeout(() => _preloadRewardedAd(), 2000);
     return false;
   }
 }
@@ -191,7 +226,6 @@ async function watchAdsForTickets(count) {
   adWatchInProgress = true;
 
   if (count === 1) {
-    showToast('📺 Loading ad...', 'var(--muted)');
     const rewarded = await _watchRewardedAd();
     adWatchInProgress = false;
     if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
@@ -206,7 +240,7 @@ async function watchAdsForTickets(count) {
     // Watch count ads in sequence — grant partial reward if chain breaks midway
     let earned = 0;
     for (let i = 1; i <= count; i++) {
-      showToast(`📺 Ad ${i}/${count}...`, 'var(--muted)');
+      showToast(`Ad ${i}/${count}...`, 'var(--muted)');
       const rewarded = await _watchRewardedAd();
       if (!rewarded) {
         adWatchInProgress = false;
@@ -246,7 +280,6 @@ async function watchAdForRandomItem() {
   if (!canWatchAd()) { showToast(getAdCooldownText(), 'var(--muted)'); return; }
   if (adWatchInProgress) { showToast('Ad already playing...', 'var(--muted)'); return; }
   adWatchInProgress = true;
-  showToast('📺 Loading ad...', 'var(--muted)');
   const rewarded = await _watchRewardedAd();
   adWatchInProgress = false;
   if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
