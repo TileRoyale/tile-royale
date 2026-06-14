@@ -626,8 +626,11 @@ app.post("/missions/claim", async (req, res) => {
     const serverCount = await getMissionServerCount(
       String(playerId), String(missionType), String(periodStart), String(periodEnd)
     );
-    // serverCount === -1 means type not validatable (xp, tickets) — allow through
-    if (serverCount !== -1 && serverCount < Number(target)) {
+    // serverCount === -1 → type not server-validatable (xp, tickets) → allow through
+    // serverCount === 0  → no DB rows for this period (e.g. all games were bot games before
+    //                      bot results were recorded) → trust client, allow through
+    // serverCount > 0    → server has real data → validate strictly
+    if (serverCount > 0 && serverCount < Number(target)) {
       return res.json({ ok: false, error: 'not_completed' });
     }
   }
@@ -1208,12 +1211,13 @@ app.get("/admin/push/count", requireAdmin, async (_req, res) => {
 
 // ─── Game End Rewards ─────────────────────────────────────────────────────────
 
-// POST /game/end-rewards  { playerId, placement, mode, isCustomLobby, xpBoostActive }
+// POST /game/end-rewards  { playerId, placement, mode, isCustomLobby, xpBoostActive, isBotMatch?, tilesTapped?, totalPlayers? }
 // Returns server-authoritative diamond grant for the just-completed game.
-// Calculates daily cap from actual game_results (server-written by TileRoyaleRoom).
+// Calculates daily cap from actual game_results.
 // Also raises the trusted diamond ceiling so the cloud save accepts the grant.
+// Bot/offline games send isBotMatch:true — we write their result here since TileRoyaleRoom only covers multiplayer.
 app.post("/game/end-rewards", async (req, res) => {
-  const { playerId, placement, mode, isCustomLobby, xpBoostActive } = req.body;
+  const { playerId, placement, mode, isCustomLobby, xpBoostActive, isBotMatch, tilesTapped, totalPlayers } = req.body;
   if (!playerId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(playerId))
     return res.json({ ok: false, error: 'invalid_player' });
 
@@ -1221,6 +1225,16 @@ app.post("/game/end-rewards", async (req, res) => {
   if (Boolean(isCustomLobby)) return res.json({ ok: true, diamonds: 0, xp: 0 });
 
   const p = Math.max(1, Math.min(Number(placement) || 99, 99));
+
+  // Record bot/offline game results — TileRoyaleRoom only covers multiplayer games
+  if (Boolean(isBotMatch) && getDbStatus().available) {
+    const taps = Math.max(0, Math.min(Number(tilesTapped) || 0, 10000));
+    const total = Math.max(2, Math.min(Number(totalPlayers) || 30, 100));
+    writeGameResult(playerId, p, total, String(mode || 'rush'),
+      taps > 0 ? { tilesTapped: taps, avgReactionMs: 0, bestReactionMs: 0 } : undefined,
+      true
+    ).catch(e => console.error("[DB] writeGameResult (bot) failed:", e));
+  }
 
   // Base diamond reward by placement
   const baseDiamonds = p === 1 ? 6 : p === 2 ? 4 : p === 3 ? 2 : 1;

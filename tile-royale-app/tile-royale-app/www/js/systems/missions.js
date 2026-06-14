@@ -23,13 +23,13 @@ const DAILY_POOL = [
 ];
 
 const WEEKLY_POOL = [
-  { id: 'w_win10',    title: 'Winner',        desc: 'Win 10 matches',                  type: 'wins',      target: 10,    reward: { type: 'diamonds', amount: 500 } },
+  { id: 'w_win10',    title: 'Winner',        desc: 'Win 10 matches',                  type: 'wins',      target: 10,    reward: { type: 'diamonds', amount: 300 } },
   { id: 'w_win25',    title: 'Dominant',      desc: 'Win 25 matches',                  type: 'wins',      target: 25,    reward: { type: 'tickets',  amount: 3   } },
-  { id: 'w_top3_20',  title: 'Podium Hunter', desc: 'Reach Top 3 twenty times',        type: 'top3',      target: 20,    reward: { type: 'diamonds', amount: 500 } },
+  { id: 'w_top3_20',  title: 'Podium Hunter', desc: 'Reach Top 3 twenty times',        type: 'top3',      target: 20,    reward: { type: 'diamonds', amount: 300 } },
   { id: 'w_top3_50',  title: 'Elite',         desc: 'Reach Top 3 fifty times',         type: 'top3',      target: 50,    reward: { type: 'tickets',  amount: 5   } },
-  { id: 'w_taps5k',   title: 'Tile Storm',    desc: 'Tap 5,000 tiles',                 type: 'taps',      target: 5000,  reward: { type: 'diamonds', amount: 500 } },
+  { id: 'w_taps5k',   title: 'Tile Storm',    desc: 'Tap 5,000 tiles',                 type: 'taps',      target: 5000,  reward: { type: 'diamonds', amount: 300 } },
   { id: 'w_taps10k',  title: 'Unstoppable',   desc: 'Tap 10,000 tiles',               type: 'taps',      target: 10000, reward: { type: 'spins',    amount: 2   } },
-  { id: 'w_xp2k',     title: 'XP Hunter',     desc: 'Earn 2,000 XP',                  type: 'xp',        target: 2000,  reward: { type: 'diamonds', amount: 500 } },
+  { id: 'w_xp2k',     title: 'XP Hunter',     desc: 'Earn 2,000 XP',                  type: 'xp',        target: 2000,  reward: { type: 'diamonds', amount: 300 } },
   { id: 'w_xp5k',     title: 'Experience',    desc: 'Earn 5,000 XP',                  type: 'xp',        target: 5000,  reward: { type: 'tickets',  amount: 5   } },
   { id: 'w_play50',   title: 'Grinder',       desc: 'Play 50 matches',                 type: 'matches',   target: 50,    reward: { type: 'spins',    amount: 2   } },
   { id: 'w_allmodes', title: 'All Rounder',   desc: 'Play Rush, Buckshot & Wild',      type: 'all_modes', target: 3,     reward: { type: 'tickets',  amount: 3   } },

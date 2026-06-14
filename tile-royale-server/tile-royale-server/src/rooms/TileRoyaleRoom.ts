@@ -712,10 +712,9 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
     });
 
     // Persist game results for every human player (fire-and-forget)
-    // Detect bot-only matches: if every opponent is a bot, flag as bot match
-    let humanOpponentCount = 0;
-    this.state.players.forEach(p => { if (!(p as any).isBot) humanOpponentCount++; });
-    const isBotMatch = humanOpponentCount <= 1; // only the local player is human
+    // Server-room games always count for rankings (is_bot_match=false).
+    // is_bot_match=true is reserved for offline client-side games recorded via /game/end-rewards.
+    const isBotMatch = false;
 
     this.state.players.forEach((p, sessionId) => {
       if ((p as any).isBot) return;
