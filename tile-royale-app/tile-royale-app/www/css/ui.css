@@ -3447,7 +3447,7 @@
 }
 .tile.bomb::after {
   content: '💣';
-  font-size: 108px;
+  font-size: 36px;
   position: absolute;
   top: 50%;
   left: 50%;

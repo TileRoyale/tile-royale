@@ -170,14 +170,13 @@ async function claimMissionReward(period, missionId) {
         });
         const data = r.ok ? await r.json() : null;
         if (data && !data.ok && !data.offline) {
-          if (data.error === 'already_claimed' || data.error === 'not_completed') {
-            if (data.error === 'already_claimed') {
-              mState.claimed = true;
-              _msSave(s);
-            }
+          if (data.error === 'already_claimed') {
+            mState.claimed = true;
+            _msSave(s);
             renderMissionsPopup(); updateMissionsBadge();
             return;
           }
+          // 'not_completed' from server: trust local check and allow claim anyway
         }
       } catch(e) { /* offline fallback — allow local claim */ }
     }

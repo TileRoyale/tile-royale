@@ -22,13 +22,29 @@ async function googleSignIn() {
   }
   try {
     showToast('⏳ Opening Google Sign-In...', 'var(--muted)');
-    await auth.initialize();
+
+    // Pass options explicitly — don't rely on capacitor.config.ts being read correctly
+    try {
+      await auth.initialize({
+        clientId: '129001782295-i2jtj0ppe4b7kjhmv1f5uvap6c8pnvdn.apps.googleusercontent.com',
+        scopes: ['profile', 'email'],
+        grantOfflineAccess: true,
+      });
+    } catch(initErr) {
+      // initialize() may throw if already initialized — that's fine
+      console.warn('[GoogleAuth] initialize warning (non-fatal):', initErr?.message || initErr);
+    }
+
     const user = await auth.signIn();
-    const googleId = user.id;
+    if (!user) throw new Error('signIn returned null');
+
+    const googleId = user.id || user.sub || user.serverAuthCode;
+    if (!googleId) throw new Error('no_google_id: ' + JSON.stringify(Object.keys(user)));
+
     const newPlayerId = `google_${googleId}`;
 
     localStorage.setItem('tr_google_id',    googleId);
-    localStorage.setItem('tr_google_name',  user.name || user.displayName || 'Player');
+    localStorage.setItem('tr_google_name',  user.name || user.displayName || user.givenName || 'Player');
     localStorage.setItem('tr_google_email', user.email || '');
 
     // Switch global PLAYER_ID to Google-based ID
@@ -39,7 +55,6 @@ async function googleSignIn() {
     const restored = await loadFromCloud();
 
     if (!restored) {
-      // No cloud save for this Google account yet — upload current progress
       await saveToCloud();
       showToast('✅ Signed in! Progress linked to Google account.', 'var(--green)');
     } else {
@@ -49,7 +64,7 @@ async function googleSignIn() {
     updateGoogleAuthUI();
   } catch(e) {
     console.warn('[GoogleAuth] sign-in failed:', e?.message || e);
-    showToast('Sign-in cancelled or failed', 'var(--muted)');
+    showToast('❌ Sign-in failed: ' + (e?.message || 'unknown error'), 'var(--red)');
   }
 }
 

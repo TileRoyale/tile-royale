@@ -98,6 +98,11 @@ function updateDangerMode() {
 // ===== GAME =====
 function startGame() {
   showScreen('gameScreen');
+  // Hide solo-only overlays that persist in the DOM after a solo session
+  const _sl = document.getElementById('soloTapsLabel');
+  if (_sl) _sl.style.display = 'none';
+  const _sc = document.getElementById('soloColorHud');
+  if (_sc) _sc.style.display = 'none';
   playerEliminated = false;
   playersLeft = gameState.players;
   playerPlace = gameState.players;

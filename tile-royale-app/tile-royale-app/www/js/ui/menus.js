@@ -842,7 +842,13 @@ function openLink(url) {
 function contactSupport() { openLink('mailto:TileRoyaleGame@gmail.com?subject=Tile%20Royale%20Support'); }
 function rateApp() {
   showToast('⭐ Thank you! Redirecting to store...', 'var(--gold)');
-  setTimeout(() => openLink('https://play.google.com/store/apps/details?id=com.tileroyale.game'), 1000);
+  setTimeout(() => {
+    if (typeof Capacitor !== 'undefined') {
+      window.open('market://details?id=com.tileroyale.game', '_system');
+    } else {
+      window.open('https://play.google.com/store/apps/details?id=com.tileroyale.game', '_blank');
+    }
+  }, 1000);
 }
 
 const LEGAL_CONTENT = {

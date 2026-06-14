@@ -453,6 +453,7 @@ function startSoloLevel() {
     tapsLabel.style.cssText = 'font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:var(--text);text-align:center;margin-bottom:6px;';
     grid.parentNode.insertBefore(tapsLabel, grid);
   }
+  tapsLabel.style.display = '';
   /* OLD: tapsLabel.textContent = `0 / ${cfg.tiles} taps`; */
   // NEW:
   tapsLabel.textContent = `0 / ${soloTapsRequired}`;

@@ -268,16 +268,28 @@ function buildItemCard(item) {
 function renderStoreSkins(c) {
   ['table','tile','tileeffect','tapeffect'].forEach(tab => {
     const tabNames = { table:'🎰 Table Skins', tile:'🟥 Tile Skins', tileeffect:'🔥 Tile Effects', tapeffect:'💥 Tap Effects' };
-    c.innerHTML += `<div class="store-section-hdr">${tabNames[tab]}</div>`;
+    const hdr = document.createElement('div');
+    hdr.className = 'store-section-hdr';
+    hdr.textContent = tabNames[tab];
+    c.appendChild(hdr);
     const grid = document.createElement('div');
     grid.className = 'store-item-grid';
     SKINS[tab].filter(s => s.price > 0).forEach(skin => {
       const owned = skin.owned || (gameState.ownedSkins && gameState.ownedSkins[skin.id]);
-      grid.innerHTML += `<div class="store-item-card ${owned?'owned':''}" onclick="${owned?'':` selectSkin('${tab}', ${JSON.stringify(skin).replace(/"/g,"'")}, false)`}">
-        <div class="store-item-icon">${skin.icon}</div>
+      const card = document.createElement('div');
+      card.className = 'store-item-card' + (owned ? ' owned' : '');
+      if (!owned) card.onclick = () => selectSkin(tab, skin, false);
+      card.innerHTML = `
+        <div class="skin-mini-preview" id="store-mini-${skin.id}" style="width:56px;height:56px;border-radius:10px;margin:0 auto 6px;"></div>
         <div class="store-item-name">${skin.name}</div>
-        <div class="store-item-price">${owned ? '✓ Owned' : '💎 '+skin.price}</div>
-      </div>`;
+        <div class="store-item-price">${owned ? '✓ Owned' : '💎 ' + skin.price}</div>`;
+      grid.appendChild(card);
+      if (typeof buildMiniPreview === 'function') {
+        setTimeout(() => {
+          const el = document.getElementById('store-mini-' + skin.id);
+          if (el) { el.id = 'mini-' + skin.id; buildMiniPreview(skin.id, tab); el.id = 'store-mini-' + skin.id; }
+        }, 0);
+      }
     });
     c.appendChild(grid);
   });

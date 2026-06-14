@@ -7,11 +7,13 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
+import com.codetrixstudio.capacitor.GoogleAuth.GoogleAuth;
 
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(BillingPlugin.class);
+        registerPlugin(GoogleAuth.class);
         super.onCreate(savedInstanceState);
 
         // Full screen — hide status bar and navigation bar
