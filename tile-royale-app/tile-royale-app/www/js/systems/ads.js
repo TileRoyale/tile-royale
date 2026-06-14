@@ -57,9 +57,9 @@ async function initAdMob() {
   const admob = _adMob();
   try {
     if (admob) {
-      await admob.initialize({ requestTrackingAuthorization: false, initializeForTesting: false });
+      await admob.initialize({ testingDevices: ['EMULATOR'] });
     } else if (cap?.nativePromise) {
-      await cap.nativePromise('AdMob', 'initialize', { requestTrackingAuthorization: false, initializeForTesting: false });
+      await cap.nativePromise('AdMob', 'initialize', { testingDevices: ['EMULATOR'] });
     }
     console.log('[AdMob] initialized');
     // Pre-load first ad in background — eliminates loading delay for user

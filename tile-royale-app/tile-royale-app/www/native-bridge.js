@@ -93,47 +93,6 @@ window.addEventListener('load', async () => {
     }
   } catch(e) {}
 
-  // ── ADMOB ────────────────────────────────────────────────────────────────
-  try {
-    const { AdMob, RewardAdPluginEvents, AdmobConsentStatus } = await import('./node_modules/@capacitor-community/admob/dist/esm/index.js')
-      .catch(() => ({ AdMob: null }));
-
-    if (AdMob) {
-      await AdMob.initialize({
-        // Real AdMob App ID: ca-app-pub-1687381057809117~9075174731
-        testingDevices: ['EMULATOR'],
-        initializeForGeography: 1, // EEA
-      });
-
-      // Real rewarded ad unit IDs
-      window.simulateAdWatch = async (onComplete) => {
-        try {
-          const adId = Cap.getPlatform() === 'ios'
-            ? 'ca-app-pub-1687381057809117/YOUR_IOS_REWARDED_ID'  // add iOS unit ID from AdMob console
-            : 'ca-app-pub-1687381057809117/7980217936'; // Android rewarded — ticket_reward
-
-          await AdMob.prepareRewardVideoAd({ adId });
-
-          let rewarded = false;
-          AdMob.addListener(RewardAdPluginEvents.Rewarded, () => {
-            rewarded = true;
-          });
-          AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
-            if (rewarded) onComplete();
-            else if (window.showToast) window.showToast('Ad not completed', 'var(--muted)');
-          });
-
-          await AdMob.showRewardVideoAd();
-        } catch(e) {
-          console.warn('[AdMob] Error:', e);
-          window.showToast('Ad unavailable — try again later', 'var(--muted)');
-        }
-      };
-
-      console.log('[NativeBridge] AdMob ready');
-    }
-  } catch(e) {}
-
   // ── APP STATE (pause/resume) ─────────────────────────────────────────────
   try {
     const { App } = await import('./node_modules/@capacitor/app/dist/esm/index.js')
