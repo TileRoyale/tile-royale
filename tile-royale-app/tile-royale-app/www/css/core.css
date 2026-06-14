@@ -112,6 +112,18 @@
     position: relative;
     overflow: hidden;
   }
+  .mode-online {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #00e676;
+    letter-spacing: 0.2px;
+    line-height: 1;
+    display: block;
+    pointer-events: none;
+  }
   .mode-card::before {
     content: '';
     position: absolute;

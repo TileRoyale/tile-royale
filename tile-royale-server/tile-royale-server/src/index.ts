@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
-import { Server } from "@colyseus/core";
+import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
@@ -2062,6 +2062,27 @@ app.post("/custom-lobby/:code/start",(req,res)=>{
   res.json({ok:true,lobby});
 });
 // ── End Custom Lobby ──────────────────────────────────────────────────────────
+
+// GET /player-counts — live player counts per mode for the main menu badges
+app.get("/player-counts", async (req, res) => {
+  try {
+    const counts: Record<string, number> = { rush: 0, buckshot: 0, wild: 0, koth: 0 };
+    const trRooms = await matchMaker.query({ name: "tile_royale" });
+    for (const room of trRooms) {
+      const mode: string = (room as any).mode || (room.metadata && (room.metadata as any).mode) || '';
+      if (mode in counts) counts[mode] += room.clients;
+    }
+    // Custom lobby: count players waiting in active (non-started) lobbies
+    let customCount = 0;
+    for (const [, lobby] of _customLobbies) {
+      if (!lobby.started) customCount += lobby.players.length;
+    }
+    counts.custom = customCount;
+    res.json(counts);
+  } catch(e) {
+    res.json({ rush: 0, buckshot: 0, wild: 0, koth: 0, custom: 0 });
+  }
+});
 
 app.use("/colyseus", monitor());
 

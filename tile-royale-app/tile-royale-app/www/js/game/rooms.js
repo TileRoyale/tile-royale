@@ -790,3 +790,43 @@ function updateMenuCustomLobbyCard() {
   }
 }
 
+// ── Live player count badges ──────────────────────────────────────────────────
+let _playerCountsTimer = null;
+
+async function fetchPlayerCounts() {
+  try {
+    const r = await fetch(`${getActiveServer().http}/player-counts`);
+    if (!r.ok) return;
+    const counts = await r.json();
+    const mapping = { rush: 'modeOnline_rush', buckshot: 'modeOnline_buckshot', wild: 'modeOnline_wild', koth: 'modeOnline_koth', custom: 'modeOnline_custom' };
+    for (const [mode, elId] of Object.entries(mapping)) {
+      const el = document.getElementById(elId);
+      if (!el) continue;
+      el.textContent = '● ' + (counts[mode] || 0);
+    }
+  } catch(e) {}
+}
+
+function startPlayerCountsPolling() {
+  fetchPlayerCounts();
+  if (_playerCountsTimer) clearInterval(_playerCountsTimer);
+  _playerCountsTimer = setInterval(fetchPlayerCounts, 5000);
+}
+
+function stopPlayerCountsPolling() {
+  if (_playerCountsTimer) { clearInterval(_playerCountsTimer); _playerCountsTimer = null; }
+}
+
+// Hook into showScreen (rooms.js loads after menus.js so showScreen is defined here)
+(function() {
+  const _orig = window.showScreen;
+  if (typeof _orig === 'function') {
+    window.showScreen = function(id) {
+      _orig.call(this, id);
+      if (id === 'menuScreen') startPlayerCountsPolling();
+    };
+  }
+  // Also fire once on initial load (menu is already visible on startup)
+  window.addEventListener('load', function() { setTimeout(fetchPlayerCounts, 800); });
+})();
+

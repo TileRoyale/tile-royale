@@ -214,21 +214,25 @@
   <div class="section-label">Select Mode</div>
   <div class="mode-grid" style="grid-template-columns: repeat(2,1fr);">
     <div class="mode-card selected" data-mode="rush" onclick="selectMode('rush', this)">
+      <span class="mode-online" id="modeOnline_rush">● 0</span>
       <div class="mode-icon">⚡</div>
       <div class="mode-name">Rush</div>
       <div class="mode-time">Single tile mode</div>
     </div>
     <div class="mode-card" data-mode="buckshot" onclick="selectMode('buckshot', this)">
+      <span class="mode-online" id="modeOnline_buckshot">● 0</span>
       <div class="mode-icon">💥</div>
       <div class="mode-name">Buckshot</div>
       <div class="mode-time">Multi tile mode</div>
     </div>
     <div class="mode-card" data-mode="wild" onclick="selectMode('wild', this)">
+      <span class="mode-online" id="modeOnline_wild">● 0</span>
       <div class="mode-icon">🌀</div>
       <div class="mode-name">Wild</div>
       <div class="mode-time">Special items mode</div>
     </div>
     <div class="mode-card koth-card" data-mode="koth" id="kothModeCard" onclick="onKothCardClick()">
+      <span class="mode-online" id="modeOnline_koth">● 0</span>
       <div class="mode-icon" id="kothModeIcon">👑</div>
       <div class="mode-name" id="kothModeName">King of the Hill</div>
       <div class="mode-time" id="kothModeSubtext" style="color:var(--gold);">💎 20 entry</div>
@@ -245,6 +249,7 @@
       <div class="mode-time">Offline · <span id="soloMenuLives">❤️ 5</span></div>
     </div>
     <div class="mode-card custom-lobby-card" data-mode="custom" onclick="selectMode('custom', this)" id="customLobbyModeCard" style="grid-column: 1 / -1;">
+      <span class="mode-online" id="modeOnline_custom">● 0</span>
       <div class="mode-icon" id="customLobbyIcon">🏟️</div>
       <div class="mode-name">Custom Lobby</div>
       <div class="mode-time" id="customLobbySubtext" style="color:var(--muted);">Join with code · 🔒 Create needs KOTH Top 3</div>
