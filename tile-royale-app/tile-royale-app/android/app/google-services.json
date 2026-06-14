@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1045465012102",
+    "project_id": "tile-royale-d7897",
+    "storage_bucket": "tile-royale-d7897.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1045465012102:android:fa0adabf046b0f370c3e07",
+        "android_client_info": {
+          "package_name": "com.tileroyale.game"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1045465012102-nh4hvabhicchjlnlvpo482ne5118sbt7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tileroyale.game",
+            "certificate_hash": "044e931f1689be322c2349c753aa7bd6216b4889"
+          }
+        },
+        {
+          "client_id": "1045465012102-vkc1iavujbscm8j1hrerj4fr440e1tjm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDe9djIacjcIKKT74s_ITM6kujzjica2iI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1045465012102-vkc1iavujbscm8j1hrerj4fr440e1tjm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

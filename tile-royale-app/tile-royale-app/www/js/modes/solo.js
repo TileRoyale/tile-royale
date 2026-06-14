@@ -547,7 +547,15 @@ function soloNextRound() {
     tiles[pos].classList.add('burning');
     tiles[pos].dataset.colorIdx = colorIdx;
     tiles[pos].dataset.isTarget = (colorIdx === soloTargetColorIdx) ? '1' : '0';
-    if (colors > 1) tiles[pos].classList.add('color-' + colorIdx);
+    if (colors > 1) {
+      tiles[pos].classList.add('color-' + colorIdx);
+      // Inline important overrides all skin/burning CSS (some skins use !important on background)
+      const _c = _SOLO_COLORS[colorIdx] || _SOLO_COLORS[0];
+      tiles[pos].style.setProperty('background', _c.bg, 'important');
+      tiles[pos].style.setProperty('box-shadow', `0 0 22px ${_c.glow}, inset 0 0 10px rgba(255,255,255,0.12)`, 'important');
+      tiles[pos].style.setProperty('border-color', _c.border, 'important');
+      tiles[pos].style.setProperty('animation', 'none', 'important');
+    }
     if (isGhostRound && i === 0) tiles[pos].classList.add('ghost-tile');
     if (isDblRound   && i === 0) tiles[pos].classList.add('double-tap-tile');
     if (isLifeRound  && i === 0) { tiles[pos].classList.add('life-tile'); tiles[pos].dataset.special = 'life'; }
@@ -570,7 +578,14 @@ function soloNextRound() {
       tiles[pos].classList.add('burning', 'decoy-tile');
       tiles[pos].dataset.colorIdx = soloTargetColorIdx;
       tiles[pos].dataset.isTarget = '0';
-      if (colors > 1) tiles[pos].classList.add('color-' + soloTargetColorIdx);
+      if (colors > 1) {
+        tiles[pos].classList.add('color-' + soloTargetColorIdx);
+        const _c = _SOLO_COLORS[soloTargetColorIdx] || _SOLO_COLORS[0];
+        tiles[pos].style.setProperty('background', _c.bg, 'important');
+        tiles[pos].style.setProperty('box-shadow', `0 0 22px ${_c.glow}, inset 0 0 10px rgba(255,255,255,0.12)`, 'important');
+        tiles[pos].style.setProperty('border-color', _c.border, 'important');
+        tiles[pos].style.setProperty('animation', 'none', 'important');
+      }
     }
   }
 
@@ -921,15 +936,22 @@ function soloDefuseVoidBomb(pos) {
   if (typeof playSound === 'function') playSound('join');
 }
 
-// ── Color HUD ────────────────────────────────────────────────────────────
-const COLOR_NAMES   = ['🔴', '🔵', '🟡', '🟢'];
+// ── Color constants ───────────────────────────────────────────────────────
+const _SOLO_COLORS = [
+  { bg: 'rgba(220,50,50,0.92)',  glow: 'rgba(220,50,50,1)',  border: 'rgb(220,50,50)'  },
+  { bg: 'rgba(50,120,220,0.92)', glow: 'rgba(50,120,220,1)', border: 'rgb(50,120,220)' },
+  { bg: 'rgba(210,185,20,0.92)', glow: 'rgba(210,185,20,1)', border: 'rgb(210,185,20)' },
+  { bg: 'rgba(50,190,75,0.92)',  glow: 'rgba(50,190,75,1)',  border: 'rgb(50,190,75)'  },
+];
 
+// ── Color HUD ────────────────────────────────────────────────────────────
 function soloUpdateColorHud(totalColors, targetIdx) {
-  const el = document.getElementById('soloColorHud');
-  if (!el) return;
-  if (totalColors <= 1) { el.style.display = 'none'; return; }
-  el.style.display = 'block';
-  el.textContent   = `TAP: ${COLOR_NAMES[targetIdx]}`;
+  const bar = document.getElementById('soloTargetBar');
+  if (!bar) return;
+  if (totalColors <= 1) { bar.style.display = 'none'; return; }
+  const c = _SOLO_COLORS[targetIdx] || _SOLO_COLORS[0];
+  bar.style.display = 'flex';
+  bar.innerHTML = `TAP → <div class="solo-target-tile" style="background:${c.bg};box-shadow:0 0 14px ${c.glow};border-color:${c.border};"></div>`;
 }
 
 // ── Floating text feedback ───────────────────────────────────────────────

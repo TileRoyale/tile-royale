@@ -26,7 +26,7 @@ async function googleSignIn() {
     // Pass options explicitly — don't rely on capacitor.config.ts being read correctly
     try {
       await auth.initialize({
-        clientId: '129001782295-i2jtj0ppe4b7kjhmv1f5uvap6c8pnvdn.apps.googleusercontent.com',
+        clientId: '1045465012102-vkc1iavujbscm8j1hrerj4fr440e1tjm.apps.googleusercontent.com',
         scopes: ['profile', 'email'],
         grantOfflineAccess: true,
       });

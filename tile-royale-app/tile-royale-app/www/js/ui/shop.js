@@ -515,6 +515,17 @@ async function _verifyAndDeliverPurchase(purchase) {
   }
 
   _applyPurchaseGrant(grant);
+
+  // Consume the purchase so Google Play doesn't auto-refund after 3 days
+  // and allows re-purchase of the same product.
+  if (purchaseToken) {
+    try {
+      const billing = window.Capacitor?.Plugins?.Billing;
+      if (billing) await billing.consume({ purchaseToken });
+    } catch(e) {
+      console.warn('[Purchase] consume failed (non-critical):', e?.message || e);
+    }
+  }
 }
 
 // Applies a purchase grant (from server or local fallback) to gameState.
