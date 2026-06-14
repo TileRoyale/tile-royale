@@ -712,8 +712,8 @@ function getKothTitleFrame() {
   return '';
 }
 
-function hasCustomLobbyAccess() {
-  return ['gold','silver'].includes(gameState.kothCurrentTitle);
+function hasCustomLobbyCreateAccess() {
+  return ['gold','silver','bronze'].includes(gameState.kothCurrentTitle);
 }
 
 function updateProfileAvatar() {
@@ -777,17 +777,16 @@ function updateMenuCustomLobbyCard() {
   const sub  = document.getElementById('customLobbySubtext');
   const icon = document.getElementById('customLobbyIcon');
   if (!card) return;
-  if (hasCustomLobbyAccess()) {
-    card.classList.remove('locked-mode');
+  card.classList.remove('locked-mode');
+  icon.textContent = '🏟️';
+  if (hasCustomLobbyCreateAccess()) {
     card.style.borderColor = 'rgba(0,229,255,0.3)';
-    sub.textContent  = 'Invite friends · Custom rules';
-    sub.style.color  = 'var(--diamond)';
-    icon.textContent = '🏟️';
+    sub.textContent = 'Create & invite · Custom rules';
+    sub.style.color = 'var(--diamond)';
   } else {
-    card.classList.add('locked-mode');
-    sub.textContent = '🔒 KOTH Top 3 required';
+    card.style.borderColor = '';
+    sub.textContent = 'Join with code · 🔒 Create needs KOTH Top 3';
     sub.style.color = 'var(--muted)';
-    icon.textContent = '🔒';
   }
 }
 
