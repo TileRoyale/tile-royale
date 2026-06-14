@@ -111,7 +111,8 @@ function openStore() {
   document.querySelectorAll('.store-tab').forEach((t,i) => t.classList.toggle('active', i===0));
   renderStore('featured');
   window.scrollTo(0, 0);
-  if (typeof isFirstWeekActive === 'function' && isFirstWeekActive()) {
+  if (typeof isFirstWeekActive === 'function' && isFirstWeekActive() && !localStorage.getItem('welcomeOfferSeen')) {
+    localStorage.setItem('welcomeOfferSeen', '1');
     setTimeout(showFirstWeekOffer, 800);
   }
 }
@@ -266,6 +267,7 @@ function buildItemCard(item) {
 }
 
 function renderStoreSkins(c) {
+  // All purchasable skin tabs — same preview as profile
   ['table','tile','tileeffect','tapeffect'].forEach(tab => {
     const tabNames = { table:'🎰 Table Skins', tile:'🟥 Tile Skins', tileeffect:'🔥 Tile Effects', tapeffect:'💥 Tap Effects' };
     const hdr = document.createElement('div');
@@ -274,7 +276,7 @@ function renderStoreSkins(c) {
     c.appendChild(hdr);
     const grid = document.createElement('div');
     grid.className = 'store-item-grid';
-    SKINS[tab].filter(s => s.price > 0).forEach(skin => {
+    SKINS[tab].filter(s => s.price > 0 && !s.whale && !s.solo).forEach(skin => {
       const owned = skin.owned || (gameState.ownedSkins && gameState.ownedSkins[skin.id]);
       const card = document.createElement('div');
       card.className = 'store-item-card' + (owned ? ' owned' : '');
@@ -284,15 +286,49 @@ function renderStoreSkins(c) {
         <div class="store-item-name">${skin.name}</div>
         <div class="store-item-price">${owned ? '✓ Owned' : '💎 ' + skin.price}</div>`;
       grid.appendChild(card);
-      if (typeof buildMiniPreview === 'function') {
-        setTimeout(() => {
-          const el = document.getElementById('store-mini-' + skin.id);
-          if (el) { el.id = 'mini-' + skin.id; buildMiniPreview(skin.id, tab); el.id = 'store-mini-' + skin.id; }
-        }, 0);
-      }
+      setTimeout(() => {
+        const el = document.getElementById('store-mini-' + skin.id);
+        if (el) { el.id = 'mini-' + skin.id; buildMiniPreview(skin.id, tab); el.id = 'store-mini-' + skin.id; }
+      }, 0);
     });
     c.appendChild(grid);
   });
+  // Start animations for effect tabs simultaneously (noClear=true for tapeffect so tileeffect intervals survive)
+  setTimeout(() => {
+    startMiniAnimations('tileeffect');
+    startMiniAnimations('tapeffect', true);
+  }, 50);
+
+  // Visual Themes section
+  if (typeof THEMES !== 'undefined') {
+    const themeHdr = document.createElement('div');
+    themeHdr.className = 'store-section-hdr';
+    themeHdr.textContent = '🎨 Visual Themes';
+    c.appendChild(themeHdr);
+    const themeGrid = document.createElement('div');
+    themeGrid.className = 'store-item-grid';
+    (THEMES || []).filter(t => t.price > 0).forEach(theme => {
+      const owned = gameState.ownedThemes && gameState.ownedThemes.includes(theme.id);
+      const card = document.createElement('div');
+      card.className = 'store-item-card' + (owned ? ' owned' : '');
+      if (!owned) card.onclick = () => buyTheme(theme.id);
+      const base = 'img/themes/' + theme.id + '/';
+      const cellS = 'width:100%;height:100%;border-radius:3px;overflow:hidden;background:#0a0a12;';
+      const imgS  = 'width:100%;height:100%;object-fit:fill;display:block;';
+      const previewHtml = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;width:56px;height:56px;margin:0 auto 6px;border-radius:8px;overflow:hidden;">
+          <div style="${cellS}"><img src="${base}tile.png" style="${imgS}"></div>
+          <div style="${cellS}"><img src="${base}fx-2.png" style="${imgS}"></div>
+          <div style="${cellS}"><img src="${base}tap-2.png" style="${imgS}"></div>
+          <div style="${cellS}"><img src="${base}tile.png" style="${imgS}opacity:0.5;"></div>
+        </div>`;
+      card.innerHTML = previewHtml +
+        `<div class="store-item-name">${theme.emoji} ${theme.name}</div>
+         <div class="store-item-price">${owned ? '✓ Owned' : '💎 ' + theme.price.toLocaleString()}</div>`;
+      themeGrid.appendChild(card);
+    });
+    c.appendChild(themeGrid);
+  }
 }
 
 function renderBundles(c) {

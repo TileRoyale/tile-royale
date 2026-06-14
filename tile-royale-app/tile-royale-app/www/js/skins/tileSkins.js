@@ -386,9 +386,8 @@ function getTapStyle(tapSkinId) {
 }
 
 
-function startMiniAnimations(tab) {
-  Object.values(miniAnimIntervals).forEach(clearInterval);
-  miniAnimIntervals = {};
+function startMiniAnimations(tab, noClear) {
+  if (!noClear) { Object.values(miniAnimIntervals).forEach(clearInterval); miniAnimIntervals = {}; }
 
   SKINS[tab].forEach(skin => {
     // Table skins have no tile animation — just static background
