@@ -410,14 +410,43 @@
   }
 
   /* ===== TILE GRID ===== */
+  #tileGridWrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+
   #tileGrid {
     display: grid;
     gap: 6px;
     width: 100%;
-    flex: 1;
-    min-height: 0;
     padding: 8px;
     align-content: center;
     box-sizing: border-box;
+  }
+
+  #soloTargetBar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.55);
+    width: 100%;
+  }
+
+  #soloTargetBar .solo-target-tile {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    border: 2px solid rgba(255,255,255,0.25);
+    animation: targetPulse 1s ease-in-out infinite alternate;
   }
 

@@ -462,9 +462,6 @@ function startSoloLevel() {
   const oldCdWrap = document.getElementById('soloCountdownWrap');
   if (oldCdWrap) oldCdWrap.style.display = 'none';
 
-  // Align tiles to top of grid so color HUD sits directly above them
-  document.getElementById('tileGrid').style.alignContent = 'start';
-
   /* OLD: soloNextRound(); */
   // NEW:
   soloStartLevelTimer();
@@ -949,12 +946,12 @@ const _SOLO_COLORS = [
 
 // ── Color HUD ────────────────────────────────────────────────────────────
 function soloUpdateColorHud(totalColors, targetIdx) {
-  const el = document.getElementById('soloColorHud');
-  if (!el) return;
-  if (totalColors <= 1) { el.style.display = 'none'; return; }
+  const bar = document.getElementById('soloTargetBar');
+  if (!bar) return;
+  if (totalColors <= 1) { bar.style.display = 'none'; return; }
   const c = _SOLO_COLORS[targetIdx] || _SOLO_COLORS[0];
-  el.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:3px;color:var(--muted);';
-  el.innerHTML = `TAP: <div style="width:32px;height:32px;border-radius:8px;background:${c.bg};box-shadow:0 0 14px ${c.glow};border:2px solid rgba(255,255,255,0.25);"></div>`;
+  bar.style.display = 'flex';
+  bar.innerHTML = `TAP → <div class="solo-target-tile" style="background:${c.bg};box-shadow:0 0 14px ${c.glow};border-color:${c.border};"></div>`;
 }
 
 // ── Floating text feedback ───────────────────────────────────────────────

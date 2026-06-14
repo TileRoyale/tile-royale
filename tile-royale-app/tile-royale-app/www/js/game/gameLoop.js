@@ -103,9 +103,8 @@ function startGame() {
   if (_sl) _sl.style.display = 'none';
   const _sc = document.getElementById('soloColorHud');
   if (_sc) _sc.style.display = 'none';
-  // Restore tileGrid vertical centering (solo sets alignContent:'start')
-  const _tg = document.getElementById('tileGrid');
-  if (_tg) _tg.style.alignContent = '';
+  const _sb = document.getElementById('soloTargetBar');
+  if (_sb) _sb.style.display = 'none';
   playerEliminated = false;
   playersLeft = gameState.players;
   playerPlace = gameState.players;
