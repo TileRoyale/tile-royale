@@ -49,6 +49,7 @@ function _closeTopPopup() {
   const popups = [
     ['modeRewardPopup',       () => { try { closeModeRewardPopup(); } catch(e) {} }],
     ['achPopupOverlay',       () => { try { closeAchPopup(); } catch(e) {} }],
+    ['adRewardPopupOverlay',  () => { try { closeAdRewardPopup(); } catch(e) {} }],
     ['skinPreviewOverlay',    () => { try { closeSkinPreview(); } catch(e) {} }],
     ['ringInventoryOverlay',  () => { try { closeRingInventory(); } catch(e) {} }],
     ['playerProfileOverlay',  () => { try { closePublicProfile(); } catch(e) {} }],

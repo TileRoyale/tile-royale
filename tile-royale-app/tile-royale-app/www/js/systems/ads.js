@@ -284,9 +284,29 @@ async function watchAdForRandomItem() {
   adWatchInProgress = false;
   if (!rewarded) { showToast('Ad not available — try again later', 'var(--muted)'); return; }
   const reward = await giveAdReward();
-  if (reward) showToast(`🎁 You got: ${reward.icon} ${reward.name}!`, 'var(--gold)');
+  if (reward) showAdRewardPopup(reward);
   playSound('achieve');
   updateStoreAdTimer();
+}
+
+function showAdRewardPopup(reward) {
+  const descs = {
+    ticket:      'Added to your ticket wallet!',
+    crystal:     'Added to your inventory!',
+    caltrops:    'Added to your inventory!',
+    shadow_tile: 'Added to your inventory!',
+  };
+  const icon = document.getElementById('adRewardPopupIcon');
+  icon.textContent = reward.icon;
+  icon.style.background = 'rgba(255,200,0,0.15)';
+  icon.style.boxShadow = '0 0 28px rgba(255,200,0,0.5)';
+  document.getElementById('adRewardPopupName').textContent = reward.name;
+  document.getElementById('adRewardPopupDesc').textContent = descs[reward.id] || 'Added to your inventory!';
+  document.getElementById('adRewardPopupOverlay').classList.add('show');
+}
+
+function closeAdRewardPopup() {
+  document.getElementById('adRewardPopupOverlay').classList.remove('show');
 }
 
 function updateStoreAdTimer() {
