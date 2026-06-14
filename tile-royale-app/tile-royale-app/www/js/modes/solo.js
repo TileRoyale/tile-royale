@@ -205,6 +205,7 @@ window.soloGetAnalyticsSummary = function() {
 let soloCurrentLevelNum  = 1;
 let soloSessionAttempts  = 0;
 let soloRoundActive      = false;
+let soloGameActive       = false; // true only while a solo level is running
 let soloTapsDone         = 0;
 let soloCountdownTimer   = null;
 let soloGridCols         = 2;
@@ -376,6 +377,7 @@ function startSoloLevel() {
   soloSessionChains      = 0;
 
   if (!soloUseLive()) { showToast('No lives! Wait or watch an ad.', '#ff4444'); return; }
+  soloGameActive = true;
   soloSessionAttempts++;
   soloTrackAttempt(levelNum);
   soloLastBurnPositions = [];
@@ -482,6 +484,19 @@ function soloStartLevelTimer() {
 function updateSoloTimerDisplay() {
   const el = document.getElementById('gameTimer');
   if (el) el.textContent = soloTimeLeft + 's';
+}
+
+// Called when leaving solo mid-game (switching to multiplayer, practice, etc.)
+function soloAbortLevel() {
+  soloGameActive = false;
+  soloRoundActive = false;
+  clearInterval(soloLevelTimer); soloLevelTimer = null;
+  clearTimeout(soloCountdownTimer); soloCountdownTimer = null;
+  soloVoidTimers.forEach(v => { clearTimeout(v.timerId); cancelAnimationFrame(v.rafId); if (v.overlayEl) v.overlayEl.remove(); });
+  soloVoidTimers = [];
+  // Hide any lingering overlays
+  try { document.getElementById('soloGameOverOverlay').classList.remove('show'); } catch(e) {}
+  try { document.getElementById('soloLevelCompleteOverlay').classList.remove('show'); } catch(e) {}
 }
 
 // ── Round loop ──
@@ -837,6 +852,8 @@ function soloLevelFailed() {
 /* OLD soloGameOver(reason) { ... } */
 
 function soloShowGameOver(reason) {
+  if (!soloGameActive) return; // abandoned — don't interrupt other game modes
+  soloGameActive = false;
   const icon  = document.getElementById('soloGameOverIcon');
   const title = document.getElementById('soloGameOverTitle');
   const sub   = document.getElementById('soloGameOverSub');
@@ -977,6 +994,7 @@ function soloHandleChainTap(tappedEl) {
 // ── Level complete ──
 function soloLevelComplete() {
   const levelNum = soloCurrentLevelNum;
+  soloGameActive = false;
   clearInterval(soloLevelTimer); soloLevelTimer = null;
   soloTrackCompletion(levelNum);
   if (typeof playSound === 'function') playSound('win');
