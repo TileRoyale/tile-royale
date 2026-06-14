@@ -462,6 +462,9 @@ function startSoloLevel() {
   const oldCdWrap = document.getElementById('soloCountdownWrap');
   if (oldCdWrap) oldCdWrap.style.display = 'none';
 
+  // Align tiles to top of grid so color HUD sits directly above them
+  document.getElementById('tileGrid').style.alignContent = 'start';
+
   /* OLD: soloNextRound(); */
   // NEW:
   soloStartLevelTimer();
