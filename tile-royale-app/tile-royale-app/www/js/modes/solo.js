@@ -329,23 +329,11 @@ function openSoloPreLevel(levelNum) {
   document.getElementById('soloPreBestRow').style.display = ld.completed ? 'flex' : 'none';
   if (ld.completed) document.getElementById('soloPreBest').textContent = '✓ Completed';
 
-  if (cfg.bombs > 0) {
-    document.getElementById('soloPreBombWarning').style.display  = 'block';
-    document.getElementById('soloPreBombCount').textContent       = cfg.bombs;
-  } else {
-    document.getElementById('soloPreBombWarning').style.display  = 'none';
-  }
+  const bombWarnEl = document.getElementById('soloPreBombWarning');
+  if (bombWarnEl) bombWarnEl.style.display = cfg.bombs > 0 ? 'block' : 'none';
 
-  // NEW: void bomb warning
   const voidEl = document.getElementById('soloPreVoidWarning');
-  if (voidEl) {
-    if (cfg.voidBombs > 0) {
-      voidEl.style.display = 'block';
-      document.getElementById('soloPreVoidCount').textContent = cfg.voidBombs;
-    } else {
-      voidEl.style.display = 'none';
-    }
-  }
+  if (voidEl) voidEl.style.display = cfg.voidBombs > 0 ? 'block' : 'none';
 
   document.getElementById('soloPreLivesInfo').textContent  = `❤️ ${lives} / ${SOLO_MAX_LIVES} lives`;
   document.getElementById('soloPreLivesTimer').textContent = soloNextLifeTimer();
@@ -590,16 +578,6 @@ function soloNextRound() {
   }
 
   soloRoundActive = true;
-
-  const displayMs = isGhostRound ? Math.round(soloCurrentSpeed * GHOST_MULTIPLIER) : soloCurrentSpeed;
-
-  soloCountdownTimer = setTimeout(() => {
-    if (!soloRoundActive) return;
-    soloRoundActive = false;
-    if (isSurgeRound) soloPendingSurge = SURGE_EFFECT_ROUNDS;
-    tiles.forEach(t => { t.className = 'tile'; t.style.cssText = ''; delete t.dataset.special; });
-    soloNextRound();
-  }, displayMs);
 }
 
 
@@ -690,6 +668,8 @@ function soloTileTap(idx) {
   if (tapped.classList.contains('bomb')) {
     soloRoundActive = false;
     clearTimeout(soloCountdownTimer);
+    soloVoidTimers.forEach(v => { clearTimeout(v.timerId); cancelAnimationFrame(v.rafId); if (v.overlayEl) v.overlayEl.remove(); });
+    soloVoidTimers = [];
     setTimeout(() => tiles.forEach(t => { t.className = 'tile'; t.style.cssText = ''; }), 300);
     soloTakeDamage('bomb');
     return;
@@ -699,6 +679,8 @@ function soloTileTap(idx) {
   if (tapped.classList.contains('decoy-tile')) {
     soloRoundActive = false;
     clearTimeout(soloCountdownTimer);
+    soloVoidTimers.forEach(v => { clearTimeout(v.timerId); cancelAnimationFrame(v.rafId); if (v.overlayEl) v.overlayEl.remove(); });
+    soloVoidTimers = [];
     setTimeout(() => tiles.forEach(t => { t.className = 'tile'; t.style.cssText = ''; }), 300);
     soloTakeDamage('decoy');
     return;
@@ -723,6 +705,8 @@ function soloTileTap(idx) {
     if (colorIdx !== soloTargetColorIdx) {
       soloRoundActive = false;
       clearTimeout(soloCountdownTimer);
+      soloVoidTimers.forEach(v => { clearTimeout(v.timerId); cancelAnimationFrame(v.rafId); if (v.overlayEl) v.overlayEl.remove(); });
+      soloVoidTimers = [];
       tapped.classList.add('wrong-tap');
       setTimeout(() => tiles.forEach(t => { t.className = 'tile'; t.style.cssText = ''; }), 200);
       setTimeout(soloNextRound, 250);
@@ -768,6 +752,8 @@ function soloTileTap(idx) {
   // Correct tap
   soloRoundActive = false;
   clearTimeout(soloCountdownTimer);
+  soloVoidTimers.forEach(v => { clearTimeout(v.timerId); cancelAnimationFrame(v.rafId); if (v.overlayEl) v.overlayEl.remove(); });
+  soloVoidTimers = [];
   soloTapsDone++;
 
   tapped.classList.remove('burning');

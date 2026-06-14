@@ -105,13 +105,13 @@ async function saveToCloud() {
     // Track server version so next save can detect conflicts
     if (resp?.saveVersion !== undefined) {
       gameState._saveVersion = resp.saveVersion;
-      try { saveState(); } catch(e) {}
+      try { localStorage.setItem('tileRoyaleState', JSON.stringify(gameState)); } catch(e) {}
     }
     // If server capped diamonds (tamper detected), apply the corrected value
     if (resp?.adjustedDiamonds !== undefined) {
       console.warn('[CloudSave] economy adjusted by server:', resp.adjustedDiamonds);
       gameState.diamonds = resp.adjustedDiamonds;
-      try { saveState(); }      catch(e) {}
+      try { localStorage.setItem('tileRoyaleState', JSON.stringify(gameState)); } catch(e) {}
       try { updateMenuStats(); } catch(e) {}
     }
   } catch(e) {
@@ -200,7 +200,7 @@ async function loadFromCloud() {
       if (data.trustedDiamonds !== undefined && data.trustedDiamonds !== null
           && data.trustedDiamonds < (gameState.diamonds || 0)) {
         gameState.diamonds = data.trustedDiamonds;
-        try { saveState(); } catch(e) {}
+        try { localStorage.setItem('tileRoyaleState', JSON.stringify(gameState)); } catch(e) {}
       }
       await saveToCloud();
       return false;
