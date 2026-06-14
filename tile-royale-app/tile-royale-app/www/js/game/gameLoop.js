@@ -624,6 +624,9 @@ async function endGame(playerWon = false) {
             mode: gameState.mode,
             isCustomLobby: false,
             xpBoostActive,
+            isBotMatch: !isMultiplayer,
+            tilesTapped: gameState.achStats?.roundTapsThisGame || 0,
+            totalPlayers: allPlayers.length || 30,
           }),
           signal: AbortSignal.timeout(5000),
         });
