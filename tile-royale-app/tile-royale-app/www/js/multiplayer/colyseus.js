@@ -434,6 +434,9 @@ function startGameFromServer() {
   }
   gameState.games++;
   showScreen('gameScreen');
+  const _sl = document.getElementById('soloTapsLabel'); if (_sl) _sl.style.display = 'none';
+  const _sc = document.getElementById('soloColorHud'); if (_sc) _sc.style.display = 'none';
+  const _sb = document.getElementById('soloTargetBar'); if (_sb) _sb.style.display = 'none';
   applySkins(); // Apply skin classes BEFORE creating tiles
   setupGameGrid();
   updateGameHeader();

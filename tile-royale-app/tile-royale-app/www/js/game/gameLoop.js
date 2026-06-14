@@ -97,6 +97,7 @@ function updateDangerMode() {
 
 // ===== GAME =====
 function startGame() {
+  try { soloAbortLevel(); } catch(e) {}
   showScreen('gameScreen');
   // Hide solo-only overlays that persist in the DOM after a solo session
   const _sl = document.getElementById('soloTapsLabel');

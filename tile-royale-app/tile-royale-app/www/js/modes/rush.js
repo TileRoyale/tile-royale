@@ -77,6 +77,7 @@ async function renderPracticeLeaderboard() {
 }
 
 function startPractice() {
+  try { soloAbortLevel(); } catch(e) {}
   gameState.mode = 'practice';
   practiceTaps = 0;
   practiceWrongTaps = 0;
@@ -84,6 +85,9 @@ function startPractice() {
   practiceStartTime = Date.now();
 
   showScreen('gameScreen');
+  const _sl = document.getElementById('soloTapsLabel'); if (_sl) _sl.style.display = 'none';
+  const _sc = document.getElementById('soloColorHud'); if (_sc) _sc.style.display = 'none';
+  const _sb = document.getElementById('soloTargetBar'); if (_sb) _sb.style.display = 'none';
   document.getElementById('gameModeBadge').textContent = '🎯 PRACTICE';
   document.getElementById('kothGameBanner').style.display = 'none';
   document.getElementById('itemHud').style.display = 'none';
