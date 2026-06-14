@@ -712,8 +712,8 @@ function getKothTitleFrame() {
   return '';
 }
 
-function hasCustomLobbyAccess() {
-  return ['gold','silver'].includes(gameState.kothCurrentTitle);
+function hasCustomLobbyCreateAccess() {
+  return ['gold','silver','bronze'].includes(gameState.kothCurrentTitle);
 }
 
 function updateProfileAvatar() {
@@ -777,17 +777,56 @@ function updateMenuCustomLobbyCard() {
   const sub  = document.getElementById('customLobbySubtext');
   const icon = document.getElementById('customLobbyIcon');
   if (!card) return;
-  if (hasCustomLobbyAccess()) {
-    card.classList.remove('locked-mode');
+  card.classList.remove('locked-mode');
+  icon.textContent = '🏟️';
+  if (hasCustomLobbyCreateAccess()) {
     card.style.borderColor = 'rgba(0,229,255,0.3)';
-    sub.textContent  = 'Invite friends · Custom rules';
-    sub.style.color  = 'var(--diamond)';
-    icon.textContent = '🏟️';
+    sub.textContent = 'Create & invite · Custom rules';
+    sub.style.color = 'var(--diamond)';
   } else {
-    card.classList.add('locked-mode');
-    sub.textContent = '🔒 KOTH Top 3 required';
+    card.style.borderColor = '';
+    sub.textContent = 'Join with code · 🔒 Create needs KOTH Top 3';
     sub.style.color = 'var(--muted)';
-    icon.textContent = '🔒';
   }
 }
+
+// ── Live player count badges ──────────────────────────────────────────────────
+let _playerCountsTimer = null;
+
+async function fetchPlayerCounts() {
+  try {
+    const r = await fetch(`${getActiveServer().http}/player-counts`);
+    if (!r.ok) return;
+    const counts = await r.json();
+    const mapping = { rush: 'modeOnline_rush', buckshot: 'modeOnline_buckshot', wild: 'modeOnline_wild', koth: 'modeOnline_koth', custom: 'modeOnline_custom' };
+    for (const [mode, elId] of Object.entries(mapping)) {
+      const el = document.getElementById(elId);
+      if (!el) continue;
+      el.textContent = '● ' + (counts[mode] || 0);
+    }
+  } catch(e) {}
+}
+
+function startPlayerCountsPolling() {
+  fetchPlayerCounts();
+  if (_playerCountsTimer) clearInterval(_playerCountsTimer);
+  _playerCountsTimer = setInterval(fetchPlayerCounts, 5000);
+}
+
+function stopPlayerCountsPolling() {
+  if (_playerCountsTimer) { clearInterval(_playerCountsTimer); _playerCountsTimer = null; }
+}
+
+// Hook into showScreen (rooms.js loads after menus.js so showScreen is defined here)
+(function() {
+  const _orig = window.showScreen;
+  if (typeof _orig === 'function') {
+    window.showScreen = function(id) {
+      _orig.call(this, id);
+      if (id === 'menuScreen') startPlayerCountsPolling();
+    };
+  }
+  // Also fire once on initial load (menu is already visible on startup)
+  window.addEventListener('load', function() { setTimeout(fetchPlayerCounts, 800); });
+})();
 

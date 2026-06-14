@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
-import { Server } from "@colyseus/core";
+import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
@@ -1968,6 +1968,120 @@ app.get("/purchase/spend-stats/:playerId", async (req, res) => {
     return res.json({ ok: false, error: 'db_unavailable' });
   const stats = await getPurchaseSpendStats(playerId);
   res.json({ ok: true, stats: stats ?? { totalSpentCents: 0, singlePurchaseMax: 0, bundlesBought: 0, purchaseCount: 0 } });
+});
+
+// ── Custom Lobby (server-side, in-memory, TTL 2h) ────────────────────────────
+interface CLPlayer { playerId:string; name:string; avatar:string; isHost:boolean; }
+interface CLobby {
+  code:string; hostId:string; mode:string; maxPlayers:number; gridSize:number;
+  buckshotTiles:number; wildItems:string[]; suddenDeath:boolean; botSpeed:number;
+  players:CLPlayer[]; createdAt:number; started:boolean;
+}
+const _customLobbies = new Map<string,CLobby>();
+setInterval(()=>{
+  const cut = Date.now() - 2*60*60*1000;
+  for(const [k,v] of _customLobbies) if(v.createdAt<cut) _customLobbies.delete(k);
+}, 15*60*1000);
+function _clGenCode():string {
+  const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s=''; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)];
+  return _customLobbies.has(s)?_clGenCode():s;
+}
+
+// POST /custom-lobby/create
+app.post("/custom-lobby/create",(req,res)=>{
+  const {playerId,name,avatar,mode,maxPlayers,gridSize,buckshotTiles,wildItems,suddenDeath,botSpeed}=req.body;
+  if(!playerId||!name) return res.status(400).json({error:'invalid'});
+  const code=_clGenCode();
+  _customLobbies.set(code,{
+    code, hostId:playerId, mode:mode||'rush',
+    maxPlayers:Math.min(30,Math.max(2,maxPlayers||10)),
+    gridSize:Math.min(10,Math.max(2,gridSize||5)),
+    buckshotTiles:Math.min(99,Math.max(1,buckshotTiles||3)),
+    wildItems:Array.isArray(wildItems)?wildItems:[],
+    suddenDeath:!!suddenDeath, botSpeed:botSpeed||2000,
+    players:[{playerId,name:name.substring(0,16),avatar:avatar||'🔥',isHost:true}],
+    createdAt:Date.now(), started:false,
+  });
+  res.json({ok:true,code});
+});
+
+// GET /custom-lobby/:code  — poll for state
+app.get("/custom-lobby/:code",(req,res)=>{
+  const lobby=_customLobbies.get(req.params.code.toUpperCase());
+  if(!lobby) return res.status(404).json({error:'not_found'});
+  res.json({ok:true,lobby});
+});
+
+// POST /custom-lobby/:code/join
+app.post("/custom-lobby/:code/join",(req,res)=>{
+  const lobby=_customLobbies.get(req.params.code.toUpperCase());
+  if(!lobby) return res.status(404).json({error:'not_found'});
+  if(lobby.started) return res.status(409).json({error:'started'});
+  if(lobby.players.length>=lobby.maxPlayers) return res.status(409).json({error:'full'});
+  const {playerId,name,avatar}=req.body;
+  if(!playerId||!name) return res.status(400).json({error:'invalid'});
+  if(!lobby.players.find(p=>p.playerId===playerId))
+    lobby.players.push({playerId,name:name.substring(0,16),avatar:avatar||'🔥',isHost:false});
+  res.json({ok:true,lobby});
+});
+
+// POST /custom-lobby/:code/leave
+app.post("/custom-lobby/:code/leave",(req,res)=>{
+  const code=req.params.code.toUpperCase();
+  const lobby=_customLobbies.get(code);
+  if(!lobby) return res.json({ok:true});
+  const {playerId}=req.body;
+  lobby.players=lobby.players.filter(p=>p.playerId!==playerId);
+  if(lobby.players.length===0||lobby.hostId===playerId) _customLobbies.delete(code);
+  res.json({ok:true});
+});
+
+// POST /custom-lobby/:code/kick  (host only)
+app.post("/custom-lobby/:code/kick",(req,res)=>{
+  const lobby=_customLobbies.get(req.params.code.toUpperCase());
+  if(!lobby) return res.status(404).json({error:'not_found'});
+  const {playerId,targetPlayerId,targetName}=req.body;
+  if(playerId!==lobby.hostId) return res.status(403).json({error:'not_host'});
+  lobby.players=lobby.players.filter(p=>
+    p.playerId!==targetPlayerId && !(targetName && p.name===targetName && !p.isHost)
+  );
+  res.json({ok:true,lobby});
+});
+
+// POST /custom-lobby/:code/start  — host marks game as started; clients start simultaneously
+app.post("/custom-lobby/:code/start",(req,res)=>{
+  const code=req.params.code.toUpperCase();
+  const lobby=_customLobbies.get(code);
+  if(!lobby) return res.status(404).json({error:'not_found'});
+  const {playerId}=req.body;
+  if(playerId!==lobby.hostId) return res.status(403).json({error:'not_host'});
+  lobby.started=true;
+  // Keep lobby alive briefly so joiners' polls catch the started state, then clean up
+  setTimeout(()=>_customLobbies.delete(code), 30*1000);
+  res.json({ok:true,lobby});
+});
+// ── End Custom Lobby ──────────────────────────────────────────────────────────
+
+// GET /player-counts — live player counts per mode for the main menu badges
+app.get("/player-counts", async (req, res) => {
+  try {
+    const counts: Record<string, number> = { rush: 0, buckshot: 0, wild: 0, koth: 0 };
+    const trRooms = await matchMaker.query({ name: "tile_royale" });
+    for (const room of trRooms) {
+      const mode: string = (room as any).mode || (room.metadata && (room.metadata as any).mode) || '';
+      if (mode in counts) counts[mode] += room.clients;
+    }
+    // Custom lobby: count players waiting in active (non-started) lobbies
+    let customCount = 0;
+    for (const [, lobby] of _customLobbies) {
+      if (!lobby.started) customCount += lobby.players.length;
+    }
+    counts.custom = customCount;
+    res.json(counts);
+  } catch(e) {
+    res.json({ rush: 0, buckshot: 0, wild: 0, koth: 0, custom: 0 });
+  }
 });
 
 app.use("/colyseus", monitor());

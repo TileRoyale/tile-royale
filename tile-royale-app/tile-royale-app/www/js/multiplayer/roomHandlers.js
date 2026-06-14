@@ -36,12 +36,9 @@ let customLobbyStartTimeout = null;
 let isCustomLobbyGame = false;
 let customLobbyBotSpeed = 2000;
 let activeCustomBotSpeedMs = null; // set at game start, null = use normal BOT_CLICK_SPEED_MS
+let _clIsHost = false; // true if this device created the lobby
 
 function openCustomLobby() {
-  if (!hasCustomLobbyAccess()) {
-    showToast('🔒 Finish KOTH Top 3 to unlock Custom Lobby!', 'var(--muted)');
-    return;
-  }
   // Reset state
   customLobbyCode = null;
   customLobbyPlayers = [];
@@ -53,7 +50,15 @@ function openCustomLobby() {
   document.getElementById('clPhasePrivate').style.display = 'block';
   document.getElementById('clPhasePublic').style.display  = 'none';
   clearInterval(customLobbyFillInterval);
-  switchCustomTab('create', document.getElementById('clTabCreate'));
+
+  // Only KOTH Top 3 can create — everyone else sees only the Join tab
+  const canCreate = hasCustomLobbyCreateAccess();
+  document.getElementById('clTabCreate').style.display = canCreate ? '' : 'none';
+  if (canCreate) {
+    switchCustomTab('create', document.getElementById('clTabCreate'));
+  } else {
+    switchCustomTab('join', document.getElementById('clTabJoin'));
+  }
   showScreen('customLobbyScreen');
 }
 
@@ -99,9 +104,14 @@ function generateLobbyCode() {
   return code;
 }
 
-function createCustomLobby() {
-  customLobbyCode       = generateLobbyCode();
-  customLobbyIsPublic   = false;
+async function createCustomLobby() {
+  if (!hasCustomLobbyCreateAccess()) {
+    showToast('🔒 Achieve KOTH Top 3 to create custom lobbies!', 'var(--muted)');
+    return;
+  }
+  const createBtn = document.getElementById('clCreateBtn');
+  if (createBtn) { createBtn.disabled = true; createBtn.textContent = 'CREATING...'; }
+
   customLobbySuddenDeath   = document.getElementById('clSuddenDeath').classList.contains('on');
   customLobbyGridSize      = parseInt(document.getElementById('clGridSlider').value);
   customLobbyBuckshotTiles = parseInt(document.getElementById('clBuckshotSlider').value);
@@ -110,21 +120,43 @@ function createCustomLobby() {
     return document.getElementById(map[id])?.classList.contains('on');
   });
   clearInterval(customLobbyFillInterval);
+  clearInterval(customLobbyPollInterval);
+
   const av = getActiveAvatar();
-  customLobbyPlayers = [{
-    name:    gameState.playerName || 'YOU',
-    avatar:  av.icon,
-    isHost:  true,
-    isYou:   true,
-    border:  av.border,
-  }];
+  try {
+    const r = await fetch(`${getActiveServer().http}/custom-lobby/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerId:      PLAYER_ID,
+        name:          gameState.playerName || 'Player',
+        avatar:        av.icon,
+        mode:          customLobbyMode,
+        maxPlayers:    customLobbyMaxPlayers,
+        gridSize:      customLobbyGridSize,
+        buckshotTiles: customLobbyBuckshotTiles,
+        wildItems:     customLobbyWildItems,
+        suddenDeath:   customLobbySuddenDeath,
+        botSpeed:      customLobbyBotSpeed,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const data = await r.json();
+    if (!data.ok || !data.code) throw new Error('Server error');
+    customLobbyCode  = data.code;
+    _clIsHost        = true;
+    customLobbyPlayers = [{ name: gameState.playerName || 'YOU', avatar: av.icon, isHost: true, isYou: true }];
+  } catch(e) {
+    if (createBtn) { createBtn.disabled = false; createBtn.textContent = 'CREATE LOBBY'; }
+    showToast('❌ Could not create lobby — check connection', 'var(--red)');
+    return;
+  }
 
   // Show lobby UI
-  document.getElementById('clLobbyCode').textContent = customLobbyCode;
+  document.getElementById('clLobbyCode').textContent  = customLobbyCode;
   document.getElementById('clCodeBox').style.display  = 'block';
   document.getElementById('clCreateBtn').style.display = 'none';
 
-  // Sudden Death badge
   let sdBadge = document.getElementById('clSuddenDeathBadge');
   if (!sdBadge) {
     sdBadge = document.createElement('div');
@@ -134,39 +166,69 @@ function createCustomLobby() {
   }
   sdBadge.textContent = customLobbySuddenDeath ? '⚡ SUDDEN DEATH MODE ACTIVE' : '';
 
-  if (!gameState.customLobbies) gameState.customLobbies = {};
-  if (gameState.customLobbies[customLobbyCode]) {
-    gameState.customLobbies[customLobbyCode].suddenDeath = customLobbySuddenDeath;
-  }
-  renderCustomLobbyWaiting();
-
   spectatorCode = generateSpectatorCode();
   document.getElementById('clSpectatorCode').textContent = spectatorCode;
-  gameState.customLobbies[customLobbyCode] = {
-    code:          customLobbyCode,
-    spectatorCode: spectatorCode,
-    mode:          customLobbyMode,
-    maxPlayers:    customLobbyMaxPlayers,
-    host:          gameState.playerName || 'YOU',
-    hostAvatar:    av.icon,
-    players:       customLobbyPlayers,
-    suddenDeath:   customLobbySuddenDeath,
-    gridSize:      customLobbyGridSize,
-    buckshotTiles: customLobbyBuckshotTiles,
-    wildItems:     customLobbyWildItems,
-    created:       Date.now(),
-  };
-  saveState();
 
-  // Poll for new joiners (simulate)
+  renderCustomLobbyWaiting();
   startCustomLobbyPoll();
   showToast(`🏟️ Lobby created! Code: ${customLobbyCode}`, 'var(--diamond)');
 }
 
 
 function startCustomLobbyPoll() {
-  // Private phase: no auto-fill — friends join via code only
   clearInterval(customLobbyPollInterval);
+  customLobbyPollInterval = setInterval(async () => {
+    if (!customLobbyCode) { clearInterval(customLobbyPollInterval); return; }
+    try {
+      const r = await fetch(`${getActiveServer().http}/custom-lobby/${customLobbyCode}`,
+        { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) { clearInterval(customLobbyPollInterval); return; }
+      const data = await r.json();
+      if (!data.ok || !data.lobby) return;
+      const lobby = data.lobby;
+
+      // Update local player list from server
+      customLobbyPlayers = lobby.players.map(p => ({
+        playerId: p.playerId, name: p.name, avatar: p.avatar, isHost: p.isHost,
+        isYou: p.playerId === PLAYER_ID,
+      }));
+      customLobbyMaxPlayers = lobby.maxPlayers;
+
+      if (_clIsHost) {
+        // Host: update waiting list UI
+        renderCustomLobbyWaiting();
+      } else {
+        // Joiner: update joined list UI
+        const joinedList = document.getElementById('clJoinedList');
+        if (joinedList) {
+          joinedList.innerHTML = '';
+          customLobbyPlayers.forEach(p => {
+            const row = document.createElement('div');
+            row.className = 'lb-entry' + (p.isYou ? ' is-you' : '');
+            row.innerHTML = `<div class="lb-entry-avatar">${p.avatar}</div><div class="lb-entry-name">${p.name}${p.isHost?' 👑':''}${p.isYou?' <span style="font-size:10px;color:var(--fire)">(YOU)</span>':''}</div>`;
+            joinedList.appendChild(row);
+          });
+        }
+      }
+
+      // Game started by host — all clients launch simultaneously
+      if (lobby.started) {
+        clearInterval(customLobbyPollInterval);
+        // Apply settings from server
+        customLobbyMode        = lobby.mode;
+        customLobbyMaxPlayers  = lobby.maxPlayers;
+        customLobbyGridSize    = lobby.gridSize;
+        customLobbyBuckshotTiles = lobby.buckshotTiles;
+        customLobbyWildItems   = lobby.wildItems || [];
+        customLobbySuddenDeath = lobby.suddenDeath;
+        customLobbyBotSpeed    = lobby.botSpeed || 2000;
+        if (!_clIsHost) {
+          // Joiner launches game with the lobby's player list
+          _clLaunchGame();
+        }
+      }
+    } catch(e) { /* network hiccup — keep polling */ }
+  }, 3000);
 }
 
 function openLobbyToPublic() {
@@ -273,7 +335,7 @@ function renderCustomLobbyWaiting() {
         ${p.public  ? '<span style="font-size:9px;color:var(--muted);letter-spacing:1px;"> QUEUE</span>' : ''}
       </div>
       ${!p.isHost && !p.isYou && !p.public
-        ? `<button onclick="kickFromLobby(${customLobbyPlayers.indexOf(p)})"
+        ? `<button onclick="kickFromLobby('${p.playerId||''}','${p.name}')"
             style="font-size:10px;color:var(--red);background:none;border:none;cursor:pointer;">✕</button>`
         : ''}
     `;
@@ -281,10 +343,16 @@ function renderCustomLobbyWaiting() {
   });
 }
 
-function kickFromLobby(idx) {
-  // Use index for safe removal — avoids name collision issues
-  customLobbyPlayers = customLobbyPlayers.filter((_, i) => i !== idx);
+function kickFromLobby(targetPlayerId, targetName) {
+  customLobbyPlayers = customLobbyPlayers.filter(p => p.playerId !== targetPlayerId && p.name !== targetName);
   renderCustomLobbyWaiting();
+  if (customLobbyCode) {
+    fetch(`${getActiveServer().http}/custom-lobby/${customLobbyCode}/kick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, targetPlayerId, targetName }),
+    }).catch(()=>{});
+  }
 }
 
 function copyCustomCode() {
@@ -293,65 +361,89 @@ function copyCustomCode() {
   copyToClipboard(text);
 }
 
-function joinCustomLobby() {
+async function joinCustomLobby() {
   const code = (document.getElementById('clJoinInput').value || '').trim().toUpperCase();
   const msg  = document.getElementById('clJoinMsg');
   if (!code || code.length < 6) { msg.textContent = 'Enter a 6-character code'; msg.className = 'redeem-msg error'; return; }
 
-  // Check if lobby exists
-  const lobby = gameState.customLobbies?.[code];
-  if (!lobby) { msg.textContent = '❌ Lobby not found'; msg.className = 'redeem-msg error'; return; }
-  if (lobby.players.length >= lobby.maxPlayers) { msg.textContent = '❌ Lobby is full'; msg.className = 'redeem-msg error'; return; }
-
-  // Join
+  msg.textContent = 'Joining...'; msg.className = 'redeem-msg';
   const av = getActiveAvatar();
-  const me = { name: gameState.playerName || 'YOU', avatar: av.icon, isHost: false, isYou: true };
-  lobby.players.push(me);
-  saveState();
+  try {
+    const r = await fetch(`${getActiveServer().http}/custom-lobby/${code}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: PLAYER_ID, name: gameState.playerName || 'Player', avatar: av.icon }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const data = await r.json();
+    if (r.status === 404 || data.error === 'not_found') { msg.textContent = '❌ Lobby not found'; msg.className = 'redeem-msg error'; return; }
+    if (data.error === 'full') { msg.textContent = '❌ Lobby is full'; msg.className = 'redeem-msg error'; return; }
+    if (data.error === 'started') { msg.textContent = '❌ Game already started'; msg.className = 'redeem-msg error'; return; }
+    if (!data.ok || !data.lobby) throw new Error('Server error');
 
-  document.getElementById('clJoinedBox').style.display = 'block';
-  document.getElementById('clJoinedCode').textContent  = code;
-  const modeLabels = { rush:'⚡ Rush Mode', buckshot:'💥 Buckshot', wild:'🌀 Wild' };
-  const sdLabel = lobby.suddenDeath ? ' · ⚡ SUDDEN DEATH' : '';
-  document.getElementById('clJoinedMode').textContent = `${modeLabels[lobby.mode] || 'Rush'} · Host: ${lobby.host}${sdLabel}`;
-  if (lobby.suddenDeath) {
-    document.getElementById('clJoinedMode').style.color = 'var(--red)';
-    suddenDeathMode = true;
+    const lobby = data.lobby;
+    customLobbyCode = code;
+    _clIsHost = false;
+    customLobbyPlayers = lobby.players.map(p => ({
+      playerId: p.playerId, name: p.name, avatar: p.avatar, isHost: p.isHost, isYou: p.playerId === PLAYER_ID,
+    }));
+    const host = lobby.players.find(p => p.isHost);
+
+    document.getElementById('clJoinedBox').style.display = 'block';
+    document.getElementById('clJoinedCode').textContent  = code;
+    const modeLabels = { rush:'⚡ Rush Mode', buckshot:'💥 Buckshot', wild:'🌀 Wild' };
+    const sdLabel = lobby.suddenDeath ? ' · ⚡ SUDDEN DEATH' : '';
+    document.getElementById('clJoinedMode').textContent = `${modeLabels[lobby.mode]||'Rush'} · Host: ${host?.name||'?'}${sdLabel}`;
+    if (lobby.suddenDeath) document.getElementById('clJoinedMode').style.color = 'var(--red)';
+
+    const joinedList = document.getElementById('clJoinedList');
+    joinedList.innerHTML = '';
+    customLobbyPlayers.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'lb-entry' + (p.isYou ? ' is-you' : '');
+      row.innerHTML = `<div class="lb-entry-avatar">${p.avatar}</div><div class="lb-entry-name">${p.name}${p.isHost?' 👑':''}${p.isYou?' <span style="font-size:10px;color:var(--fire)">(YOU)</span>':''}</div>`;
+      joinedList.appendChild(row);
+    });
+
+    msg.textContent = ''; msg.className = 'redeem-msg';
+    showToast(`✅ Joined ${host?.name||'?'}'s lobby! Waiting for host to start...`, 'var(--green)');
+    startCustomLobbyPoll(); // poll until host starts
+  } catch(e) {
+    msg.textContent = '❌ Connection error — try again'; msg.className = 'redeem-msg error';
   }
-
-  const joinedList = document.getElementById('clJoinedList');
-  joinedList.innerHTML = '';
-  (lobby.players || []).forEach(p => {
-    const row = document.createElement('div');
-    row.className = 'lb-entry' + (p.isYou ? ' is-you' : '');
-    row.innerHTML = `<div class="lb-entry-avatar">${p.avatar}</div><div class="lb-entry-name">${p.name}${p.isHost?' 👑':''}</div>`;
-    joinedList.appendChild(row);
-  });
-
-  msg.textContent = ''; msg.className = 'redeem-msg';
-  showToast(`✅ Joined ${lobby.host}'s lobby!`, 'var(--green)');
 }
 
-function startCustomGame() {
+async function startCustomGame() {
   clearInterval(customLobbyPollInterval);
   clearInterval(customLobbyFillInterval);
   clearTimeout(customLobbyStartTimeout);
   customLobbyStartTimeout = null;
+
+  if (_clIsHost && customLobbyCode) {
+    // Tell server game is starting so joiners' polls trigger their launch
+    try {
+      await fetch(`${getActiveServer().http}/custom-lobby/${customLobbyCode}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch(e) { /* non-fatal — host still launches */ }
+  }
+  _clLaunchGame();
+}
+
+function _clLaunchGame() {
+  clearInterval(customLobbyPollInterval);
   suddenDeathMode = customLobbySuddenDeath;
   isCustomLobbyGame = true;
   activeCustomBotSpeedMs = Math.max(10, customLobbyBotSpeed);
-
-  if (customLobbyCode && gameState.customLobbies) {
-    delete gameState.customLobbies[customLobbyCode];
-    saveState();
-  }
 
   const playerCount = customLobbyPlayers.length;
   gameState.mode     = customLobbyMode;
   gameState.players  = playerCount;
   gameState.gridSize = customLobbyGridSize * customLobbyGridSize;
 
-  // Build allPlayers directly from the custom lobby list
   allPlayers = [];
   playerEliminated = false;
   playerWon        = false;
@@ -359,22 +451,19 @@ function startCustomGame() {
   playersLeft      = playerCount;
 
   const av = getActiveAvatar();
-  // Add real player first (slot 0)
+  // Real player first (slot 0), everyone else as bots with real names/avatars
   allPlayers.push({ name: gameState.playerName || 'YOU', avatar: av.icon, isBot: false, eliminated: false, place: 0, tapCount: 0, totalReactionMs: 0 });
-  // Add other lobby members as bots, using their names/avatars
   customLobbyPlayers.forEach(p => {
     if (p.isYou) return;
     allPlayers.push({ name: p.name, avatar: p.avatar, isBot: true, eliminated: false, place: 0, tapCount: 0, totalReactionMs: 0 });
   });
 
-  // Set up lobby screen UI
   const modeTitles = { rush:'RUSH MODE', buckshot:'BUCKSHOT MODE', wild:'WILD MODE' };
   document.getElementById('lobbyModeTitle').textContent = modeTitles[gameState.mode] || 'RUSH MODE';
   document.getElementById('lobbyGridSub').textContent   = `${customLobbyGridSize}×${customLobbyGridSize} Grid${suddenDeathMode ? ' · ⚡ SD' : ''}`;
   document.getElementById('lobbyStatusWrap').style.display    = 'none';
   document.getElementById('lobbyCountdownWrap').style.display = 'none';
 
-  // Build player grid slots
   const grid = document.getElementById('playersGrid');
   grid.innerHTML = '';
   grid.style.gridTemplateColumns = '';
@@ -388,8 +477,6 @@ function startCustomGame() {
 
   showScreen('lobbyScreen');
   showToast(`Starting ${customLobbyMode} · ${playerCount} players`, 'var(--diamond)');
-
-  // Short delay then straight to countdown — no matchmaking needed
   setTimeout(() => startLobbyCountdown(), 800);
 }
 

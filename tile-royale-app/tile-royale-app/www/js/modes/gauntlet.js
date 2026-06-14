@@ -1063,6 +1063,16 @@ function leaveCustomLobby() {
   customLobbyFillInterval = null;
   customLobbyPollInterval = null;
   customLobbyStartTimeout = null;
+  // Notify server so host sees the player left
+  if (customLobbyCode && typeof PLAYER_ID !== 'undefined' && typeof getActiveServer === 'function') {
+    try {
+      fetch(`${getActiveServer().http}/custom-lobby/${customLobbyCode}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: PLAYER_ID }),
+      }).catch(()=>{});
+    } catch(e) {}
+  }
   customLobbyCode = null;
   customLobbyPlayers = [];
   isCustomLobbyGame = false;
