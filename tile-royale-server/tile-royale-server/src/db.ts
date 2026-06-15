@@ -940,7 +940,6 @@ export async function getPlayerPercentiles(playerId: string): Promise<any | null
         COALESCE(p.diamonds, 0)::NUMERIC                                   AS diamonds
       FROM players p
       LEFT JOIN game_results gr ON gr.player_id = p.player_id
-        AND (gr.is_bot_match IS NULL OR gr.is_bot_match = false)
       GROUP BY p.player_id, p.diamonds
     ),
     pcts AS (
