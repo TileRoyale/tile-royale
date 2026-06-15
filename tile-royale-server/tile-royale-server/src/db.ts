@@ -940,16 +940,17 @@ export async function getPlayerPercentiles(playerId: string): Promise<any | null
         COALESCE(p.diamonds, 0)::NUMERIC                                   AS diamonds
       FROM players p
       LEFT JOIN game_results gr ON gr.player_id = p.player_id
+        AND (gr.is_bot_match IS NULL OR gr.is_bot_match = false)
       GROUP BY p.player_id, p.diamonds
     ),
     pcts AS (
       SELECT
         player_id,
-        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY wins             ASC NULLS LAST)) * 100)::NUMERIC)::INT AS wins_pct,
-        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY win_rate         ASC NULLS LAST)) * 100)::NUMERIC)::INT AS win_rate_pct,
-        ROUND((      PERCENT_RANK() OVER (ORDER BY fastest_reaction ASC NULLS LAST) * 100 )::NUMERIC)::INT AS reaction_pct,
-        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY tiles_tapped     ASC NULLS LAST)) * 100)::NUMERIC)::INT AS tiles_pct,
-        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY diamonds         ASC NULLS LAST)) * 100)::NUMERIC)::INT AS diamonds_pct
+        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY wins             ASC NULLS LAST )) * 100)::NUMERIC)::INT AS wins_pct,
+        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY win_rate         ASC NULLS FIRST)) * 100)::NUMERIC)::INT AS win_rate_pct,
+        ROUND((      PERCENT_RANK() OVER (ORDER BY fastest_reaction ASC NULLS LAST ) * 100 )::NUMERIC)::INT AS reaction_pct,
+        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY tiles_tapped     ASC NULLS LAST )) * 100)::NUMERIC)::INT AS tiles_pct,
+        ROUND(((1 - PERCENT_RANK() OVER (ORDER BY diamonds         ASC NULLS LAST )) * 100)::NUMERIC)::INT AS diamonds_pct
       FROM per_player
     )
     SELECT wins_pct, win_rate_pct, reaction_pct, tiles_pct, diamonds_pct
