@@ -349,6 +349,37 @@ function renderRingInventory() {
 
   const trades = gameState.activeTrades || {};
   el.innerHTML = '';
+
+  // Bulk salvage buttons (common/uncommon/rare/epic only — equipped rings skipped)
+  const _equippedIds = Object.values(gameState.gauntlet || {});
+  const _skipCounts = {};
+  _equippedIds.forEach(rid => { _skipCounts[rid] = (_skipCounts[rid] || 0) + 1; });
+  const _usedSkips = {};
+  const salvageableCounts = {};
+  inv.forEach(rid => {
+    const ring = getRingDef(rid);
+    if (!ring) return;
+    const rarId = ring.rarityId;
+    if (!['common','uncommon','rare','epic'].includes(rarId)) return;
+    const skipLeft = (_skipCounts[rid] || 0) - (_usedSkips[rid] || 0);
+    if (skipLeft > 0) { _usedSkips[rid] = (_usedSkips[rid] || 0) + 1; return; }
+    salvageableCounts[rarId] = (salvageableCounts[rarId] || 0) + 1;
+  });
+  const bulkRarities = ['common','uncommon','rare','epic'].filter(r => salvageableCounts[r] > 0);
+  if (bulkRarities.length) {
+    const bulkRow = document.createElement('div');
+    bulkRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:8px 4px 10px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:6px;';
+    bulkRarities.forEach(rarId => {
+      const rar = getRarityDef(rarId);
+      const cnt = salvageableCounts[rarId];
+      const btn = document.createElement('button');
+      btn.textContent = `SALVAGE ALL ${rar.label.toUpperCase()} ×${cnt}`;
+      btn.style.cssText = `font-size:9px;padding:5px 9px;border-radius:7px;background:rgba(220,50,50,.1);border:1px solid rgba(220,50,50,.3);color:rgba(255,110,110,.9);cursor:pointer;letter-spacing:1px;font-family:'Bebas Neue',sans-serif;`;
+      btn.onclick = e => { e.stopPropagation(); salvageAllByRarity(rarId); };
+      bulkRow.appendChild(btn);
+    });
+    el.appendChild(bulkRow);
+  }
   const unique = [...new Set(inv)];
   (unique||[]).forEach(rid => {
     const ring  = getRingDef(rid);
@@ -454,6 +485,85 @@ function salvageRing(rid) {
       </div>`;
     document.body.appendChild(win);
     win.querySelector('#salvOkBtn').onclick = () => document.body.removeChild(win);
+    win.onclick = e => { if (e.target === win) document.body.removeChild(win); };
+  };
+}
+
+function salvageAllByRarity(rarityId) {
+  const SALVAGE_REWARDS = { common:10, uncommon:20, rare:35, epic:50, legendary:100, secret:300 };
+  const rewardPer = SALVAGE_REWARDS[rarityId] || 10;
+  const inv = (gameState.ringInventory || []).slice();
+
+  const equippedIds = Object.values(gameState.gauntlet || {});
+  const skipCounts = {};
+  equippedIds.forEach(rid => { skipCounts[rid] = (skipCounts[rid] || 0) + 1; });
+  const usedSkips = {};
+  const toSalvage = [];
+  inv.forEach(rid => {
+    const ring = getRingDef(rid);
+    if (!ring || ring.rarityId !== rarityId) return;
+    const skipLeft = (skipCounts[rid] || 0) - (usedSkips[rid] || 0);
+    if (skipLeft > 0) { usedSkips[rid] = (usedSkips[rid] || 0) + 1; return; }
+    toSalvage.push(rid);
+  });
+
+  if (!toSalvage.length) return;
+
+  const totalDiamonds = toSalvage.length * rewardPer;
+  const rar = getRarityDef(rarityId);
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:linear-gradient(180deg,#1a0808,#0e0404);border:1px solid rgba(220,50,50,.35);border-radius:18px;padding:24px 20px;max-width:300px;width:90%;text-align:center;box-shadow:0 0 30px rgba(220,50,50,.18);">
+      <div style="font-size:30px;margin-bottom:10px;">⚗️</div>
+      <div style="font-family:'Cinzel Decorative','Bebas Neue',serif;font-size:15px;letter-spacing:2px;color:rgba(255,120,100,.95);margin-bottom:14px;">SALVAGE ALL ${rar.label.toUpperCase()}?</div>
+      <div style="font-size:13px;letter-spacing:1px;margin-bottom:6px;"><span class="${rar.cls}" style="font-weight:bold;">${toSalvage.length} ring${toSalvage.length>1?'s':''}</span> <span style="color:var(--muted);">will be destroyed</span></div>
+      <div style="font-size:15px;margin-bottom:6px;letter-spacing:1px;">You will receive <span style="color:var(--diamond);font-weight:bold;">💎 +${totalDiamonds}</span></div>
+      <div style="font-size:10px;color:rgba(255,80,80,.6);margin-bottom:18px;letter-spacing:1px;">${rewardPer} gems × ${toSalvage.length} rings · equipped skipped</div>
+      <div style="display:flex;gap:10px;">
+        <button id="salvAllCancelBtn" style="flex:1;padding:10px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:var(--muted);cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1.5px;">CANCEL</button>
+        <button id="salvAllConfirmBtn" style="flex:1;padding:10px;border-radius:10px;background:rgba(220,50,50,.15);border:1px solid rgba(220,50,50,.45);color:rgba(255,120,100,.95);cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1.5px;">SALVAGE ALL</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#salvAllCancelBtn').onclick = () => document.body.removeChild(overlay);
+  overlay.onclick = e => { if (e.target === overlay) document.body.removeChild(overlay); };
+
+  overlay.querySelector('#salvAllConfirmBtn').onclick = () => {
+    document.body.removeChild(overlay);
+
+    const currentInv = gameState.ringInventory || [];
+    toSalvage.forEach(rid => {
+      const idx = currentInv.indexOf(rid);
+      if (idx !== -1) currentInv.splice(idx, 1);
+    });
+    gameState.ringInventory = currentInv;
+
+    gameState.diamonds = (gameState.diamonds || 0) + totalDiamonds;
+    saveState();
+    _addTrustedDiamondsServer(totalDiamonds);
+
+    try { renderRingInventory(); }       catch(e) {}
+    try { renderGauntletHand(); }        catch(e) {}
+    try { renderMenuGauntletWidget(); }  catch(e) {}
+    ['spinDiamondBalance','storeBalance','profileDiamonds','st-diamonds','statDiamonds'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = (gameState.diamonds || 0).toLocaleString();
+    });
+
+    const win = document.createElement('div');
+    win.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;display:flex;align-items:center;justify-content:center;';
+    win.innerHTML = `
+      <div style="background:linear-gradient(180deg,#0a180a,#050e05);border:1px solid rgba(0,200,80,.35);border-radius:18px;padding:28px 20px;max-width:280px;width:90%;text-align:center;box-shadow:0 0 30px rgba(0,200,80,.15);">
+        <div style="font-size:36px;margin-bottom:12px;">⚗️</div>
+        <div style="font-family:'Cinzel Decorative','Bebas Neue',serif;font-size:15px;letter-spacing:2px;color:var(--green);margin-bottom:14px;">RINGS SALVAGED!</div>
+        <div style="font-size:30px;font-family:'Bebas Neue',sans-serif;color:var(--diamond);letter-spacing:2px;margin-bottom:4px;">💎 +${totalDiamonds}</div>
+        <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:22px;">${toSalvage.length} ${rar.label} ring${toSalvage.length>1?'s':''} destroyed</div>
+        <button id="salvAllOkBtn" style="width:100%;padding:12px;border-radius:10px;background:rgba(0,200,80,.15);border:1px solid rgba(0,200,80,.35);color:var(--green);cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;">OK</button>
+      </div>`;
+    document.body.appendChild(win);
+    win.querySelector('#salvAllOkBtn').onclick = () => document.body.removeChild(win);
     win.onclick = e => { if (e.target === win) document.body.removeChild(win); };
   };
 }
