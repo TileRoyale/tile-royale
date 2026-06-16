@@ -233,7 +233,7 @@ app.get("/delete-data", (_req, res) => {
 
 // AdMob app-ads.txt — must be served from the developer website registered in Play Console
 app.get("/app-ads.txt", (_req, res) => {
-  res.type('text/plain').send('google.com, pub-2005005437331878, DIRECT, f08c47fec0942fa0');
+  res.type('text/plain').send('google.com, pub-1687381057809117, DIRECT, f08c47fec0942fa0');
 });
 
 // Health check + region info (clients ping this to measure latency)
