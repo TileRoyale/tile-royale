@@ -1177,6 +1177,56 @@ export async function recordMissionClaim(
   }
 }
 
+// Tier thresholds shared by daily/weekly mode rewards — keyed by real percentile, not win count.
+const MODE_REWARD_TIERS = [
+  { tier: 'TOP 1%', maxPct: 1 },
+  { tier: 'TOP 3%', maxPct: 3 },
+  { tier: 'TOP 5%', maxPct: 5 },
+];
+const MODE_REWARD_TICKETS: Record<'daily' | 'weekly', Record<string, number>> = {
+  daily:  { 'TOP 1%': 10, 'TOP 3%': 5,  'TOP 5%': 3  },
+  weekly: { 'TOP 1%': 30, 'TOP 3%': 20, 'TOP 5%': 10 },
+};
+
+// Real percentile rank among players who won at least once in this mode/period.
+// rank=1 (best) always maps to percentile 0, so a lone top player always qualifies
+// for the best tier instead of being penalized by a tiny population (the old bug).
+export async function getModeRewardPercentile(
+  playerId: string, mode: string, periodStart: string, periodEnd: string
+): Promise<{ wins: number; rank: number | null; totalWinners: number; percentile: number | null } | null> {
+  if (!pool || !dbAvailable) return null;
+  try {
+    const rows = await pool.query(
+      `WITH wins_cte AS (
+         SELECT player_id, COUNT(*)::INT AS wins
+         FROM game_results
+         WHERE mode = $1 AND placement = 1
+           AND played_at >= $2 AND played_at < $3
+           AND (is_bot_match IS NULL OR is_bot_match = false)
+         GROUP BY player_id
+       ),
+       ranked AS (
+         SELECT *, RANK() OVER (ORDER BY wins DESC)::INT AS rank, COUNT(*) OVER ()::INT AS total
+         FROM wins_cte
+       )
+       SELECT wins, rank, total FROM ranked WHERE player_id = $4`,
+      [mode, periodStart, periodEnd, playerId]
+    );
+    const row = rows.rows[0];
+    if (!row) return { wins: 0, rank: null, totalWinners: 0, percentile: null };
+    const percentile = Math.ceil(((row.rank - 1) / row.total) * 100);
+    return { wins: row.wins, rank: row.rank, totalWinners: row.total, percentile };
+  } catch (err: any) {
+    console.error('[DB] getModeRewardPercentile error:', err?.message);
+    return null;
+  }
+}
+
+function tierForPercentile(pct: number | null): { tier: string } | null {
+  if (pct === null) return null;
+  return MODE_REWARD_TIERS.find(t => pct <= t.maxPct) || null;
+}
+
 // Validates mode reward claim against actual game_results and records idempotently.
 // Returns the earned tier, or null if already claimed.
 export async function getAndValidateModeRewardClaim(
@@ -1185,28 +1235,20 @@ export async function getAndValidateModeRewardClaim(
 ): Promise<{ tier: string; tickets: number } | 'already_claimed' | 'no_reward' | 'error'> {
   if (!pool || !dbAvailable) return 'error';
   try {
-    // Count actual wins from server game_results
-    const rows = await pool.query(
-      `SELECT COUNT(*)::INT AS wins FROM game_results
-       WHERE player_id = $1 AND mode = $2 AND placement = 1
-         AND played_at >= $3 AND played_at < $4`,
-      [playerId, mode, periodStart, periodEnd]
-    );
-    const wins = rows.rows[0]?.wins ?? 0;
+    const stats = await getModeRewardPercentile(playerId, mode, periodStart, periodEnd);
+    if (!stats || !stats.wins) return 'no_reward';
 
-    const dailyTiers  = [{ minWins:5, tier:'TOP 1%', tickets:10 }, { minWins:2, tier:'TOP 3%', tickets:5 }, { minWins:1, tier:'TOP 5%', tickets:3 }];
-    const weeklyTiers = [{ minWins:20, tier:'TOP 1%', tickets:30 }, { minWins:10, tier:'TOP 3%', tickets:20 }, { minWins:3, tier:'TOP 5%', tickets:10 }];
-    const tiers = period === 'daily' ? dailyTiers : weeklyTiers;
-    const earned = tiers.find(t => wins >= t.minWins);
+    const earned = tierForPercentile(stats.percentile);
     if (!earned) return 'no_reward';
+    const tickets = MODE_REWARD_TICKETS[period][earned.tier];
 
     // Record claim — idempotent
     await pool.query(
       `INSERT INTO mode_reward_claims (player_id, mode, period, period_key, tier, tickets)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [playerId, mode, period, periodKey, earned.tier, earned.tickets]
+      [playerId, mode, period, periodKey, earned.tier, tickets]
     );
-    return { tier: earned.tier, tickets: earned.tickets };
+    return { tier: earned.tier, tickets };
   } catch (err: any) {
     if (err.code === '23505') return 'already_claimed';
     console.error('[DB] mode_reward_claims error:', err?.message);
