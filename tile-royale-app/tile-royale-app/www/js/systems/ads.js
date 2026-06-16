@@ -1,7 +1,7 @@
 // ===== AD REWARD SYSTEM =====
 const AD_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
-const ADMOB_REWARDED_ID = 'ca-app-pub-1687381057809117/7980217936';
+const ADMOB_REWARDED_ID = 'ca-app-pub-2005005437331878/4414084422';
 
 // ─── AdMob Bridge ─────────────────────────────────────────────────────────────
 
