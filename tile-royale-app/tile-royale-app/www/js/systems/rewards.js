@@ -404,16 +404,38 @@ function showRedeemMsg(text, type) {
 
 // ===== MODE REWARDS (Rush / Buckshot / Wild) =====
 
-const MODE_DAILY_TIERS = [
-  { tier: 'TOP 1%', minWins: 5,  tickets: 10, icon: '🥇', color: 'var(--gold)' },
-  { tier: 'TOP 3%', minWins: 2,  tickets: 5,  icon: '🥈', color: '#c0c0c0'     },
-  { tier: 'TOP 5%', minWins: 1,  tickets: 3,  icon: '🥉', color: '#cd7f32'     },
+// Tiers are real server-computed percentiles (rank among players who won at least
+// once this period) — NOT fixed win counts. A lone top player always qualifies for
+// TOP 1% regardless of how few people played, matching what the server returns.
+const MODE_TIER_THRESHOLDS = [
+  { tier: 'TOP 1%', maxPct: 1, icon: '🥇', color: 'var(--gold)' },
+  { tier: 'TOP 3%', maxPct: 3, icon: '🥈', color: '#c0c0c0'     },
+  { tier: 'TOP 5%', maxPct: 5, icon: '🥉', color: '#cd7f32'     },
 ];
-const MODE_WEEKLY_TIERS = [
-  { tier: 'TOP 1%', minWins: 20, tickets: 30, icon: '🥇', color: 'var(--gold)' },
-  { tier: 'TOP 3%', minWins: 10, tickets: 20, icon: '🥈', color: '#c0c0c0'     },
-  { tier: 'TOP 5%', minWins: 3,  tickets: 10, icon: '🥉', color: '#cd7f32'     },
-];
+const MODE_DAILY_TICKETS  = { 'TOP 1%': 10, 'TOP 3%': 5,  'TOP 5%': 3  };
+const MODE_WEEKLY_TICKETS = { 'TOP 1%': 30, 'TOP 3%': 20, 'TOP 5%': 10 };
+
+function _tierForPercentile(pct) {
+  if (pct === null || pct === undefined) return null;
+  return MODE_TIER_THRESHOLDS.find(t => pct <= t.maxPct) || null;
+}
+
+// Cache of server-fetched percentile stats, keyed by `${mode}:${periodKey}`.
+// { wins, rank, totalWinners, percentile }
+const _modeStatsCache = {};
+
+async function _fetchModeRewardStats(mode, periodKey, periodStart, periodEnd) {
+  if (typeof PLAYER_ID === 'undefined' || !PLAYER_ID || typeof getActiveServer !== 'function') return null;
+  const cacheKey = `${mode}:${periodKey}`;
+  try {
+    const url = `${getActiveServer().http}/mode-rewards/stats?playerId=${PLAYER_ID}&mode=${mode}&periodStart=${encodeURIComponent(periodStart)}&periodEnd=${encodeURIComponent(periodEnd)}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const data = r.ok ? await r.json() : null;
+    if (!data || !data.ok) return null;
+    _modeStatsCache[cacheKey] = data;
+    return data;
+  } catch(e) { return null; }
+}
 
 // UTC date string "YYYY-MM-DD" — aligns with server's date_trunc('day', now())
 function _modeUtcDate() {
@@ -579,23 +601,50 @@ function openModeRewardPopup(mode) {
   if (_modeTimerHandle) clearInterval(_modeTimerHandle);
   _modeTimerHandle = setInterval(_refreshModeTimers, 30000);
 
-  // Pending = locked results from yesterday / last week (claimable now)
-  // Active  = current accumulation (not yet claimable, shown for info)
-  const pendingDailyTier  = data.pendingDaily
-    ? MODE_DAILY_TIERS.find(t  => data.pendingDaily.wins  >= t.minWins) || null : null;
-  const pendingWeeklyTier = data.pendingWeekly
-    ? MODE_WEEKLY_TIERS.find(t => data.pendingWeekly.wins >= t.minWins) || null : null;
+  const today   = _modeUtcDate();
+  const weekKey = _modeWeekStart();
+
+  // Kick off (cached) percentile fetches for every period shown in this popup,
+  // re-rendering once each lands so the real server rank replaces the loading state.
+  const _bounds = (periodKey, days) => {
+    const d = new Date(periodKey + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    return { start: periodKey + 'T00:00:00Z', end: _modeUtcIso(d) + 'T00:00:00Z' };
+  };
+  const _ensureStats = (periodKey, days) => {
+    const cacheKey = `${mode}:${periodKey}`;
+    if (_modeStatsCache[cacheKey]) return;
+    const { start, end } = _bounds(periodKey, days);
+    _fetchModeRewardStats(mode, periodKey, start, end).then(stats => {
+      if (stats && _modePopupMode === mode && popup.style.display !== 'none') openModeRewardPopup(mode);
+    });
+  };
+  if (data.pendingDaily)  _ensureStats(data.pendingDaily.date, 1);
+  _ensureStats(today, 1);
+  if (data.pendingWeekly) _ensureStats(data.pendingWeekly.week, 7);
+  _ensureStats(weekKey, 7);
+
+  const statsFor = (periodKey) => _modeStatsCache[`${mode}:${periodKey}`] || null;
+  const pendingDailyStats  = data.pendingDaily  ? statsFor(data.pendingDaily.date)  : null;
+  const pendingWeeklyStats = data.pendingWeekly ? statsFor(data.pendingWeekly.week) : null;
+  const activeDailyStats   = statsFor(today);
+  const activeWeeklyStats  = statsFor(weekKey);
+
+  const pendingDailyTier  = pendingDailyStats  ? _tierForPercentile(pendingDailyStats.percentile)  : null;
+  const pendingWeeklyTier = pendingWeeklyStats ? _tierForPercentile(pendingWeeklyStats.percentile) : null;
+  const activeDailyTier   = activeDailyStats   ? _tierForPercentile(activeDailyStats.percentile)   : null;
+  const activeWeeklyTier  = activeWeeklyStats  ? _tierForPercentile(activeWeeklyStats.percentile)  : null;
 
   // Highlight whichever tier the player has reached (pending if claimable, else active)
-  const _highlightTierBox = (boxId, tiers, wins, isLocked) => {
+  const _highlightTierBox = (boxId, tier, isLocked) => {
     const box = document.getElementById(boxId);
     if (!box) return;
     const rows = box.querySelectorAll('.koth-daily-row');
-    const qi = tiers.findIndex(t => wins >= t.minWins);
+    const qi = tier ? MODE_TIER_THRESHOLDS.findIndex(t => t.tier === tier.tier) : -1;
     rows.forEach((row, i) => {
       if (i === qi && !isLocked) {
         row.style.background   = 'rgba(255,215,0,0.08)';
-        row.style.borderLeft   = `3px solid ${tiers[i].color}`;
+        row.style.borderLeft   = `3px solid ${MODE_TIER_THRESHOLDS[i].color}`;
         row.style.borderRadius = '6px';
       } else {
         row.style.background   = '';
@@ -604,41 +653,36 @@ function openModeRewardPopup(mode) {
       }
     });
   };
-  const dHW = (data.pendingDaily  && !data.pendingDaily.claimed)  ? data.pendingDaily.wins  : data.daily.wins;
-  const wHW = (data.pendingWeekly && !data.pendingWeekly.claimed) ? data.pendingWeekly.wins : data.weekly.wins;
   const dHL = !data.pendingDaily  || data.pendingDaily.claimed;
   const wHL = !data.pendingWeekly || data.pendingWeekly.claimed;
-  _highlightTierBox('modeDailyTierBox',  MODE_DAILY_TIERS,  dHW, dHL);
-  _highlightTierBox('modeWeeklyTierBox', MODE_WEEKLY_TIERS, wHW, wHL);
+  _highlightTierBox('modeDailyTierBox',  dHL ? activeDailyTier  : pendingDailyTier,  false);
+  _highlightTierBox('modeWeeklyTierBox', wHL ? activeWeeklyTier : pendingWeeklyTier, false);
 
   // Status block
   const rankEl = document.getElementById('modeRewardPopupRank');
   if (rankEl) {
-    const buildPendingLine = (pending, tiers, label) => {
+    const buildPendingLine = (pending, stats, tier, ticketsMap, label) => {
       if (!pending) return null;
-      const tier = tiers.find(t => pending.wins >= t.minWins);
       const ws = `${pending.wins} win${pending.wins !== 1 ? 's' : ''}`;
-      if (!tier)           return `${label}: <b>${ws}</b> · below threshold`;
-      if (pending.claimed) return `${label}: <b>${ws}</b> · <span style="color:var(--muted)">${tier.tier} ✓ Claimed</span>`;
-      return `${label}: <b>${ws}</b> · <span style="color:${tier.color};font-weight:700;">${tier.tier} → +${tier.tickets} 🎟️ READY!</span>`;
+      if (!stats)           return `${label}: <b>${ws}</b> · loading rank…`;
+      if (!tier)            return `${label}: <b>${ws}</b> · outside top 5%`;
+      if (pending.claimed)  return `${label}: <b>${ws}</b> · <span style="color:var(--muted)">${tier.tier} ✓ Claimed</span>`;
+      return `${label}: <b>${ws}</b> · <span style="color:${tier.color};font-weight:700;">${tier.tier} → +${ticketsMap[tier.tier]} 🎟️ READY!</span>`;
     };
-    const buildActiveLine = (wins, tiers, label) => {
+    const buildActiveLine = (wins, stats, tier, label) => {
       const ws = `${wins} win${wins !== 1 ? 's' : ''}`;
-      const tier = tiers.find(t => wins >= t.minWins);
-      if (!wins) return `${label}: 0 wins`;
-      if (!tier) {
-        const need = tiers[tiers.length - 1].minWins - wins;
-        return `${label}: <b>${ws}</b> · need ${need} more for ${tiers[tiers.length-1].tier}`;
-      }
-      return `${label}: <b>${ws}</b> · <span style="color:${tier.color}">${tier.tier}</span>`;
+      if (!wins)  return `${label}: 0 wins`;
+      if (!stats) return `${label}: <b>${ws}</b> · loading rank…`;
+      if (!tier)  return `${label}: <b>${ws}</b> · outside top 5% so far`;
+      return `${label}: <b>${ws}</b> · <span style="color:${tier.color}">${tier.tier}</span> so far`;
     };
     const lines = [];
-    const pdLine = buildPendingLine(data.pendingDaily,  MODE_DAILY_TIERS,  'Yesterday');
-    const pwLine = buildPendingLine(data.pendingWeekly, MODE_WEEKLY_TIERS, 'Last week');
+    const pdLine = buildPendingLine(data.pendingDaily,  pendingDailyStats,  pendingDailyTier,  MODE_DAILY_TICKETS,  'Yesterday');
+    const pwLine = buildPendingLine(data.pendingWeekly, pendingWeeklyStats, pendingWeeklyTier, MODE_WEEKLY_TICKETS, 'Last week');
     if (pdLine) lines.push(pdLine);
-    lines.push(buildActiveLine(data.daily.wins,  MODE_DAILY_TIERS,  'Today'));
+    lines.push(buildActiveLine(data.daily.wins,  activeDailyStats,  activeDailyTier,  'Today'));
     if (pwLine) lines.push(pwLine);
-    lines.push(buildActiveLine(data.weekly.wins, MODE_WEEKLY_TIERS, 'This week'));
+    lines.push(buildActiveLine(data.weekly.wins, activeWeeklyStats, activeWeeklyTier, 'This week'));
     rankEl.innerHTML = lines.join('<br>');
   }
 
@@ -650,13 +694,13 @@ function openModeRewardPopup(mode) {
   const dailyBtn  = document.getElementById('modeDailyClaimBtn');
   if (dailyWrap) dailyWrap.style.display = canClaimDaily ? 'block' : 'none';
   if (dailyBtn && pendingDailyTier)
-    dailyBtn.textContent = `🎟️ CLAIM YESTERDAY'S REWARD — ${pendingDailyTier.tier} · +${pendingDailyTier.tickets} Tickets`;
+    dailyBtn.textContent = `🎟️ CLAIM YESTERDAY'S REWARD — ${pendingDailyTier.tier} · +${MODE_DAILY_TICKETS[pendingDailyTier.tier]} Tickets`;
 
   const weeklyWrap = document.getElementById('modeWeeklyClaimWrap');
   const weeklyBtn  = document.getElementById('modeWeeklyClaimBtn');
   if (weeklyWrap) weeklyWrap.style.display = canClaimWeekly ? 'block' : 'none';
   if (weeklyBtn && pendingWeeklyTier)
-    weeklyBtn.textContent = `🎟️ CLAIM LAST WEEK'S REWARD — ${pendingWeeklyTier.tier} · +${pendingWeeklyTier.tickets} Tickets`;
+    weeklyBtn.textContent = `🎟️ CLAIM LAST WEEK'S REWARD — ${pendingWeeklyTier.tier} · +${MODE_WEEKLY_TICKETS[pendingWeeklyTier.tier]} Tickets`;
 
   popup.style.display = 'flex';
 }
