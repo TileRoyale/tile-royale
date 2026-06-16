@@ -282,4 +282,4 @@ _(kõik teadaolevad bugid hetkel lahendatud)_
 ## Google Play
 - App ID: `com.tileroyale.game`
 - Praegu: Internal Testing
-- AdMob: `ca-app-pub-2005005437331878~7767995750`
+- AdMob: `ca-app-pub-1687381057809117~9075174731`
