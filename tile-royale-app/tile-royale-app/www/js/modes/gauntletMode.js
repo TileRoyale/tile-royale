@@ -32,16 +32,24 @@ const GM_SURVIVAL_CHANCE = {
   common:10, uncommon:25, rare:40, epic:55, legendary:70, secret:90
 };
 
-// Effect values per rarity (percentages as decimals)
-const GM_EFFECT_VALS = {
-  common:    {bonusMmr:0.001,  voidTimer:0.05,  tileSpawn:0.0125, plusPoints:0.05,  minusPenalty:0.05 },
-  uncommon:  {bonusMmr:0.002,  voidTimer:0.08,  tileSpawn:0.02,   plusPoints:0.08,  minusPenalty:0.08 },
-  rare:      {bonusMmr:0.004,  voidTimer:0.11,  tileSpawn:0.0275, plusPoints:0.11,  minusPenalty:0.11 },
-  epic:      {bonusMmr:0.006,  voidTimer:0.14,  tileSpawn:0.035,  plusPoints:0.14,  minusPenalty:0.14 },
-  legendary: {bonusMmr:0.008,  voidTimer:0.17,  tileSpawn:0.0425, plusPoints:0.17,  minusPenalty:0.17 },
-  secret:    {bonusMmr:0.01,   voidTimer:0.20,  tileSpawn:0.05,   plusPoints:0.20,  minusPenalty:0.20 },
+// Effect value ranges per rarity [min, max] (as decimals)
+// rollPct 0-100 interpolates linearly within the range
+const GM_EFFECT_RANGES = {
+  common:    { bonusMmr:[0.0005,0.001],  voidTimer:[0.03,0.06],  tileSpawn:[0.0075,0.015],  plusPoints:[0.03,0.06],  minusPenalty:[0.03,0.06]  },
+  uncommon:  { bonusMmr:[0.0012,0.0022], voidTimer:[0.06,0.10],  tileSpawn:[0.015,0.025],   plusPoints:[0.06,0.10],  minusPenalty:[0.06,0.10]  },
+  rare:      { bonusMmr:[0.0028,0.0045], voidTimer:[0.09,0.14],  tileSpawn:[0.023,0.035],   plusPoints:[0.09,0.14],  minusPenalty:[0.09,0.14]  },
+  epic:      { bonusMmr:[0.005,0.007],   voidTimer:[0.13,0.18],  tileSpawn:[0.033,0.045],   plusPoints:[0.13,0.18],  minusPenalty:[0.13,0.18]  },
+  legendary: { bonusMmr:[0.0075,0.010],  voidTimer:[0.16,0.22],  tileSpawn:[0.042,0.058],   plusPoints:[0.16,0.22],  minusPenalty:[0.16,0.22]  },
+  secret:    { bonusMmr:[0.011,0.018],   voidTimer:[0.20,0.30],  tileSpawn:[0.055,0.08],    plusPoints:[0.20,0.30],  minusPenalty:[0.20,0.30]  },
 };
 const GM_EFFECT_KEYS = ['bonusMmr','voidTimer','tileSpawn','plusPoints','minusPenalty'];
+
+function _statFromRoll(rarityId, statKey, rollPct) {
+  const ranges = GM_EFFECT_RANGES[rarityId] || GM_EFFECT_RANGES.common;
+  const r = ranges[statKey];
+  if (!r) return 0;
+  return r[0] + (r[1] - r[0]) * (rollPct / 100);
+}
 
 // ── Data persistence ──
 function gmLoadData() {
@@ -202,15 +210,11 @@ function gmGetRingEffects() {
   const fingers  = Object.values(equipped).filter(Boolean);
   const totals   = {bonusMmr:0, voidTimer:0, tileSpawn:0, plusPoints:0, minusPenalty:0};
 
-  fingers.forEach(ringId => {
-    const ring = getRingDef(ringId);
-    if (!ring) return;
-    const vals = GM_EFFECT_VALS[ring.rarityId] || GM_EFFECT_VALS.common;
-    // Deterministic effect type per ring
-    let hash = 0;
-    for (let i = 0; i < ringId.length; i++) hash = ((hash << 5) - hash + ringId.charCodeAt(i)) | 0;
-    const key = GM_EFFECT_KEYS[Math.abs(hash) % GM_EFFECT_KEYS.length];
-    totals[key] += vals[key];
+  fingers.forEach(uid => {
+    const inst = (typeof _getRingByUid === 'function') ? _getRingByUid(uid) : null;
+    if (!inst) return;
+    const val = _statFromRoll(inst.rarityId, inst.statKey, inst.rollPct);
+    totals[inst.statKey] = (totals[inst.statKey] || 0) + val;
   });
 
   return totals;
@@ -1183,14 +1187,10 @@ function _gmConfirmLeave() {
 }
 
 // ── Single ring effect lookup (used by inventory, equip picker, spin popup) ──
-function gmGetSingleRingEffect(ringId) {
-  const ring = getRingDef(ringId);
-  if (!ring) return null;
-  const vals = GM_EFFECT_VALS[ring.rarityId] || GM_EFFECT_VALS.common;
-  let hash = 0;
-  for (let i = 0; i < ringId.length; i++) hash = ((hash << 5) - hash + ringId.charCodeAt(i)) | 0;
-  const key = GM_EFFECT_KEYS[Math.abs(hash) % GM_EFFECT_KEYS.length];
-  const val = vals[key];
+function gmGetSingleRingEffect(uid) {
+  const inst = (typeof _getRingByUid === 'function') ? _getRingByUid(uid) : null;
+  if (!inst) return null;
+  const val = _statFromRoll(inst.rarityId, inst.statKey, inst.rollPct);
   const LABELS = {
     bonusMmr:    'Bonus MMR',
     voidTimer:   'Void Timer',
@@ -1198,9 +1198,9 @@ function gmGetSingleRingEffect(ringId) {
     plusPoints:  'Score+',
     minusPenalty:'Penalty−',
   };
-  const pct = key === 'bonusMmr'
+  const pct = inst.statKey === 'bonusMmr'
     ? `+${(val * 100).toFixed(1)}%`
     : `+${Math.round(val * 100)}%`;
-  return { key, label: LABELS[key] || key, pct };
+  return { key: inst.statKey, label: LABELS[inst.statKey] || inst.statKey, pct };
 }
 

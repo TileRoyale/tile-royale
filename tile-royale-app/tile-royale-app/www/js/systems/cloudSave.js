@@ -194,14 +194,11 @@ async function loadFromCloud() {
       _csSetStatus('synced');
       return true;
     } else {
-      // Local is current — push to cloud (server validates economy on receipt)
+      // Local is current — push to cloud (server validates economy on receipt).
+      // Do NOT pre-cap diamonds here: /ring/reward may still be in-flight, so
+      // trustedDiamonds from this GET can lag behind a legitimate salvage gain.
+      // The server's /save endpoint already enforces the tamper ceiling correctly.
       console.log('[CloudSave] Local save is current — uploading');
-      // Apply trusted ceiling from server before uploading so local matches
-      if (data.trustedDiamonds !== undefined && data.trustedDiamonds !== null
-          && data.trustedDiamonds < (gameState.diamonds || 0)) {
-        gameState.diamonds = data.trustedDiamonds;
-        try { localStorage.setItem('tileRoyaleState', JSON.stringify(gameState)); } catch(e) {}
-      }
       await saveToCloud();
       return false;
     }
