@@ -1,6 +1,7 @@
 const AD_SPINS_MAX = 3;                          // max ad spins per day
 const DIAMOND_SPIN_COSTS = [50, 100, 200];       // spin costs after ads exhausted
 
+
 // ── RING DATA (moved to top for hoisting) ──
 const RING_RARITIES = [
   { id:'secret',    label:'SECRET',    color:'#ff3355', prob:0.0001, cls:'ring-secret' },
@@ -51,7 +52,7 @@ function ringImgHtml(rarityId, rollPct, pxSize) {
   if (typeof pxSize !== 'number') pxSize = 36;
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const src = 'img/Rings/' + cap(rarityId) + ' ' + _ringVariant(rollPct) + '.png';
-  return '<img src="' + src + '" width="' + pxSize + '" height="' + pxSize + '" style="object-fit:contain;flex-shrink:0;display:block;" draggable="false">';
+  return '<img src="' + src + '" width="' + pxSize + '" height="' + pxSize + '" style="object-fit:contain;flex-shrink:0;display:block;border-radius:50%;" draggable="false">';
 }
 
 function getRarityDef(id) { return RING_RARITIES.find(r=>r.id===id) || RING_RARITIES[5]; }
