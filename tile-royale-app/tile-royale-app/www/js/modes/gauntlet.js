@@ -467,10 +467,7 @@ function salvageRing(rid) {
     try { renderRingInventory(); }       catch(e) {}
     try { renderGauntletHand(); }        catch(e) {}
     try { renderMenuGauntletWidget(); }  catch(e) {}
-    ['spinDiamondBalance','storeBalance','profileDiamonds','st-diamonds','statDiamonds'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = (gameState.diamonds || 0).toLocaleString();
-    });
+    try { updateMenuStats(); }           catch(e) {}
 
     // Success overlay
     const win = document.createElement('div');
@@ -547,10 +544,7 @@ function salvageAllByRarity(rarityId) {
     try { renderRingInventory(); }       catch(e) {}
     try { renderGauntletHand(); }        catch(e) {}
     try { renderMenuGauntletWidget(); }  catch(e) {}
-    ['spinDiamondBalance','storeBalance','profileDiamonds','st-diamonds','statDiamonds'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = (gameState.diamonds || 0).toLocaleString();
-    });
+    try { updateMenuStats(); }           catch(e) {}
 
     const win = document.createElement('div');
     win.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;display:flex;align-items:center;justify-content:center;';
