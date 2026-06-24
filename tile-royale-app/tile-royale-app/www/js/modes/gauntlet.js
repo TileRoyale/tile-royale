@@ -33,44 +33,95 @@ const RINGS = Array.from({length:100}, (_,i) => {
 const FINGER_NAMES = ['Thumb','Index','Middle','Ring','Pinky'];
 // RARITY_ORDER moved to top
 
-// ── RING CSS SPRITE SYSTEM ─────────────────────────────────────────────
-// Rings.png: 835×701px. Per-rarity crop origins measured from actual sphere
-// visual centers (center-of-mass of bright pixels) so each ring is perfectly
-// centered in its display box at any size. cropX = sphereX−55, cropY = sphereY−55.
-const _RING_IW = 835, _RING_IH = 701, _RING_SQ = 109;
-const _RING_CROP = {
-  common:    { x: 422, y:  47 },
-  uncommon:  { x: 428, y: 144 },
-  rare:      { x: 418, y: 252 },
-  epic:      { x: 418, y: 372 },
-  legendary: { x: 421, y: 468 },
-  secret:    { x: 420, y: 575 },
-};
+// ── RING IMAGE SYSTEM ──────────────────────────────────────────────────
+// Individual images in img/Rings/{Rarity} {1-5}.png
+// Variant 1 = best roll (80-100% of range), variant 5 = worst roll (0-20%)
 
-// Returns a <div> showing the correctly centered ring sprite at pxSize×pxSize.
-function ringImgHtml(rarityId, pxSize) {
+function _ringVariant(rollPct) {
+  if (rollPct >= 80) return 1;
+  if (rollPct >= 60) return 2;
+  if (rollPct >= 40) return 3;
+  if (rollPct >= 20) return 4;
+  return 5;
+}
+
+// Supports old 2-arg style ringImgHtml(rarityId, pxSize) — rollPct defaults to 50 (variant 3)
+function ringImgHtml(rarityId, rollPct, pxSize) {
+  if (pxSize === undefined) { pxSize = rollPct; rollPct = 50; }
   if (typeof pxSize !== 'number') pxSize = 36;
-  var crop = _RING_CROP[rarityId] || _RING_CROP.common;
-  var sc   = pxSize / _RING_SQ;
-  var bgW  = (_RING_IW * sc).toFixed(1);
-  var bgH  = (_RING_IH * sc).toFixed(1);
-  var bgX  = (-crop.x * sc).toFixed(1);
-  var bgY  = (-crop.y * sc).toFixed(1);
-  return '<div class="gv2-ring-img" style="width:'+pxSize+'px;height:'+pxSize+'px;'+
-    'background:url(\'img/rings.png\') no-repeat '+bgX+'px '+bgY+'px/'+bgW+'px '+bgH+'px;'+
-    'flex-shrink:0;"></div>';
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const src = 'img/Rings/' + cap(rarityId) + ' ' + _ringVariant(rollPct) + '.png';
+  return '<img src="' + src + '" width="' + pxSize + '" height="' + pxSize + '" style="object-fit:contain;flex-shrink:0;display:block;" draggable="false">';
 }
 
 function getRarityDef(id) { return RING_RARITIES.find(r=>r.id===id) || RING_RARITIES[5]; }
 function getRingDef(id)   { return RINGS.find(r=>r.id===id); }
 
+// ── RING INSTANCE HELPERS ──────────────────────────────────────────────
+// Ring instance: { uid, id, rarityId, statKey, rollPct }
+// uid     — unique per instance (used in gauntlet slots, salvage, trade)
+// id      — ring definition ID (for name/emoji from RINGS array)
+// rollPct — 0-100; 80-100 = variant 1 (best image), 0-20 = variant 5 (worst)
+
+const _RING_STAT_KEYS = ['bonusMmr','voidTimer','tileSpawn','plusPoints','minusPenalty'];
+
+function _mkRingInst(id, rarityId) {
+  return {
+    uid:      Math.random().toString(36).slice(2, 10),
+    id:       id,
+    rarityId: rarityId,
+    statKey:  _RING_STAT_KEYS[Math.floor(Math.random() * _RING_STAT_KEYS.length)],
+    rollPct:  Math.random() * 100,
+  };
+}
+
+function _getRingByUid(uid) {
+  return (gameState.ringInventory || []).find(r => r && typeof r === 'object' && r.uid === uid) || null;
+}
+
+// Migrate old string-array inventory to ring instance objects. Idempotent.
+function _migrateRingInventory() {
+  const inv = gameState.ringInventory || [];
+  if (!inv.length || typeof inv[0] === 'object') return;
+  const firstUid = {};
+  gameState.ringInventory = inv.map(rid => {
+    const def = RINGS.find(r => r.id === rid);
+    const rarityId = def ? def.rarityId : 'common';
+    let hash = 0;
+    for (let i = 0; i < rid.length; i++) hash = ((hash << 5) - hash + rid.charCodeAt(i)) | 0;
+    const statKey = _RING_STAT_KEYS[Math.abs(hash) % _RING_STAT_KEYS.length];
+    const inst = { uid: Math.random().toString(36).slice(2, 10), id: rid, rarityId, statKey, rollPct: 50 };
+    if (!firstUid[rid]) firstUid[rid] = inst.uid;
+    return inst;
+  });
+  const g = gameState.gauntlet || {};
+  Object.keys(g).forEach(slot => {
+    const old = g[slot];
+    if (old && typeof old === 'string' && firstUid[old]) g[slot] = firstUid[old];
+  });
+  gameState.gauntlet = g;
+  const trades = gameState.activeTrades || {};
+  Object.values(trades).forEach(t => {
+    if (t.ringId && typeof t.ringId === 'string' && !t.ringInst) {
+      const def = RINGS.find(r => r.id === t.ringId);
+      const rarityId = def ? def.rarityId : 'common';
+      let hash = 0;
+      for (let i = 0; i < t.ringId.length; i++) hash = ((hash << 5) - hash + t.ringId.charCodeAt(i)) | 0;
+      const statKey = _RING_STAT_KEYS[Math.abs(hash) % _RING_STAT_KEYS.length];
+      t.ringInst = { uid: Math.random().toString(36).slice(2, 10), id: t.ringId, rarityId, statKey, rollPct: 50 };
+    }
+  });
+  saveState();
+}
+
 function getGauntletRarity() {
+  _migrateRingInventory();
   const equipped = gameState.gauntlet || {};
   const fingers  = Object.values(equipped).filter(Boolean);
   if (!fingers.length) return null;
-  const best = fingers.map(rid => {
-    const ring = getRingDef(rid);
-    return ring ? RARITY_ORDER.indexOf(ring.rarityId) : 99;
+  const best = fingers.map(uid => {
+    const inst = _getRingByUid(uid);
+    return inst ? RARITY_ORDER.indexOf(inst.rarityId) : 99;
   }).reduce((a,b) => Math.min(a,b), 99);
   return RARITY_ORDER[best] || null;
 }
@@ -85,9 +136,9 @@ function getGauntletRarityPercent() {
   const equipped = gameState.gauntlet || {};
   const fingers  = Object.values(equipped).filter(Boolean);
   if (!fingers.length) return null;
-  const avgProb = fingers.reduce((sum, rid) => {
-    const ring = getRingDef(rid);
-    return sum + (ring ? (RARITY_PROB[ring.rarityId] || 0.4989) : 0.4989);
+  const avgProb = fingers.reduce((sum, uid) => {
+    const inst = _getRingByUid(uid);
+    return sum + (inst ? (RARITY_PROB[inst.rarityId] || 0.4989) : 0.4989);
   }, 0) / fingers.length;
   return avgProb;
 }
@@ -122,15 +173,16 @@ function renderMenuGauntletWidget() {
   const equipped = gameState.gauntlet || {};
   if (slotsEl) {
     slotsEl.innerHTML = FINGER_NAMES.map((fname, i) => {
-      const ringId = equipped[i];
-      const ring   = ringId ? getRingDef(ringId) : null;
-      const rar    = ring  ? getRarityDef(ring.rarityId) : null;
-      const empty  = !ring;
-      const eff    = (ring && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(ringId) : null;
+      const uid    = equipped[i];
+      const inst   = uid ? _getRingByUid(uid) : null;
+      const ring   = inst ? getRingDef(inst.id) : null;
+      const rar    = inst ? getRarityDef(inst.rarityId) : null;
+      const empty  = !inst;
+      const eff    = (inst && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(uid) : null;
       return `<div class="menu-finger-slot ${empty ? 'slot-empty' : ''}"
                    style="${rar ? `border-color:${rar.color}44;` : ''}"
                    onclick="event.stopPropagation();openGauntletToSlot(${i})">
-        <div class="mfs-emoji">${ring ? (ringImgHtml(ring.rarityId, 28) || ring.emoji) : '⭕'}</div>
+        <div class="mfs-emoji">${inst ? ringImgHtml(inst.rarityId, inst.rollPct, 28) : '⭕'}</div>
         <div class="mfs-label">${fname}</div>
         <div class="mfs-rarity ${rar?.cls || ''}">${rar ? rar.label : '—'}</div>
         ${eff ? `<div style="font-size:8px;letter-spacing:0.5px;color:${rar.color};margin-top:1px;opacity:0.9;">${eff.label} ${eff.pct}</div>` : ''}
@@ -170,13 +222,14 @@ function renderGauntletHand() {
 
   // Build 5 hotspot divs positioned over the ring slot circles in gauntlet.png
   const hotspots = FINGER_NAMES.map((fname, i) => {
-    const ringId = equipped[i];
-    const ring   = ringId ? getRingDef(ringId) : null;
-    const rar    = ring ? getRarityDef(ring.rarityId) : null;
-    const eff    = (ring && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(ringId) : null;
-    const stateClass  = ring ? 'hs-equipped' : 'hs-empty';
+    const uid      = equipped[i];
+    const inst     = uid ? _getRingByUid(uid) : null;
+    const ring     = inst ? getRingDef(inst.id) : null;
+    const rar      = inst ? getRarityDef(inst.rarityId) : null;
+    const eff      = (inst && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(uid) : null;
+    const stateClass  = inst ? 'hs-equipped' : 'hs-empty';
     const inlineStyle = rar  ? `style="--hs-clr:${rar.color};"` : '';
-    const iconHtml    = ring ? ringImgHtml(ring.rarityId, 36) : '';
+    const iconHtml    = inst ? ringImgHtml(inst.rarityId, inst.rollPct, 36) : '';
     const effLabel    = eff
       ? `<div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:8px;letter-spacing:0.5px;color:${rar.color};background:rgba(0,0,0,0.75);padding:1px 4px;border-radius:4px;">${eff.label} ${eff.pct}</div>`
       : '';
@@ -238,12 +291,13 @@ function equipRingToFinger(fingerIdx) {
   body.className = 'gv2-pbody';
 
   const gauntlet     = gameState.gauntlet || {};
-  const currentRid   = gauntlet[fingerIdx] || null;
+  const currentUid   = gauntlet[fingerIdx] || null;
+  const currentInst  = currentUid ? _getRingByUid(currentUid) : null;
 
   // Unequip row — shown when this finger already has a ring
-  if (currentRid) {
-    const curRing = getRingDef(currentRid);
-    const curRar  = curRing ? getRarityDef(curRing.rarityId) : null;
+  if (currentInst) {
+    const curRing = getRingDef(currentInst.id);
+    const curRar  = getRarityDef(currentInst.rarityId);
     const unequipRow = document.createElement('div');
     unequipRow.style.cssText = [
       'display:flex;align-items:center;gap:11px;padding:11px 12px;',
@@ -276,20 +330,16 @@ function equipRingToFinger(fingerIdx) {
   // Rings already on other fingers cannot be selected (equip-once rule)
   const equippedElsewhere = Object.entries(gauntlet)
     .filter(([slot]) => parseInt(slot) !== fingerIdx)
-    .map(([, rid]) => rid)
+    .map(([, uid]) => uid)
     .filter(Boolean);
 
   // Sort by rarity (best first); exclude current ring on this finger & rings on other fingers
   const RORDER = ['secret','legendary','epic','rare','uncommon','common'];
-  const unique = [...new Set(inv)]
-    .filter(rid => rid !== currentRid && !equippedElsewhere.includes(rid))
-    .sort((a, b) => {
-      const ra = getRingDef(a)?.rarityId || 'common';
-      const rb = getRingDef(b)?.rarityId || 'common';
-      return RORDER.indexOf(ra) - RORDER.indexOf(rb);
-    });
+  const available = inv
+    .filter(inst => inst && inst.uid !== currentUid && !equippedElsewhere.includes(inst.uid))
+    .sort((a, b) => RORDER.indexOf(a.rarityId) - RORDER.indexOf(b.rarityId));
 
-  if (!unique.length) {
+  if (!available.length) {
     const empty = document.createElement('div');
     empty.className = 'gv2-pempty';
     empty.textContent = inv.length
@@ -297,25 +347,24 @@ function equipRingToFinger(fingerIdx) {
       : 'Inventory empty — spin to get rings!';
     body.appendChild(empty);
   } else {
-    unique.forEach(rid => {
-      const ring = getRingDef(rid);
+    available.forEach(inst => {
+      const ring = getRingDef(inst.id);
       if (!ring) return;
-      const rar   = getRarityDef(ring.rarityId);
-      const count = inv.filter(r => r === rid).length;
-      const row   = document.createElement('div');
+      const rar  = getRarityDef(inst.rarityId);
+      const eff  = (typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(inst.uid) : null;
+      const row  = document.createElement('div');
       row.className = `gv2-prow gv2-pr-${rar.id}`;
       row.innerHTML = `
-        <div class="gv2-pr-icon">${ringImgHtml(ring.rarityId, 40) || ring.emoji}</div>
+        <div class="gv2-pr-icon">${ringImgHtml(inst.rarityId, inst.rollPct, 40)}</div>
         <div class="gv2-pr-info">
           <div class="gv2-pr-name">${ring.name}</div>
           <div class="gv2-pr-rar ${rar.cls}">${rar.label}</div>
-          ${(()=>{ const e=(typeof gmGetSingleRingEffect==='function')?gmGetSingleRingEffect(rid):null; return e?`<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:1px;">${e.label} <b>${e.pct}</b></div>`:''; })()}
-          ${count > 1 ? `<div class="gv2-pr-cnt">×${count} owned</div>` : ''}
+          ${eff ? `<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:1px;">${eff.label} <b>${eff.pct}</b></div>` : ''}
         </div>
         <button class="gv2-pr-equip">EQUIP</button>`;
       const doEquip = () => {
         if (!gameState.gauntlet) gameState.gauntlet = {};
-        gameState.gauntlet[fingerIdx] = rid;
+        gameState.gauntlet[fingerIdx] = inst.uid;
         saveState();
         document.body.removeChild(overlay);
         renderGauntletHand();
@@ -325,7 +374,7 @@ function equipRingToFinger(fingerIdx) {
           const hs = document.getElementById(`gv2-slot-${fingerIdx}`);
           if (hs) { hs.classList.add('gv2-equip-anim'); setTimeout(() => hs.classList.remove('gv2-equip-anim'), 450); }
         }, 30);
-        showToast(`${ring.name} equipped!`, rar.color);
+        showToast(`${ring ? ring.name : inst.id} equipped!`, rar.color);
         playSound('achieve');
       };
       row.querySelector('.gv2-pr-equip').onclick = doEquip;
@@ -341,29 +390,23 @@ function equipRingToFinger(fingerIdx) {
 }
 
 function renderRingInventory() {
+  _migrateRingInventory();
   const el = document.getElementById('ringInventoryList');
   if (!el) return;
   const inv = gameState.ringInventory || [];
   document.getElementById('ringInvCount').textContent = inv.length;
   if (!inv.length) { el.innerHTML='<div style="color:var(--muted);font-size:13px;letter-spacing:1px;text-align:center;padding:12px;">Inventory empty</div>'; return; }
 
-  const trades = gameState.activeTrades || {};
+  const trades    = gameState.activeTrades || {};
+  const equippedUids = new Set(Object.values(gameState.gauntlet || {}).filter(Boolean));
   el.innerHTML = '';
 
   // Bulk salvage buttons (common/uncommon/rare/epic only — equipped rings skipped)
-  const _equippedIds = Object.values(gameState.gauntlet || {});
-  const _skipCounts = {};
-  _equippedIds.forEach(rid => { _skipCounts[rid] = (_skipCounts[rid] || 0) + 1; });
-  const _usedSkips = {};
   const salvageableCounts = {};
-  inv.forEach(rid => {
-    const ring = getRingDef(rid);
-    if (!ring) return;
-    const rarId = ring.rarityId;
-    if (!['common','uncommon','rare','epic'].includes(rarId)) return;
-    const skipLeft = (_skipCounts[rid] || 0) - (_usedSkips[rid] || 0);
-    if (skipLeft > 0) { _usedSkips[rid] = (_usedSkips[rid] || 0) + 1; return; }
-    salvageableCounts[rarId] = (salvageableCounts[rarId] || 0) + 1;
+  inv.forEach(inst => {
+    if (!inst || equippedUids.has(inst.uid)) return;
+    if (!['common','uncommon','rare','epic'].includes(inst.rarityId)) return;
+    salvageableCounts[inst.rarityId] = (salvageableCounts[inst.rarityId] || 0) + 1;
   });
   const bulkRarities = ['common','uncommon','rare','epic'].filter(r => salvageableCounts[r] > 0);
   if (bulkRarities.length) {
@@ -380,28 +423,39 @@ function renderRingInventory() {
     });
     el.appendChild(bulkRow);
   }
-  const unique = [...new Set(inv)];
-  (unique||[]).forEach(rid => {
-    const ring  = getRingDef(rid);
+
+  // Sort: best rarity first, then by rollPct descending within rarity
+  const RORDER = ['secret','legendary','epic','rare','uncommon','common'];
+  const sorted = [...inv].sort((a, b) => {
+    const ri = RORDER.indexOf(a.rarityId) - RORDER.indexOf(b.rarityId);
+    return ri !== 0 ? ri : b.rollPct - a.rollPct;
+  });
+
+  sorted.forEach(inst => {
+    if (!inst) return;
+    const ring = getRingDef(inst.id);
     if (!ring) return;
-    const rar   = getRarityDef(ring.rarityId);
-    const count = inv.filter(r=>r===rid).length;
-    const locked = Object.values(trades).some(t=>t.ringId===rid && Date.now()-t.ts < 4*3600*1000);
-    const equippedSlot = Object.entries(gameState.gauntlet||{}).find(([,v])=>v===rid);
+    const rar  = getRarityDef(inst.rarityId);
+    const locked = Object.values(trades).some(t => {
+      const ti = t.ringInst || (t.ringId ? { uid: null } : null);
+      return ti && (ti.uid === inst.uid) && Date.now()-t.ts < 4*3600*1000;
+    });
+    const equippedSlot = Object.entries(gameState.gauntlet||{}).find(([,v])=>v===inst.uid);
     const equippedFinger = equippedSlot ? FINGER_NAMES[parseInt(equippedSlot[0])] : null;
+    const eff = (typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(inst.uid) : null;
     const row = document.createElement('div');
     row.className = 'ring-inventory-row';
     row.innerHTML = `
-      <div class="ring-icon-lg ${rar.cls}">${ringImgHtml(ring.rarityId, 40) || ring.emoji}</div>
+      <div class="ring-icon-lg ${rar.cls}">${ringImgHtml(inst.rarityId, inst.rollPct, 40)}</div>
       <div class="ring-info">
-        <div class="ring-name">${ring.name}${count>1?` ×${count}`:''}</div>
-        <div class="ring-rarity ${rar.cls}">${rar.label}</div>
-        ${(()=>{ const e=(typeof gmGetSingleRingEffect==='function')?gmGetSingleRingEffect(rid):null; return e?`<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:2px;">${e.label} <b>${e.pct}</b></div>`:''; })()}
+        <div class="ring-name">${ring.name}</div>
+        <div class="ring-rarity ${rar.cls}">${rar.label} · ${_ringVariant(inst.rollPct)}★</div>
+        ${eff ? `<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:2px;">${eff.label} <b>${eff.pct}</b></div>` : ''}
         ${equippedFinger ? `<div style="font-size:9px;letter-spacing:1.5px;color:var(--gold);margin-top:2px;opacity:0.85;">${equippedFinger.toUpperCase()}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:row;gap:5px;flex-shrink:0;align-items:center;">
-        ${!locked ? `<button onclick="event.stopPropagation();closeRingInventory();showScreen('tradingScreen');renderTradeScreen();" style="font-size:10px;padding:4px 8px;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.3);border-radius:6px;color:var(--diamond);cursor:pointer;letter-spacing:1px;">TRADE</button>` : '<span style="font-size:10px;color:var(--muted);">🔒</span>'}
-        <button onclick="event.stopPropagation();salvageRing('${rid}')" style="font-size:10px;padding:4px 8px;background:rgba(255,60,60,0.08);border:1px solid rgba(255,80,80,0.3);border-radius:6px;color:rgba(255,110,110,0.9);cursor:pointer;letter-spacing:1px;">SALVAGE</button>
+        ${!locked && !equippedFinger ? `<button onclick="event.stopPropagation();closeRingInventory();showScreen('tradingScreen');renderTradeScreen();" style="font-size:10px;padding:4px 8px;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.3);border-radius:6px;color:var(--diamond);cursor:pointer;letter-spacing:1px;">TRADE</button>` : (locked ? '<span style="font-size:10px;color:var(--muted);">🔒</span>' : '')}
+        ${!equippedFinger ? `<button onclick="event.stopPropagation();salvageRing('${inst.uid}')" style="font-size:10px;padding:4px 8px;background:rgba(255,60,60,0.08);border:1px solid rgba(255,80,80,0.3);border-radius:6px;color:rgba(255,110,110,0.9);cursor:pointer;letter-spacing:1px;">SALVAGE</button>` : ''}
       </div>`;
     el.appendChild(row);
   });
@@ -411,12 +465,13 @@ function renderRingInventory() {
 // RING_ACHIEVEMENTS declared at top
 
 // ── RING SALVAGE ──────────────────────────────────────────────────────
-function salvageRing(rid) {
-  const ring = getRingDef(rid);
-  if (!ring) return;
-  const rar = getRarityDef(ring.rarityId);
+function salvageRing(uid) {
+  const inst = _getRingByUid(uid);
+  if (!inst) return;
+  const ring = getRingDef(inst.id);
+  const rar = getRarityDef(inst.rarityId);
   const SALVAGE_REWARDS = { common:10, uncommon:20, rare:35, epic:50, legendary:100, secret:300 };
-  const DIAMONDS = SALVAGE_REWARDS[ring.rarityId] || 10;
+  const DIAMONDS = SALVAGE_REWARDS[inst.rarityId] || 10;
 
   // Confirm overlay
   const overlay = document.createElement('div');
@@ -426,9 +481,9 @@ function salvageRing(rid) {
       <div style="font-size:30px;margin-bottom:10px;">⚗️</div>
       <div style="font-family:'Cinzel Decorative','Bebas Neue',serif;font-size:15px;letter-spacing:2px;color:rgba(255,120,100,.95);margin-bottom:12px;">SALVAGE RING?</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
-        ${ringImgHtml(ring.rarityId, 36)}
+        ${ringImgHtml(inst.rarityId, inst.rollPct, 36)}
         <div style="text-align:left;">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1px;color:var(--text);">${ring.name}</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1px;color:var(--text);">${ring ? ring.name : inst.id}</div>
           <div style="font-size:10px;letter-spacing:2px;" class="${rar.cls}">${rar.label}</div>
         </div>
       </div>
@@ -446,15 +501,15 @@ function salvageRing(rid) {
   overlay.querySelector('#salvConfirmBtn').onclick = () => {
     document.body.removeChild(overlay);
 
-    // Remove one instance from inventory
+    // Remove from inventory by uid
     const inv = gameState.ringInventory || [];
-    const idx = inv.indexOf(rid);
+    const idx = inv.findIndex(r => r && r.uid === uid);
     if (idx !== -1) inv.splice(idx, 1);
     gameState.ringInventory = inv;
 
     // Remove from gauntlet if equipped
     const g = gameState.gauntlet || {};
-    Object.keys(g).forEach(slot => { if (g[slot] === rid) delete g[slot]; });
+    Object.keys(g).forEach(slot => { if (g[slot] === uid) delete g[slot]; });
     gameState.gauntlet = g;
 
     // Award diamonds
@@ -490,18 +545,12 @@ function salvageAllByRarity(rarityId) {
   const SALVAGE_REWARDS = { common:10, uncommon:20, rare:35, epic:50, legendary:100, secret:300 };
   const rewardPer = SALVAGE_REWARDS[rarityId] || 10;
   const inv = (gameState.ringInventory || []).slice();
-
-  const equippedIds = Object.values(gameState.gauntlet || {});
-  const skipCounts = {};
-  equippedIds.forEach(rid => { skipCounts[rid] = (skipCounts[rid] || 0) + 1; });
-  const usedSkips = {};
+  const equippedUids = new Set(Object.values(gameState.gauntlet || {}).filter(Boolean));
   const toSalvage = [];
-  inv.forEach(rid => {
-    const ring = getRingDef(rid);
-    if (!ring || ring.rarityId !== rarityId) return;
-    const skipLeft = (skipCounts[rid] || 0) - (usedSkips[rid] || 0);
-    if (skipLeft > 0) { usedSkips[rid] = (usedSkips[rid] || 0) + 1; return; }
-    toSalvage.push(rid);
+  inv.forEach(inst => {
+    if (!inst || inst.rarityId !== rarityId) return;
+    if (equippedUids.has(inst.uid)) return;
+    toSalvage.push(inst.uid);
   });
 
   if (!toSalvage.length) return;
@@ -531,8 +580,8 @@ function salvageAllByRarity(rarityId) {
     document.body.removeChild(overlay);
 
     const currentInv = gameState.ringInventory || [];
-    toSalvage.forEach(rid => {
-      const idx = currentInv.indexOf(rid);
+    toSalvage.forEach(uid => {
+      const idx = currentInv.findIndex(r => r && r.uid === uid);
       if (idx !== -1) currentInv.splice(idx, 1);
     });
     gameState.ringInventory = currentInv;
@@ -569,11 +618,11 @@ function checkRingAchievements() {
 
   const stats = {
     invSize:   inv.length,
-    uncommon:  inv.filter(r=>{const rg=getRingDef(r);return rg&&['uncommon','rare','epic','legendary','secret'].includes(rg.rarityId);}).length,
-    rare:      inv.filter(r=>{const rg=getRingDef(r);return rg&&['rare','epic','legendary','secret'].includes(rg.rarityId);}).length,
-    epic:      inv.filter(r=>{const rg=getRingDef(r);return rg&&['epic','legendary','secret'].includes(rg.rarityId);}).length,
-    legendary: inv.filter(r=>{const rg=getRingDef(r);return rg&&['legendary','secret'].includes(rg.rarityId);}).length,
-    secret:    inv.filter(r=>{const rg=getRingDef(r);return rg&&rg.rarityId==='secret';}).length,
+    uncommon:  inv.filter(r=>r&&['uncommon','rare','epic','legendary','secret'].includes(r.rarityId)).length,
+    rare:      inv.filter(r=>r&&['rare','epic','legendary','secret'].includes(r.rarityId)).length,
+    epic:      inv.filter(r=>r&&['epic','legendary','secret'].includes(r.rarityId)).length,
+    legendary: inv.filter(r=>r&&['legendary','secret'].includes(r.rarityId)).length,
+    secret:    inv.filter(r=>r&&r.rarityId==='secret').length,
     trades:    gameState.tradesDone || 0,
     slotsUsed: Object.values(gameState.gauntlet||{}).filter(Boolean).length,
   };
@@ -612,11 +661,11 @@ function renderRingAchievements() {
 
   const stats = {
     invSize:   inv.length,
-    uncommon:  inv.filter(r=>{const rg=getRingDef(r);return rg&&['uncommon','rare','epic','legendary','secret'].includes(rg.rarityId);}).length,
-    rare:      inv.filter(r=>{const rg=getRingDef(r);return rg&&['rare','epic','legendary','secret'].includes(rg.rarityId);}).length,
-    epic:      inv.filter(r=>{const rg=getRingDef(r);return rg&&['epic','legendary','secret'].includes(rg.rarityId);}).length,
-    legendary: inv.filter(r=>{const rg=getRingDef(r);return rg&&['legendary','secret'].includes(rg.rarityId);}).length,
-    secret:    inv.filter(r=>{const rg=getRingDef(r);return rg&&rg.rarityId==='secret';}).length,
+    uncommon:  inv.filter(r=>r&&['uncommon','rare','epic','legendary','secret'].includes(r.rarityId)).length,
+    rare:      inv.filter(r=>r&&['rare','epic','legendary','secret'].includes(r.rarityId)).length,
+    epic:      inv.filter(r=>r&&['epic','legendary','secret'].includes(r.rarityId)).length,
+    legendary: inv.filter(r=>r&&['legendary','secret'].includes(r.rarityId)).length,
+    secret:    inv.filter(r=>r&&r.rarityId==='secret').length,
     trades:    gameState.tradesDone||0,
     slotsUsed: Object.values(gameState.gauntlet||{}).filter(Boolean).length,
   };
@@ -749,18 +798,20 @@ function _tradeChecksum(code, ringId) {
   return Math.abs(h).toString(36).toUpperCase().slice(0, 4);
 }
 
-async function createTradeCode(ringId) {
+async function createTradeCode(uid) {
   if ((gameState.level||1) < 10) { showToast('🔒 Unlocks at level 10!', 'var(--muted)'); return; }
   if (!gameState.ringInventory) gameState.ringInventory = [];
 
-  const invIdx = gameState.ringInventory.indexOf(ringId);
+  const inst = _getRingByUid(uid);
+  if (!inst) { showToast('❌ Ring not in inventory!', 'var(--red)'); return; }
+  const invIdx = gameState.ringInventory.findIndex(r => r && r.uid === uid);
   if (invIdx === -1) { showToast('❌ Ring not in inventory!', 'var(--red)'); return; }
-  const equippedSlot = Object.values(gameState.gauntlet||{}).indexOf(ringId);
+  const equippedSlot = Object.values(gameState.gauntlet||{}).indexOf(uid);
   if (equippedSlot !== -1) { showToast('❌ Unequip ring from gauntlet first!', 'var(--red)'); return; }
 
   // Find server grantId for this ring if available
   const grantId = Object.entries(gameState.ringGrantMap || {})
-    .find(([, rid]) => rid === ringId)?.[0] || null;
+    .find(([, v]) => v === uid)?.[0] || null;
 
   let code = null;
 
@@ -770,7 +821,7 @@ async function createTradeCode(ringId) {
       const r = await fetch(`${getActiveServer().http}/ring/trade/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: PLAYER_ID, grantId, ringId }),
+        body: JSON.stringify({ playerId: PLAYER_ID, grantId, ringId: inst.id }),
         signal: AbortSignal.timeout(8000),
       });
       const data = r.ok ? await r.json() : null;
@@ -785,13 +836,16 @@ async function createTradeCode(ringId) {
   // Fallback to local checksum-based code (works same-device or offline)
   if (!code) {
     const base = Math.random().toString(36).substr(2,6).toUpperCase();
-    const chk  = _tradeChecksum('TR-RING-' + base, ringId);
+    const chk  = _tradeChecksum('TR-RING-' + base, inst.id);
     code = 'TR-RING-' + base + '-' + chk;
   }
 
   if (!gameState.activeTrades) gameState.activeTrades = {};
   gameState.ringInventory.splice(invIdx, 1);
-  gameState.activeTrades[code] = { ringId, ts: Date.now(), owner: gameState.playerName||'Player', grantId: grantId || null };
+  // Also remove from gauntlet if somehow still equipped
+  const g = gameState.gauntlet || {};
+  Object.keys(g).forEach(slot => { if (g[slot] === uid) delete g[slot]; });
+  gameState.activeTrades[code] = { ringInst: inst, ringId: inst.id, ts: Date.now(), owner: gameState.playerName||'Player', grantId: grantId || null };
   saveState();
   renderRingInventory();
   renderTradeScreen();
@@ -828,10 +882,11 @@ async function acceptTrade() {
       const data = r.ok ? await r.json() : null;
       if (data?.ok && data.ringId) {
         if (!gameState.ringInventory) gameState.ringInventory = [];
-        gameState.ringInventory.push(data.ringId);
+        const newInst = _mkRingInst(data.ringId, data.rarityId || 'common');
+        gameState.ringInventory.push(newInst);
         if (data.grantId) {
           if (!gameState.ringGrantMap) gameState.ringGrantMap = {};
-          gameState.ringGrantMap[data.grantId] = data.ringId;
+          gameState.ringGrantMap[data.grantId] = newInst.uid;
         }
         gameState.tradesDone = (gameState.tradesDone||0)+1;
         const ring = getRingDef(data.ringId);
@@ -861,21 +916,23 @@ async function acceptTrade() {
 
   if (Date.now()-trade.ts > 4*3600*1000) {
     msg.textContent='❌ Code expired'; msg.className='redeem-msg error';
-    if (trade.ringId) { if(!gameState.ringInventory)gameState.ringInventory=[]; gameState.ringInventory.push(trade.ringId); }
+    const expInst = trade.ringInst || (trade.ringId ? _mkRingInst(trade.ringId, 'common') : null);
+    if (expInst) { if(!gameState.ringInventory)gameState.ringInventory=[]; gameState.ringInventory.push(expInst); }
     delete trades[code]; saveState(); renderTradeScreen();
     _isClaiming=false; if(claimBtn)claimBtn.disabled=false; return;
   }
 
-  const ring = getRingDef(trade.ringId);
-  if (!ring) { msg.textContent='❌ Ring not found'; msg.className='redeem-msg error'; _isClaiming=false; if(claimBtn)claimBtn.disabled=false; return; }
+  const tradeInst = trade.ringInst || (trade.ringId ? _mkRingInst(trade.ringId, 'common') : null);
+  if (!tradeInst) { msg.textContent='❌ Ring not found'; msg.className='redeem-msg error'; _isClaiming=false; if(claimBtn)claimBtn.disabled=false; return; }
+  const ring = getRingDef(tradeInst.id);
 
   if (!gameState.ringInventory) gameState.ringInventory = [];
-  gameState.ringInventory.push(trade.ringId);
+  gameState.ringInventory.push(tradeInst);
   gameState.tradesDone = (gameState.tradesDone||0)+1;
   delete trades[code];
   saveState();
 
-  msg.textContent = `✅ ${ring.name} added to your inventory!`;
+  msg.textContent = `✅ ${ring ? ring.name : tradeInst.id} added to your inventory!`;
   msg.className = 'redeem-msg success';
   document.getElementById('tradeCodeInput').value = '';
   renderRingInventory(); renderTradeScreen(); checkRingAchievements(); playSound('achieve');
@@ -887,15 +944,17 @@ function renderTradeScreen() {
   // Trade inventory select
   const selEl = document.getElementById('tradeInventorySelect');
   if (selEl) {
-    const inv = [...new Set(gameState.ringInventory||[])];
-    selEl.innerHTML = inv.length ? '' : '<div style="color:var(--muted);font-size:12px;letter-spacing:1px;">Inventory empty</div>';
-    inv.forEach(rid => {
-      const ring=getRingDef(rid); if(!ring)return;
-      const rar=getRarityDef(ring.rarityId);
+    const inv = gameState.ringInventory || [];
+    const equippedUids = new Set(Object.values(gameState.gauntlet||{}).filter(Boolean));
+    const tradeable = inv.filter(inst => inst && !equippedUids.has(inst.uid));
+    selEl.innerHTML = tradeable.length ? '' : '<div style="color:var(--muted);font-size:12px;letter-spacing:1px;">Inventory empty</div>';
+    tradeable.forEach(inst => {
+      const ring=getRingDef(inst.id);
+      const rar=getRarityDef(inst.rarityId);
       const row=document.createElement('div'); row.className='ring-inventory-row';
-      row.innerHTML=`<div class="ring-icon-lg ${rar.cls}">${ringImgHtml(ring.rarityId, 40) || ring.emoji}</div>
-        <div class="ring-info"><div class="ring-name">${ring.name}</div><div class="ring-rarity ${rar.cls}">${rar.label}</div></div>
-        <button onclick="createTradeCode('${rid}')" style="font-size:10px;padding:4px 8px;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.3);border-radius:6px;color:var(--diamond);cursor:pointer;letter-spacing:1px;flex-shrink:0;">TRADE</button>`;
+      row.innerHTML=`<div class="ring-icon-lg ${rar.cls}">${ringImgHtml(inst.rarityId, inst.rollPct, 40)}</div>
+        <div class="ring-info"><div class="ring-name">${ring ? ring.name : inst.id}</div><div class="ring-rarity ${rar.cls}">${rar.label}</div></div>
+        <button onclick="createTradeCode('${inst.uid}')" style="font-size:10px;padding:4px 8px;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.3);border-radius:6px;color:var(--diamond);cursor:pointer;letter-spacing:1px;flex-shrink:0;">TRADE</button>`;
       selEl.appendChild(row);
     });
   }
@@ -909,7 +968,9 @@ function renderTradeScreen() {
     entries.forEach(([code,trade]) => {
       const remaining = Math.max(0, 4*3600*1000-(Date.now()-trade.ts));
       const h=Math.floor(remaining/3600000), m=Math.floor((remaining%3600000)/60000);
-      const ring=getRingDef(trade.ringId); if(!ring)return;
+      const ti = trade.ringInst || null;
+      const ring = ti ? getRingDef(ti.id) : getRingDef(trade.ringId);
+      if (!ring && !ti) return;
       const row=document.createElement('div'); row.style.cssText='padding:8px 12px;background:var(--panel);border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;gap:10px;';
       row.innerHTML=`<div style="flex:1;"><div class="trade-code-display" onclick="copyToClipboard('${code}')">${code}</div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:1px;">${ring.name} · ${h}h ${m}m remaining</div></div>
@@ -923,9 +984,10 @@ function cancelTrade(code) {
   if (!gameState.activeTrades || !gameState.activeTrades[code]) return;
   const trade = gameState.activeTrades[code];
   // Guaranteed return: ring goes back to inventory
-  if (trade && trade.ringId) {
+  const returnInst = trade.ringInst || (trade.ringId ? _mkRingInst(trade.ringId, 'common') : null);
+  if (returnInst) {
     if (!gameState.ringInventory) gameState.ringInventory = [];
-    gameState.ringInventory.push(trade.ringId);
+    gameState.ringInventory.push(returnInst);
     showToast('❌ Trade cancelled — ring returned to inventory!', 'var(--muted)');
   } else {
     showToast('Trade code cancelled', 'var(--muted)');

@@ -497,14 +497,15 @@ function _executeSpin(serverRing, serverRarityId, serverGrantId) {
       wheelSpinning = false;
       wheelAngle    = finalAngle;
       if (!gameState.ringInventory) gameState.ringInventory = [];
-      gameState.ringInventory.push(ring.id);
-      // Track server grant IDs by grantId key (not by index — indices shift on salvage)
+      const newInst = _mkRingInst(ring.id, rarityId);
+      gameState.ringInventory.push(newInst);
+      // Track server grant IDs by uid (not by index — indices shift on salvage)
       if (serverGrantId) {
         if (!gameState.ringGrantMap) gameState.ringGrantMap = {};
-        gameState.ringGrantMap[serverGrantId] = ring.id;
+        gameState.ringGrantMap[serverGrantId] = newInst.uid;
       }
       saveState();
-      showSpinResult(ring, rarDef);
+      showSpinResult(ring, rarDef, newInst);
       renderGauntletHand();
       renderMenuGauntletWidget();
       renderRingInventory();
@@ -648,12 +649,13 @@ function devCalibrate50() {
   runNext();
 }
 
-function showSpinResult(ring, rarDef) {
+function showSpinResult(ring, rarDef, inst) {
   // Keep inline result updated (small label below wheel)
   const el = document.getElementById('spinResult');
+  const rollPct = inst ? inst.rollPct : 50;
   if (el) {
     el.innerHTML = `
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;vertical-align:middle;">${ringImgHtml(ring.rarityId, 32) || ring.emoji}</span>
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;vertical-align:middle;">${ringImgHtml(ring.rarityId, rollPct, 32)}</span>
       <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:${rarDef.color};margin:0 6px;vertical-align:middle;">${ring.name}</span>
       <span style="font-size:10px;color:${rarDef.color};letter-spacing:2px;opacity:0.8;vertical-align:middle;">[${rarDef.label}]</span>`;
   }
@@ -671,10 +673,10 @@ function showSpinResult(ring, rarDef) {
   else vibrate([50,30,100]);
 
   // Show ring won popup
-  _showRingWonPopup(ring, rarDef);
+  _showRingWonPopup(ring, rarDef, inst);
 }
 
-function _showRingWonPopup(ring, rarDef) {
+function _showRingWonPopup(ring, rarDef, inst) {
   const overlay = document.getElementById('ringWonOverlay');
   if (!overlay) return;
 
@@ -686,7 +688,7 @@ function _showRingWonPopup(ring, rarDef) {
   const btnEl    = document.getElementById('ringWonBtn');
   const popupEl  = overlay.querySelector('.ring-won-popup');
 
-  if (imgEl)   imgEl.innerHTML  = ringImgHtml(ring.rarityId, 110) || `<span style="font-size:80px;">${ring.emoji}</span>`;
+  if (imgEl)   imgEl.innerHTML  = ringImgHtml(ring.rarityId, inst ? inst.rollPct : 50, 110);
   if (nameEl)  nameEl.textContent = ring.name;
   if (rarEl) {
     rarEl.textContent   = rarDef.label;
@@ -694,8 +696,8 @@ function _showRingWonPopup(ring, rarDef) {
   }
 
   // Effect + inventory count
-  const total = (gameState.ringInventory || []).filter(id => id === ring.id).length;
-  const eff = (typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(ring.id) : null;
+  const total = (gameState.ringInventory || []).filter(r => r && r.id === ring.id).length;
+  const eff = (inst && typeof gmGetSingleRingEffect === 'function') ? gmGetSingleRingEffect(inst.uid) : null;
   if (descEl) {
     const effHtml = eff
       ? `<div style="margin-top:6px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2px;color:${rarDef.color};">${eff.label} ${eff.pct}</div>`
