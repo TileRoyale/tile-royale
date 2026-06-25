@@ -713,7 +713,12 @@ function getKothTitleFrame() {
 }
 
 function hasCustomLobbyCreateAccess() {
-  return ['gold','silver','bronze'].includes(gameState.kothCurrentTitle);
+  if (['gold','silver','bronze'].includes(gameState.kothCurrentTitle)) return true;
+  const equipped = Object.values(gameState.gauntlet || {}).filter(Boolean);
+  return equipped.some(uid => {
+    const inst = (typeof _getRingByUid === 'function') ? _getRingByUid(uid) : null;
+    return inst && inst.rarityId === 'secret';
+  });
 }
 
 function updateProfileAvatar() {
@@ -785,7 +790,7 @@ function updateMenuCustomLobbyCard() {
     sub.style.color = 'var(--diamond)';
   } else {
     card.style.borderColor = '';
-    sub.textContent = 'Join with code · 🔒 Create needs KOTH Top 3';
+    sub.textContent = 'Join with code · 🔒 Create needs KOTH Top 3 or Secret Ring';
     sub.style.color = 'var(--muted)';
   }
 }

@@ -1142,6 +1142,12 @@ function renderGauntletModeEffects() {
     minusPenalty:'- Penalty',
   };
 
+  const dailySpins = (typeof getRingDailyBonusSpins === 'function') ? getRingDailyBonusSpins() : 0;
+  const hasCustom  = fingers.some(uid => {
+    const inst = (typeof _getRingByUid === 'function') ? _getRingByUid(uid) : null;
+    return inst && inst.rarityId === 'secret';
+  });
+
   el.innerHTML = `
     <div class="gm-effects-title">⚔ GAUNTLET MODE EFFECTS</div>
     ${GM_EFFECT_KEYS.map(k => {
@@ -1152,6 +1158,14 @@ function renderGauntletModeEffects() {
         <div class="gm-effect-val${v > 0 ? ' gm-eff-active' : ''}">${v > 0 ? '+' : ''}${pct}%</div>
       </div>`;
     }).join('')}
+    ${dailySpins > 0 ? `<div class="gm-effect-row">
+      <div class="gm-effect-name">Free Spins/Day</div>
+      <div class="gm-effect-val gm-eff-active">+${dailySpins}</div>
+    </div>` : ''}
+    ${hasCustom ? `<div class="gm-effect-row">
+      <div class="gm-effect-name">Custom Lobby</div>
+      <div class="gm-effect-val gm-eff-active">UNLOCKED</div>
+    </div>` : ''}
     <div class="gm-survival-bonus${allFilled ? '' : ' gm-surv-locked'}">
       <div class="gm-surv-label">GAUNTLET SURVIVAL BONUS</div>
       ${allFilled
@@ -1201,6 +1215,13 @@ function gmGetSingleRingEffect(uid) {
   const pct = inst.statKey === 'bonusMmr'
     ? `+${(val * 100).toFixed(1)}%`
     : `+${Math.round(val * 100)}%`;
-  return { key: inst.statKey, label: LABELS[inst.statKey] || inst.statKey, pct };
+  const extras = [];
+  if (inst.rarityId === 'legendary') extras.push('+1 spin/day');
+  if (inst.rarityId === 'secret') {
+    const variant = (typeof _ringVariant === 'function') ? _ringVariant(inst.rollPct) : 3;
+    extras.push(`+${6 - variant} spins/day`);
+    extras.push('Custom Lobby');
+  }
+  return { key: inst.statKey, label: LABELS[inst.statKey] || inst.statKey, pct, extras };
 }
 

@@ -46,6 +46,24 @@ function _ringVariant(rollPct) {
   return 5;
 }
 
+// Returns total daily free spins granted by rings that were equipped before today.
+// Rings equipped today don't count — must have been in finger at day reset (midnight).
+function getRingDailyBonusSpins() {
+  const today      = new Date().toDateString();
+  const equipped   = gameState.gauntlet || {};
+  const equipDates = gameState.gauntletEquipDate || {};
+  let total = 0;
+  for (const [fingerIdx, uid] of Object.entries(equipped)) {
+    if (!uid) continue;
+    if (equipDates[fingerIdx] === today) continue; // equipped today → doesn't count
+    const inst = _getRingByUid(uid);
+    if (!inst) continue;
+    if (inst.rarityId === 'legendary') total += 1;
+    if (inst.rarityId === 'secret')    total += (6 - _ringVariant(inst.rollPct));
+  }
+  return total;
+}
+
 // Supports old 2-arg style ringImgHtml(rarityId, pxSize) — rollPct defaults to 50 (variant 3)
 function ringImgHtml(rarityId, rollPct, pxSize) {
   if (pxSize === undefined) { pxSize = rollPct; rollPct = 50; }
@@ -314,6 +332,7 @@ function equipRingToFinger(fingerIdx) {
       </div>`;
     unequipRow.onclick = () => {
       delete gameState.gauntlet[fingerIdx];
+      if (gameState.gauntletEquipDate) delete gameState.gauntletEquipDate[fingerIdx];
       saveState();
       document.body.removeChild(overlay);
       renderGauntletHand();
@@ -366,6 +385,8 @@ function equipRingToFinger(fingerIdx) {
       const doEquip = () => {
         if (!gameState.gauntlet) gameState.gauntlet = {};
         gameState.gauntlet[fingerIdx] = inst.uid;
+        if (!gameState.gauntletEquipDate) gameState.gauntletEquipDate = {};
+        gameState.gauntletEquipDate[fingerIdx] = new Date().toDateString();
         saveState();
         document.body.removeChild(overlay);
         renderGauntletHand();
@@ -451,7 +472,7 @@ function renderRingInventory() {
       <div class="ring-info">
         <div class="ring-name">${ring.name}</div>
         <div class="ring-rarity ${rar.cls}">${rar.label} · ${_ringVariant(inst.rollPct)}★</div>
-        ${eff ? `<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:2px;">${eff.label} <b>${eff.pct}</b></div>` : ''}
+        ${eff ? `<div style="font-size:10px;letter-spacing:1px;color:${rar.color};margin-top:2px;">${eff.label} <b>${eff.pct}</b>${eff.extras && eff.extras.length ? ' · ' + eff.extras.join(' · ') : ''}</div>` : ''}
         ${equippedFinger ? `<div style="font-size:9px;letter-spacing:1.5px;color:var(--gold);margin-top:2px;opacity:0.85;">${equippedFinger.toUpperCase()}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:row;gap:5px;flex-shrink:0;align-items:center;">
@@ -1005,6 +1026,15 @@ function openGauntlet() {
   const today = new Date().toDateString();
   if (gameState.spinDate !== today)   { gameState.spinDate=today;   gameState.spinsToday=0;  saveState(); }
   if (gameState.adSpinDate !== today) { gameState.adSpinDate=today; gameState.adSpinsUsed=0; saveState(); }
+  if (gameState.ringSpinGrantDate !== today) {
+    gameState.ringSpinGrantDate = today;
+    const bonus = getRingDailyBonusSpins();
+    if (bonus > 0) {
+      gameState.freeSpins = (gameState.freeSpins || 0) + bonus;
+      showToast(`💍 +${bonus} free spin${bonus > 1 ? 's' : ''} from rings!`, 'var(--gold)');
+    }
+    saveState();
+  }
   updateGauntletSpinUI();
   renderGauntletHand();
   renderRingInventory();
