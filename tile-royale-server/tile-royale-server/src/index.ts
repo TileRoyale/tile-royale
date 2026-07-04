@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -97,7 +97,7 @@ const region = process.env.REGION || "EU";   // EU | NA | ASIA
 const app    = express();
 
 // Bump this when releasing a client version that is required (breaks old clients)
-const MIN_CLIENT_VERSION = "v0.8.4";
+const MIN_CLIENT_VERSION = "v1.0.22";
 
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
@@ -2126,6 +2126,48 @@ gameServer.define("tile_royale", TileRoyaleRoom)
 
 gameServer.define("gauntlet", GauntletRoom)
   .sortBy({ clients: -1 });
+
+// ─── Patient Angler Anti-cheat ────────────────────────────────────────────────
+
+const PA_MAX_COIN_RATE    = 60000; // coins per second max (fleet-level income)
+const PA_MAX_DIAMOND_BURST = 1500; // max diamonds gained between saves
+
+function validatePASave(prev: any, next: any): { ok: boolean; reason?: string } {
+  if (!prev) return { ok: true };
+  const timeDiff  = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
+  const coinDiff  = (next.coins    || 0) - (prev.coins    || 0);
+  if (coinDiff > timeDiff * PA_MAX_COIN_RATE)
+    return { ok: false, reason: `coin_rate:${Math.round(coinDiff / timeDiff)}/s` };
+  const diaGain   = (next.diamonds || 0) - (prev.diamonds || 0);
+  if (diaGain > PA_MAX_DIAMOND_BURST + timeDiff * 0.5)
+    return { ok: false, reason: `diamond_burst:${diaGain}` };
+  return { ok: true };
+}
+
+app.post("/pa/save", express.json({ limit: "500kb" }), async (req, res) => {
+  const { uid, save } = req.body;
+  if (!uid || !save || typeof save !== "object")
+    return res.status(400).json({ ok: false, error: "invalid_request" });
+  const prev      = await loadPASave(uid);
+  const prevData  = prev ? JSON.parse(prev.saveJson) : null;
+  const check     = validatePASave(prevData, save);
+  if (!check.ok) {
+    console.warn(`[PA] Anti-cheat triggered uid=${uid}: ${check.reason}`);
+    return res.status(400).json({ ok: false, error: "validation_failed", reason: check.reason });
+  }
+  const ok = await savePASave(uid, JSON.stringify(save));
+  res.json({ ok });
+});
+
+app.get("/pa/load/:uid", async (req, res) => {
+  const { uid } = req.params;
+  if (!uid) return res.status(400).json({ ok: false });
+  const data = await loadPASave(uid);
+  if (!data) return res.json({ ok: true, save: null });
+  res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 initDb().then(() => {
   gameServer.listen(port).then(() => {
