@@ -838,7 +838,12 @@ function set(id, val) {
 function openAbout() { showScreen('aboutScreen'); }
 function openLink(url) {
   if (url.startsWith('mailto:')) { window.open(url, '_system'); return; }
-  if (typeof Capacitor !== 'undefined') Capacitor.Plugins.Browser?.open({url}); else window.open(url,'_blank');
+  if (typeof Capacitor !== 'undefined') {
+    if (Capacitor.Plugins.Browser) Capacitor.Plugins.Browser.open({url});
+    else window.open(url, '_system');
+  } else {
+    window.open(url, '_blank');
+  }
 }
 function contactSupport() { openLink('mailto:TileRoyaleGame@gmail.com?subject=Tile%20Royale%20Support'); }
 function rateApp() {
