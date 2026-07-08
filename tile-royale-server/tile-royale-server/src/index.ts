@@ -2167,10 +2167,12 @@ app.get("/pa/load/:uid", async (req, res) => {
   res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt });
 });
 
-// Bump this when releasing a PA client version that requires a forced update
+// Bump PA_MIN_CLIENT_VERSION when a forced update is required
+// Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
+const PA_LATEST_VERSION     = "v0.1.7";
 app.get("/pa/version", (_req, res) => {
-  res.json({ minClientVersion: PA_MIN_CLIENT_VERSION });
+  res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
 
 // AdMob app-ads.txt verification
