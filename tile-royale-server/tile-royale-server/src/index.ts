@@ -2167,6 +2167,12 @@ app.get("/pa/load/:uid", async (req, res) => {
   res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt });
 });
 
+// Bump this when releasing a PA client version that requires a forced update
+const PA_MIN_CLIENT_VERSION = "v0.1.5";
+app.get("/pa/version", (_req, res) => {
+  res.json({ minClientVersion: PA_MIN_CLIENT_VERSION });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 initDb().then(() => {
