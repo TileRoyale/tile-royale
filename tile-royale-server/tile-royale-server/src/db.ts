@@ -165,6 +165,13 @@ async function createTables(): Promise<void> {
     );
     ALTER TABLE player_save_data ADD COLUMN IF NOT EXISTS save_version INTEGER NOT NULL DEFAULT 1;
 
+    -- Patient Angler save data (keyed by Firebase UID)
+    CREATE TABLE IF NOT EXISTS pa_save_data (
+      uid          TEXT         PRIMARY KEY,
+      save_json    TEXT         NOT NULL,
+      updated_at   TIMESTAMPTZ  DEFAULT now()
+    );
+
     -- Push tokens: one row per FCM token (UNIQUE on token, indexed by player)
     CREATE TABLE IF NOT EXISTS push_tokens (
       id          SERIAL       PRIMARY KEY,
@@ -1519,6 +1526,35 @@ export async function loadPlayerData(playerId: string): Promise<{ saveJson: stri
   );
   if (!rows?.length) return null;
   return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at, saveVersion: rows[0].save_version ?? 1 };
+}
+
+// ─── Patient Angler Save ──────────────────────────────────────────────────────
+
+export async function savePASave(uid: string, saveJson: string): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  try {
+    await query(
+      `INSERT INTO pa_save_data (uid, save_json, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (uid) DO UPDATE SET
+         save_json  = EXCLUDED.save_json,
+         updated_at = now()`,
+      [uid, saveJson]
+    );
+    return true;
+  } catch (err) {
+    console.error('[DB] savePASave error:', err);
+    return false;
+  }
+}
+
+export async function loadPASave(uid: string): Promise<{ saveJson: string; updatedAt: string } | null> {
+  const rows = await query(
+    `SELECT save_json, updated_at FROM pa_save_data WHERE uid = $1`,
+    [uid]
+  );
+  if (!rows?.length) return null;
+  return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
 }
 
 // ─── Push Tokens ───────────────────────────────────────────────────────────────
