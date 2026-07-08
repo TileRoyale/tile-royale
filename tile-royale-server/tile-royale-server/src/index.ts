@@ -2173,6 +2173,11 @@ app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION });
 });
 
+// AdMob app-ads.txt verification
+app.get("/app-ads.txt", (_req, res) => {
+  res.type("text/plain").send("google.com, pub-1687381057809117, DIRECT, f08c47fec0942fa0\n");
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 initDb().then(() => {
