@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, checkAndRecordPARedeem } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -2170,9 +2170,55 @@ app.get("/pa/load/:uid", async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.1.11";
+const PA_LATEST_VERSION     = "v0.1.13";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
+});
+
+// ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
+// Codes are ONLY here on the server — never sent to the client.
+// Add new codes here any time without a new app build.
+// rewardType: 'coins' | 'diamonds' | 'autoIncome'
+// For 'autoIncome': server marks as used, client computes 1h automation income locally.
+
+const PA_REDEEM_CODES: Record<string, {
+  rewardType: 'coins' | 'diamonds' | 'autoIncome';
+  amount?: number;   // used for coins / diamonds
+  desc: string;
+  maxUses?: number;  // omit = unlimited
+  expires?: string;  // ISO date string
+}> = {
+  'REVIEW':     { rewardType: 'autoIncome',                  desc: '1h automation income — thank you for the review!' },
+  'LAUNCH':     { rewardType: 'coins',    amount: 500,       desc: 'Launch celebration gift!' },
+  'PEARLS5':    { rewardType: 'diamonds', amount: 5,         desc: '5 Black Pearls gift!' },
+};
+
+app.post("/pa/redeem", express.json(), async (req, res) => {
+  const { uid, code: rawCode } = req.body;
+
+  if (!uid || typeof uid !== 'string' || uid.length < 4)
+    return res.json({ ok: false, error: 'missing_uid' });
+  if (!rawCode || typeof rawCode !== 'string')
+    return res.json({ ok: false, error: 'missing_code' });
+
+  const code  = rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const entry = PA_REDEEM_CODES[code];
+
+  if (!entry)
+    return res.json({ ok: false, error: 'invalid_code' });
+  if (entry.expires && new Date() > new Date(entry.expires))
+    return res.json({ ok: false, error: 'expired' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'server_error' });
+
+  const result = await checkAndRecordPARedeem(uid, code);
+  if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
+  if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
+
+  const reward: Record<string, any> = { rewardType: entry.rewardType };
+  if (entry.amount != null) reward.amount = entry.amount;
+
+  res.json({ ok: true, desc: entry.desc, reward });
 });
 
 // AdMob app-ads.txt verification
