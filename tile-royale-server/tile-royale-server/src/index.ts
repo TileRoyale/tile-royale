@@ -2170,7 +2170,7 @@ app.get("/pa/load/:uid", async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.1.13";
+const PA_LATEST_VERSION     = "v0.1.14";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
