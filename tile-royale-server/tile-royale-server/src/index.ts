@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, checkAndRecordPARedeem } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -2131,22 +2131,43 @@ gameServer.define("gauntlet", GauntletRoom)
 
 const PA_MAX_COIN_RATE    = 60000; // coins per second max (fleet-level income)
 const PA_MAX_DIAMOND_BURST = 1500; // max diamonds gained between saves
+const PA_ZONE_ORDER = ['pond','river','lake','bay','sea','ocean','abyss'];
 
 function validatePASave(prev: any, next: any): { ok: boolean; reason?: string } {
   if (!prev) return { ok: true };
-  const timeDiff  = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
-  const coinDiff  = (next.coins    || 0) - (prev.coins    || 0);
+  const timeDiff = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
+
+  // Anti-cheat: coin generation rate
+  const coinDiff = (next.coins || 0) - (prev.coins || 0);
   if (coinDiff > timeDiff * PA_MAX_COIN_RATE)
     return { ok: false, reason: `coin_rate:${Math.round(coinDiff / timeDiff)}/s` };
-  const diaGain   = (next.diamonds || 0) - (prev.diamonds || 0);
+
+  // Anti-cheat: diamond burst
+  const diaGain = (next.diamonds || 0) - (prev.diamonds || 0);
   if (diaGain > PA_MAX_DIAMOND_BURST + timeDiff * 0.5)
     return { ok: false, reason: `diamond_burst:${diaGain}` };
-  // Block fresh-install default state from overwriting a real save.
-  // A genuine save never has totalFish=0 when the previous save had meaningful coins.
-  const prevCoins = prev.coins || 0;
-  const nextFish  = (next.stats?.totalFish || 0) + (next.stats?.lifeCoinsEarned || 0);
-  if (prevCoins > 500 && nextFish === 0)
-    return { ok: false, reason: 'progress_regression' };
+
+  // Regression detection: block a lower-progress state from overwriting a real save.
+  // This catches reinstall/fresh-state overwrites that slip past client-side guards.
+  const prevLife = (prev.stats?.lifeCoinsEarned || 0) + (prev.coins || 0);
+  const nextLife = (next.stats?.lifeCoinsEarned || 0) + (next.coins || 0);
+  const prevZone = PA_ZONE_ORDER.indexOf(prev.stats?.recHighestZone || prev.currentZone || 'pond');
+  const nextZone = PA_ZONE_ORDER.indexOf(next.stats?.recHighestZone || next.currentZone || 'pond');
+  const prevRods = (prev.ownedRods || []).length;
+  const nextRods = (next.ownedRods || []).length;
+
+  // Zone regression: had river+ and now back to pond with almost no coins
+  if (prevZone > 0 && nextZone < prevZone && nextLife < prevLife / 20)
+    return { ok: false, reason: `zone_regression:${prev.stats?.recHighestZone}->${next.stats?.recHighestZone}` };
+
+  // Rod regression: had 3+ rods and now has 1 with almost no coins
+  if (prevRods >= 3 && nextRods <= 1 && nextLife < 1000)
+    return { ok: false, reason: `rod_regression:${prevRods}->${nextRods}` };
+
+  // Coin regression: lifetime coins dropped by 99%+ (reinstall default state)
+  if (prevLife > 10000 && nextLife < prevLife / 100)
+    return { ok: false, reason: `coin_regression:${prevLife}->${nextLife}` };
+
   return { ok: true };
 }
 
@@ -2398,6 +2419,28 @@ app.post('/admin/pa/restore-save', paAdminMiddleware, express.json({ limit: '500
 });
 
 // Find all saves that contain a specific bobber cosmetic id (for player recovery by unique cosmetic)
+// View last 3 save snapshots for a player (for manual recovery)
+app.get('/admin/pa/save-history/:uid', paAdminMiddleware, async (req, res) => {
+  const { uid } = req.params;
+  const history = await loadPASaveHistory(uid);
+  const summary = history.map(h => {
+    try {
+      const s = JSON.parse(h.saveJson);
+      return {
+        savedAt: h.savedAt,
+        coins: s.coins,
+        zone: s.currentZone,
+        recHighestZone: s.stats?.recHighestZone,
+        lifeCoinsEarned: s.stats?.lifeCoinsEarned,
+        ownedRods: s.ownedRods,
+        automationCount: (s.ownedAutomation || []).length,
+        bobbers: s.unlockedBobberCosmetics,
+      };
+    } catch { return { savedAt: h.savedAt, parseError: true }; }
+  });
+  res.json({ uid, count: history.length, history: summary });
+});
+
 app.get('/admin/pa/find-by-bobber', paAdminMiddleware, async (req, res) => {
   const bobberId = (req.query.id as string) || 'bc_worm';
   const rows = await query(

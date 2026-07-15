@@ -172,6 +172,15 @@ async function createTables(): Promise<void> {
       updated_at   TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Rolling backup of the last 3 saves per player (auto-purged beyond 3)
+    CREATE TABLE IF NOT EXISTS pa_save_history (
+      id           SERIAL       PRIMARY KEY,
+      uid          TEXT         NOT NULL,
+      save_json    TEXT         NOT NULL,
+      saved_at     TIMESTAMPTZ  DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS pa_save_history_uid_idx ON pa_save_history (uid, saved_at DESC);
+
     -- Patient Angler redeem code uses: one row per (code, uid) pair
     CREATE TABLE IF NOT EXISTS pa_codes_used (
       code        TEXT         NOT NULL,
@@ -1541,6 +1550,19 @@ export async function loadPlayerData(playerId: string): Promise<{ saveJson: stri
 export async function savePASave(uid: string, saveJson: string): Promise<boolean> {
   if (!pool || !dbAvailable) return false;
   try {
+    // Archive current save to history before overwriting (keep last 3 per player)
+    await query(
+      `INSERT INTO pa_save_history (uid, save_json, saved_at)
+       SELECT uid, save_json, now() FROM pa_save_data WHERE uid = $1`,
+      [uid]
+    );
+    await query(
+      `DELETE FROM pa_save_history WHERE id IN (
+         SELECT id FROM pa_save_history WHERE uid = $1
+         ORDER BY saved_at DESC OFFSET 3
+       )`,
+      [uid]
+    );
     await query(
       `INSERT INTO pa_save_data (uid, save_json, updated_at)
        VALUES ($1, $2, now())
@@ -1554,6 +1576,14 @@ export async function savePASave(uid: string, saveJson: string): Promise<boolean
     console.error('[DB] savePASave error:', err);
     return false;
   }
+}
+
+export async function loadPASaveHistory(uid: string): Promise<Array<{ saveJson: string; savedAt: string }>> {
+  const rows = await query(
+    `SELECT save_json, saved_at FROM pa_save_history WHERE uid = $1 ORDER BY saved_at DESC LIMIT 3`,
+    [uid]
+  );
+  return (rows || []).map((r: any) => ({ saveJson: r.save_json, savedAt: r.saved_at }));
 }
 
 export async function loadPASave(uid: string): Promise<{ saveJson: string; updatedAt: string } | null> {
