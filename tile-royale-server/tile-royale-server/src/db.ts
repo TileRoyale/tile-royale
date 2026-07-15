@@ -172,6 +172,14 @@ async function createTables(): Promise<void> {
       updated_at   TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Patient Angler redeem code uses: one row per (code, uid) pair
+    CREATE TABLE IF NOT EXISTS pa_codes_used (
+      code        TEXT         NOT NULL,
+      uid         TEXT         NOT NULL,
+      redeemed_at TIMESTAMPTZ  DEFAULT now(),
+      PRIMARY KEY (code, uid)
+    );
+
     -- Push tokens: one row per FCM token (UNIQUE on token, indexed by player)
     CREATE TABLE IF NOT EXISTS push_tokens (
       id          SERIAL       PRIMARY KEY,
@@ -1555,6 +1563,26 @@ export async function loadPASave(uid: string): Promise<{ saveJson: string; updat
   );
   if (!rows?.length) return null;
   return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
+}
+
+// ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
+
+export async function checkAndRecordPARedeem(
+  uid: string,
+  code: string
+): Promise<'ok' | 'already_redeemed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO pa_codes_used (code, uid) VALUES ($1, $2)`,
+      [code, uid]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_redeemed'; // unique violation = already used
+    console.error('[DB] pa redeem error:', err);
+    return 'error';
+  }
 }
 
 // ─── Push Tokens ───────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, checkAndRecordPARedeem } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -2141,6 +2141,12 @@ function validatePASave(prev: any, next: any): { ok: boolean; reason?: string } 
   const diaGain   = (next.diamonds || 0) - (prev.diamonds || 0);
   if (diaGain > PA_MAX_DIAMOND_BURST + timeDiff * 0.5)
     return { ok: false, reason: `diamond_burst:${diaGain}` };
+  // Block fresh-install default state from overwriting a real save.
+  // A genuine save never has totalFish=0 when the previous save had meaningful coins.
+  const prevCoins = prev.coins || 0;
+  const nextFish  = (next.stats?.totalFish || 0) + (next.stats?.lifeCoinsEarned || 0);
+  if (prevCoins > 500 && nextFish === 0)
+    return { ok: false, reason: 'progress_regression' };
   return { ok: true };
 }
 
@@ -2170,9 +2176,56 @@ app.get("/pa/load/:uid", async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.1.9";
+const PA_LATEST_VERSION     = "v0.8.3";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
+});
+
+// ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
+// Codes are ONLY here on the server — never sent to the client.
+// Add new codes here any time without a new app build.
+// rewardType: 'coins' | 'diamonds' | 'autoIncome'
+// For 'autoIncome': server marks as used, client computes 1h automation income locally.
+
+const PA_REDEEM_CODES: Record<string, {
+  rewardType: 'coins' | 'diamonds' | 'autoIncome';
+  amount?: number;   // used for coins / diamonds
+  desc: string;
+  maxUses?: number;  // omit = unlimited
+  expires?: string;  // ISO date string
+}> = {
+  'REVIEW':         { rewardType: 'autoIncome',                  desc: '1h automation income — thank you for the review!' },
+  'LAUNCH':         { rewardType: 'coins',    amount: 500,       desc: 'Launch celebration gift!' },
+  'PEARLS5':        { rewardType: 'diamonds', amount: 5,         desc: '5 Black Pearls gift!' },
+  'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,        desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
+};
+
+app.post("/pa/redeem", express.json(), async (req, res) => {
+  const { uid, code: rawCode } = req.body;
+
+  if (!uid || typeof uid !== 'string' || uid.length < 4)
+    return res.json({ ok: false, error: 'missing_uid' });
+  if (!rawCode || typeof rawCode !== 'string')
+    return res.json({ ok: false, error: 'missing_code' });
+
+  const code  = rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const entry = PA_REDEEM_CODES[code];
+
+  if (!entry)
+    return res.json({ ok: false, error: 'invalid_code' });
+  if (entry.expires && new Date() > new Date(entry.expires))
+    return res.json({ ok: false, error: 'expired' });
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'server_error' });
+
+  const result = await checkAndRecordPARedeem(uid, code);
+  if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
+  if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
+
+  const reward: Record<string, any> = { rewardType: entry.rewardType };
+  if (entry.amount != null) reward.amount = entry.amount;
+
+  res.json({ ok: true, desc: entry.desc, reward });
 });
 
 // AdMob app-ads.txt verification
@@ -2180,9 +2233,181 @@ app.get("/app-ads.txt", (_req, res) => {
   res.type("text/plain").send("google.com, pub-1687381057809117, DIRECT, f08c47fec0942fa0\n");
 });
 
+// ─── Patient Angler Analytics ─────────────────────────────────────────────────
+import {
+  adminMiddleware       as paAdminMiddleware,
+  adminBrowserMiddleware as paAdminBrowserMiddleware,
+  serveAdminLogin,
+  handleAdminLogin,
+  handleAdminLogout,
+  handleAnalyticsProgress,
+  handleAdminSummary,
+  handleAdminPlayers,
+  handleAdminPlayerDetail,
+  handleAdminFunnel,
+  handleAdminZones,
+  handleAdminVersions,
+  handleAdminCohorts,
+  handleAdminDataQuality,
+  handleAdminExportCsv,
+  handleAdminExportMilestonesCsv,
+  serveAdminDashboard,
+  createAnalyticsTables,
+} from './paAnalytics';
+
+const _urlForm = express.urlencoded({ extended: false, limit: '4kb' });
+
+// Player-facing analytics endpoint (no admin auth — just uid validation inside handler)
+app.post('/pa/analytics/progress', express.json({ limit: '64kb' }), handleAnalyticsProgress);
+
+// ── Patient Angler IAP ────────────────────────────────────────────────────────
+
+const PA_PACKAGE_NAME = "com.henlygames.patientangler";
+
+// Server-authoritative PA product catalog — must match iap.js DIAMOND_PACK_MAP exactly.
+const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'; diamonds?: number; grant: Record<string, any> }> = {
+  starter:               { type: 'consumable',     diamonds: 80,   grant: { diamonds: 80   } },
+  pouch:                 { type: 'consumable',     diamonds: 200,  grant: { diamonds: 200  } },
+  chest:                 { type: 'consumable',     diamonds: 550,  grant: { diamonds: 550  } },
+  vault:                 { type: 'consumable',     diamonds: 1200, grant: { diamonds: 1200 } },
+  remove_ads:            { type: 'non_consumable',              grant: { removeAds: true } },
+  permanent_autoseller:  { type: 'non_consumable',              grant: { permanentAutoSell: true } },
+  dev_support_package:   { type: 'non_consumable',              grant: { devSupport: true } },
+};
+
+async function verifyWithGooglePlayPA(productId: string, purchaseToken: string): Promise<boolean> {
+  const keyJson = process.env.GOOGLE_PLAY_KEY_JSON;
+  if (!keyJson) {
+    console.error('[PA-IAP] Rejected — GOOGLE_PLAY_KEY_JSON not configured.');
+    return false;
+  }
+  try {
+    const credentials = JSON.parse(keyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/androidpublisher'],
+    });
+    const publisher = google.androidpublisher({ version: 'v3', auth });
+    const res = await publisher.purchases.products.get({
+      packageName: PA_PACKAGE_NAME,
+      productId,
+      token: purchaseToken,
+    });
+    const state = res.data.purchaseState;
+    if (state !== 0) {
+      console.warn(`[PA-IAP] Google Play rejected token — purchaseState=${state}`);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error('[PA-IAP] Google Play API error:', err?.message || err);
+    return false;
+  }
+}
+
+// POST /pa/iap/verify  { uid, productId, purchaseToken, orderId? }
+// Verifies purchase with Google Play, records token (idempotent), returns grant payload.
+// Client applies the grant only after receiving { ok: true }.
+app.post("/pa/iap/verify", express.json(), async (req, res) => {
+  const { uid, productId, purchaseToken, orderId = '' } = req.body;
+
+  if (!uid || typeof uid !== 'string' || uid.length < 4)
+    return res.json({ ok: false, error: 'missing_uid' });
+  if (!productId || typeof productId !== 'string')
+    return res.json({ ok: false, error: 'invalid_product' });
+  if (!purchaseToken || typeof purchaseToken !== 'string' || purchaseToken.length < 10)
+    return res.json({ ok: false, error: 'invalid_token' });
+
+  const product = PA_PRODUCT_CATALOG[productId];
+  if (!product) return res.json({ ok: false, error: 'unknown_product' });
+
+  // Idempotent: return the original grant on duplicate token
+  const existing = await getPAPurchaseReceipt(purchaseToken);
+  if (existing !== null) {
+    try {
+      const grant = JSON.parse(existing);
+      return res.json({ ok: true, grant, already_processed: true });
+    } catch {
+      return res.json({ ok: false, error: 'already_processed' });
+    }
+  }
+
+  // Verify with Google Play Developer API
+  const valid = await verifyWithGooglePlayPA(productId, purchaseToken);
+  if (!valid) return res.json({ ok: false, error: 'google_play_rejected' });
+
+  const grantedJson = JSON.stringify(product.grant);
+
+  // Record in DB — UNIQUE on purchase_token is the double-delivery guard
+  if (getDbStatus().available) {
+    const result = await recordPAPurchaseReceipt(uid, productId, purchaseToken, String(orderId), grantedJson);
+    if (result === 'error') return res.json({ ok: false, error: 'db_error' });
+    if (result === 'already_processed') {
+      return res.json({ ok: true, grant: product.grant, already_processed: true });
+    }
+  }
+
+  console.log(`[PA-IAP] ✅ ${productId} verified for ${uid}`);
+  res.json({ ok: true, grant: product.grant });
+});
+
+// Admin login / logout (no session required)
+app.get ('/admin/login',  serveAdminLogin);
+app.post('/admin/login',  _urlForm, handleAdminLogin);
+app.post('/admin/logout', handleAdminLogout);
+
+// Admin dashboard UI — browser route: redirects to /admin/login if not authed
+app.get('/admin/analytics',                       paAdminBrowserMiddleware, serveAdminDashboard);
+
+// Admin API routes — API route: returns JSON 401 if not authed
+app.get('/admin/analytics/api/summary',           paAdminMiddleware, handleAdminSummary);
+app.get('/admin/analytics/api/players',           paAdminMiddleware, handleAdminPlayers);
+app.get('/admin/analytics/api/player/:playerId',  paAdminMiddleware, handleAdminPlayerDetail);
+
+// One-time recovery: look up a player by email, show analytics + current save
+app.get('/admin/pa/recover-by-email', paAdminMiddleware, async (req, res) => {
+  const email = req.query.email as string;
+  if (!email) { res.status(400).json({ error: 'missing email' }); return; }
+  try {
+    const fbUser = await firebaseAdmin.auth().getUserByEmail(email);
+    const uid = fbUser.uid;
+    const [analyticsRows, saveRows] = await Promise.all([
+      query('SELECT * FROM pa_player_progress WHERE player_id=$1', [uid]),
+      query('SELECT save_json, updated_at FROM pa_save_data WHERE uid=$1', [uid]),
+    ]);
+    const milestones = await query('SELECT milestone_key, reached_at FROM pa_player_milestones WHERE player_id=$1 ORDER BY reached_at', [uid]);
+    res.json({
+      uid,
+      email: fbUser.email,
+      displayName: fbUser.displayName,
+      analytics: analyticsRows?.[0] || null,
+      currentSave: saveRows?.[0] ? { updatedAt: saveRows[0].updated_at, save: JSON.parse(saveRows[0].save_json) } : null,
+      milestones: milestones || [],
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Manual save restore for a specific uid (admin only)
+app.post('/admin/pa/restore-save', paAdminMiddleware, express.json({ limit: '500kb' }), async (req, res) => {
+  const { uid, save } = req.body;
+  if (!uid || !save) { res.status(400).json({ error: 'missing uid or save' }); return; }
+  const ok = await savePASave(uid, JSON.stringify(save));
+  res.json({ ok });
+});
+app.get('/admin/analytics/api/funnel',            paAdminMiddleware, handleAdminFunnel);
+app.get('/admin/analytics/api/zones',             paAdminMiddleware, handleAdminZones);
+app.get('/admin/analytics/api/versions',          paAdminMiddleware, handleAdminVersions);
+app.get('/admin/analytics/api/cohorts',           paAdminMiddleware, handleAdminCohorts);
+app.get('/admin/analytics/api/quality',           paAdminMiddleware, handleAdminDataQuality);
+app.get('/admin/analytics/export.csv',            paAdminMiddleware, handleAdminExportCsv);
+app.get('/admin/analytics/milestones.csv',        paAdminMiddleware, handleAdminExportMilestonesCsv);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
-initDb().then(() => {
+initDb().then(async () => {
+  await createAnalyticsTables();
   gameServer.listen(port).then(() => {
     console.log(`🔥 Tile Royale [${region}] running on port ${port}`);
     console.log(`📊 Monitor: http://localhost:${port}/colyseus`);
