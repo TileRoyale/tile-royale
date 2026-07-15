@@ -1980,6 +1980,11 @@ export async function getPurchaseReceipt(purchaseToken: string): Promise<string 
   return rows && rows.length > 0 ? rows[0].granted_json : null;
 }
 
+// Patient Angler IAP receipt functions — aliases to the shared purchase_receipts table.
+// PA UIDs are Firebase UIDs (distinct from TR player IDs) so there's no collision risk.
+export const recordPAPurchaseReceipt = recordPurchaseReceipt;
+export const getPAPurchaseReceipt    = getPurchaseReceipt;
+
 // Returns all processed purchase tokens for a player (used by restore to skip already-granted items).
 export async function getProcessedTokens(playerId: string): Promise<Set<string>> {
   const rows = await query(
