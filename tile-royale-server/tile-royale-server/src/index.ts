@@ -2363,6 +2363,39 @@ app.get('/admin/analytics',                       paAdminBrowserMiddleware, serv
 app.get('/admin/analytics/api/summary',           paAdminMiddleware, handleAdminSummary);
 app.get('/admin/analytics/api/players',           paAdminMiddleware, handleAdminPlayers);
 app.get('/admin/analytics/api/player/:playerId',  paAdminMiddleware, handleAdminPlayerDetail);
+
+// One-time recovery: look up a player by email, show analytics + current save
+app.get('/admin/pa/recover-by-email', paAdminMiddleware, async (req, res) => {
+  const email = req.query.email as string;
+  if (!email) { res.status(400).json({ error: 'missing email' }); return; }
+  try {
+    const fbUser = await firebaseAdmin.auth().getUserByEmail(email);
+    const uid = fbUser.uid;
+    const [analyticsRows, saveRows] = await Promise.all([
+      query('SELECT * FROM pa_player_progress WHERE player_id=$1', [uid]),
+      query('SELECT save_json, updated_at FROM pa_save_data WHERE uid=$1', [uid]),
+    ]);
+    const milestones = await query('SELECT milestone_key, reached_at FROM pa_player_milestones WHERE player_id=$1 ORDER BY reached_at', [uid]);
+    res.json({
+      uid,
+      email: fbUser.email,
+      displayName: fbUser.displayName,
+      analytics: analyticsRows?.[0] || null,
+      currentSave: saveRows?.[0] ? { updatedAt: saveRows[0].updated_at, save: JSON.parse(saveRows[0].save_json) } : null,
+      milestones: milestones || [],
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Manual save restore for a specific uid (admin only)
+app.post('/admin/pa/restore-save', paAdminMiddleware, express.json({ limit: '500kb' }), async (req, res) => {
+  const { uid, save } = req.body;
+  if (!uid || !save) { res.status(400).json({ error: 'missing uid or save' }); return; }
+  const ok = await savePASave(uid, JSON.stringify(save));
+  res.json({ ok });
+});
 app.get('/admin/analytics/api/funnel',            paAdminMiddleware, handleAdminFunnel);
 app.get('/admin/analytics/api/zones',             paAdminMiddleware, handleAdminZones);
 app.get('/admin/analytics/api/versions',          paAdminMiddleware, handleAdminVersions);
