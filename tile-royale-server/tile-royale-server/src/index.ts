@@ -2396,6 +2396,24 @@ app.post('/admin/pa/restore-save', paAdminMiddleware, express.json({ limit: '500
   const ok = await savePASave(uid, JSON.stringify(save));
   res.json({ ok });
 });
+
+// Find all saves that contain a specific bobber cosmetic id (for player recovery by unique cosmetic)
+app.get('/admin/pa/find-by-bobber', paAdminMiddleware, async (req, res) => {
+  const bobberId = (req.query.id as string) || 'bc_worm';
+  const rows = await query(
+    `SELECT uid, updated_at,
+            (save_json::jsonb->>'coins')::bigint AS coins,
+            save_json::jsonb->'unlockedBobberCosmetics' AS bobbers,
+            save_json::jsonb->>'equippedBobberCosmetic' AS equipped,
+            save_json::jsonb->>'currentZone' AS zone,
+            (save_json::jsonb->>'_savedAt')::bigint AS saved_at
+     FROM pa_save_data
+     WHERE save_json::jsonb->'unlockedBobberCosmetics' ? $1
+     ORDER BY updated_at DESC`,
+    [bobberId]
+  );
+  res.json({ count: rows?.length ?? 0, rows: rows ?? [] });
+});
 app.get('/admin/analytics/api/funnel',            paAdminMiddleware, handleAdminFunnel);
 app.get('/admin/analytics/api/zones',             paAdminMiddleware, handleAdminZones);
 app.get('/admin/analytics/api/versions',          paAdminMiddleware, handleAdminVersions);
