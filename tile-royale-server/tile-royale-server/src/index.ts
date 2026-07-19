@@ -2197,7 +2197,7 @@ app.get("/pa/load/:uid", async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.9.3.4";
+const PA_LATEST_VERSION     = "v0.9.3.5";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2210,15 +2210,17 @@ app.get("/pa/version", (_req, res) => {
 
 const PA_REDEEM_CODES: Record<string, {
   rewardType: 'coins' | 'diamonds' | 'autoIncome';
-  amount?: number;   // used for coins / diamonds
+  amount?: number;        // used for coins / diamonds
+  bonusDiamonds?: number; // extra diamonds granted alongside autoIncome (requires client v0.9.3.6+)
   desc: string;
   maxUses?: number;  // omit = unlimited
   expires?: string;  // ISO date string
 }> = {
-  'REVIEW':         { rewardType: 'autoIncome',                  desc: '1h automation income — thank you for the review!' },
-  'LAUNCH':         { rewardType: 'coins',    amount: 500,       desc: 'Launch celebration gift!' },
-  'PEARLS5':        { rewardType: 'diamonds', amount: 5,         desc: '5 Black Pearls gift!' },
-  'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,        desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
+  'REVIEW':         { rewardType: 'autoIncome',                                desc: '1h automation income — thank you for the review!' },
+  'LAUNCH':         { rewardType: 'coins',    amount: 500,                     desc: 'Launch celebration gift!' },
+  'PEARLS5':        { rewardType: 'diamonds', amount: 5,                       desc: '5 Black Pearls gift!' },
+  'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,                      desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
+  '300':            { rewardType: 'autoIncome', bonusDiamonds: 10,             desc: '1h automation income + 10 Diamonds. Enjoy!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2287,10 +2289,10 @@ const PA_PACKAGE_NAME = "com.henlygames.patientangler";
 
 // Server-authoritative PA product catalog — must match iap.js DIAMOND_PACK_MAP exactly.
 const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'; diamonds?: number; grant: Record<string, any> }> = {
-  starter:               { type: 'consumable',     diamonds: 80,   grant: { diamonds: 80   } },
-  pouch:                 { type: 'consumable',     diamonds: 200,  grant: { diamonds: 200  } },
-  chest:                 { type: 'consumable',     diamonds: 550,  grant: { diamonds: 550  } },
-  vault:                 { type: 'consumable',     diamonds: 1200, grant: { diamonds: 1200 } },
+  starter:               { type: 'consumable',     diamonds: 200,  grant: { diamonds: 200  } },
+  pouch:                 { type: 'consumable',     diamonds: 400,  grant: { diamonds: 400  } },
+  chest:                 { type: 'consumable',     diamonds: 1100, grant: { diamonds: 1100 } },
+  vault:                 { type: 'consumable',     diamonds: 2500, grant: { diamonds: 2500 } },
   remove_ads:            { type: 'non_consumable',              grant: { removeAds: true } },
   permanent_autoseller:  { type: 'non_consumable',              grant: { permanentAutoSell: true } },
   dev_support_package:   { type: 'non_consumable',              grant: { devSupport: true } },
