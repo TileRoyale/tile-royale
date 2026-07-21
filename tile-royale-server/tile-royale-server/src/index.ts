@@ -2629,6 +2629,23 @@ app.post('/admin/pa/grant-diamonds', paAdminMiddleware, express.json(), async (r
   res.json({ ok: true, uid, before, after: save.diamonds, granted: amount });
 });
 
+// GET /admin/pa/code-status?codes=KW9F4T2M,KW3R8X5N
+app.get('/admin/pa/code-status', paAdminMiddleware, async (req, res) => {
+  const codes = ((req.query.codes as string) || '').split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+  if (!codes.length) { res.status(400).json({ error: 'missing codes param' }); return; }
+  const rows = await query(
+    `SELECT code, uid, redeemed_at FROM pa_codes_used WHERE code = ANY($1) ORDER BY redeemed_at`,
+    [codes]
+  );
+  const used = new Set((rows || []).map((r: any) => r.code));
+  const result = codes.map(code => ({
+    code,
+    used: used.has(code),
+    ...(rows || []).find((r: any) => r.code === code) || {},
+  }));
+  res.json({ result });
+});
+
 app.get('/admin/pa/find-by-bobber', paAdminMiddleware, async (req, res) => {
   const bobberId = (req.query.id as string) || 'bc_worm';
   const rows = await query(
