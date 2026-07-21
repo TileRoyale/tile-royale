@@ -2198,8 +2198,10 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
   }
 
   // Pearl upgrade total level burst (all upgrades combined)
-  const prevUpgradeTotal = Object.values(prev.pearlUpgrades || {}).reduce((a: number, v: any) => a + (Number(v) || 0), 0);
-  const nextUpgradeTotal = Object.values(next.pearlUpgrades || {}).reduce((a: number, v: any) => a + (Number(v) || 0), 0);
+  const prevUpgrades: any = prev.pearlUpgrades || {};
+  const nextUpgrades: any = next.pearlUpgrades || {};
+  const prevUpgradeTotal: number = Object.values(prevUpgrades).reduce((a: number, v: any) => a + (Number(v) || 0), 0);
+  const nextUpgradeTotal: number = Object.values(nextUpgrades).reduce((a: number, v: any) => a + (Number(v) || 0), 0);
   if (nextUpgradeTotal - prevUpgradeTotal > PA_PEARL_UPGRADE_TOTAL_BURST)
     return { ok: false, reason: `upgrade_burst:+${nextUpgradeTotal - prevUpgradeTotal}` };
 
