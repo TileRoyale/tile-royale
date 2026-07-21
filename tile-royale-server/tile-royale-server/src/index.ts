@@ -2358,8 +2358,6 @@ const PA_REDEEM_CODES: Record<string, {
   'PEARLS5':        { rewardType: 'diamonds', amount: 5,                       desc: '5 Black Pearls gift!' },
   'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,                      desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
   '300':            { rewardType: 'autoIncome', bonusDiamonds: 10,             desc: '1h automation income + 10 Diamonds. Enjoy!' },
-  'KW9F4T2M':       { rewardType: 'diamonds', amount: 2500, maxUses: 1,        desc: 'Captain\'s Vault recovery — 2500 Diamonds.' },
-  'KW3R8X5N':       { rewardType: 'diamonds', amount: 2500, maxUses: 1,        desc: 'Captain\'s Vault recovery — 2500 Diamonds.' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
