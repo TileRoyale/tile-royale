@@ -2349,14 +2349,16 @@ const PA_REDEEM_CODES: Record<string, {
   amount?: number;        // used for coins / diamonds
   bonusDiamonds?: number; // extra diamonds granted alongside autoIncome (requires client v0.9.3.6+)
   desc: string;
-  maxUses?: number;  // omit = unlimited
-  expires?: string;  // ISO date string
+  maxUses?: number;   // omit = unlimited; enforced via pa_codes_used count
+  targetUid?: string; // if set, only this Firebase uid may redeem the code
+  expires?: string;   // ISO date string
 }> = {
   'REVIEW':         { rewardType: 'autoIncome',                                desc: '1h automation income — thank you for the review!' },
   'LAUNCH':         { rewardType: 'coins',    amount: 500,                     desc: 'Launch celebration gift!' },
   'PEARLS5':        { rewardType: 'diamonds', amount: 5,                       desc: '5 Black Pearls gift!' },
   'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,                      desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
   '300':            { rewardType: 'autoIncome', bonusDiamonds: 10,             desc: '1h automation income + 10 Diamonds. Enjoy!' },
+  'KW9F4T2M':       { rewardType: 'diamonds', amount: 2500, maxUses: 1,        desc: 'Captain\'s Vault recovery — 2500 Diamonds.' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2374,8 +2376,18 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     return res.json({ ok: false, error: 'invalid_code' });
   if (entry.expires && new Date() > new Date(entry.expires))
     return res.json({ ok: false, error: 'expired' });
+  // targetUid: code is locked to a specific player — others see invalid_code
+  if (entry.targetUid && entry.targetUid !== uid)
+    return res.json({ ok: false, error: 'invalid_code' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'server_error' });
+
+  // maxUses: check total redemption count before allowing
+  if (entry.maxUses != null) {
+    const rows = await query(`SELECT COUNT(*)::INT AS n FROM pa_codes_used WHERE code = $1`, [code]);
+    const used = rows?.[0]?.n ?? 0;
+    if (used >= entry.maxUses) return res.json({ ok: false, error: 'invalid_code' });
+  }
 
   const result = await checkAndRecordPARedeem(uid, code);
   if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
