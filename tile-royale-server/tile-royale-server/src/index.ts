@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -2129,26 +2129,87 @@ gameServer.define("gauntlet", GauntletRoom)
 
 // ─── Patient Angler Anti-cheat ────────────────────────────────────────────────
 
-const PA_MAX_COIN_RATE    = 60000; // coins per second max (fleet-level income)
-const PA_MAX_DIAMOND_BURST = 1500; // max diamonds gained between saves
+const PA_MAX_COIN_RATE             = 100_000_000_000_000; // 100T coins/s — no practical cap for any zone
+const PA_MAX_DIAMOND_BURST         = 1500;                 // max diamonds gained between saves
+const PA_MAX_BLACK_PEARL_BURST     = 10000;                // max black pearls gained between saves
+const PA_MAX_BOBBER_TIER           = 15;                   // absolute max tier per bobber
+const PA_MAX_BOBBER_BURST          = 5;                    // max tiers gained per bobber per save
+const PA_MAX_PRESTIGE_BURST        = 3;                    // max prestiges per save
+const PA_PEARL_UPGRADE_TOTAL_BURST = 20;                   // max total upgrade levels gained per save
 const PA_ZONE_ORDER = ['pond','river','lake','bay','sea','ocean','abyss'];
+const PA_BOBBER_IDS = ['basic_bobber','sensitive_bobber','heavy_bobber','electronic_bobber'];
+const PA_PEARL_UPGRADE_MAXLEVEL: Record<string, number> = {
+  masterangler:   4,
+  ghostbusters:  50,
+  ghostwhisperer: 15,
+};
 
-function validatePASave(prev: any, next: any): { ok: boolean; reason?: string } {
-  if (!prev) return { ok: true };
+async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: boolean; reason?: string }> {
+  // ── Absolute caps (apply to every save, including the first) ─────────────────
+
+  // Zone must be a known value
+  if (next.currentZone && !PA_ZONE_ORDER.includes(next.currentZone))
+    return { ok: false, reason: `invalid_zone:${next.currentZone}` };
+
+  // Bobber tiers can't exceed the game's physical maximum
+  for (const bid of PA_BOBBER_IDS) {
+    if (((next.bobberTiers || {})[bid] || 0) > PA_MAX_BOBBER_TIER)
+      return { ok: false, reason: `bobber_cap:${bid}=${(next.bobberTiers || {})[bid]}` };
+  }
+
+  // Pearl upgrades with hard maxLevel in-game
+  for (const [id, max] of Object.entries(PA_PEARL_UPGRADE_MAXLEVEL)) {
+    if (((next.pearlUpgrades || {})[id] || 0) > max)
+      return { ok: false, reason: `upgrade_cap:${id}=${(next.pearlUpgrades || {})[id]}>max${max}` };
+  }
+
+  // ── First save: enforce a clean initial state ─────────────────────────────
+  if (!prev) {
+    if ((next.coins || 0) > 50000)
+      return { ok: false, reason: `first_save_coins:${next.coins}` };
+    if ((next.blackPearls || 0) > 0)
+      return { ok: false, reason: `first_save_pearls:${next.blackPearls}` };
+    return { ok: true };
+  }
+
+  // ── Burst checks (require a previous save to compare against) ────────────
   const timeDiff = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
 
-  // Anti-cheat: coin generation rate
+  // Coin generation rate
   const coinDiff = (next.coins || 0) - (prev.coins || 0);
   if (coinDiff > timeDiff * PA_MAX_COIN_RATE)
     return { ok: false, reason: `coin_rate:${Math.round(coinDiff / timeDiff)}/s` };
 
-  // Anti-cheat: diamond burst
+  // Diamond burst
   const diaGain = (next.diamonds || 0) - (prev.diamonds || 0);
   if (diaGain > PA_MAX_DIAMOND_BURST + timeDiff * 0.5)
     return { ok: false, reason: `diamond_burst:${diaGain}` };
 
-  // Regression detection: block a lower-progress state from overwriting a real save.
-  // This catches reinstall/fresh-state overwrites that slip past client-side guards.
+  // Black pearl burst
+  const pearlGain = (next.blackPearls || 0) - (prev.blackPearls || 0);
+  if (pearlGain > PA_MAX_BLACK_PEARL_BURST)
+    return { ok: false, reason: `pearl_burst:${pearlGain}` };
+
+  // Bobber tier burst per bobber
+  for (const bid of PA_BOBBER_IDS) {
+    const gain = ((next.bobberTiers || {})[bid] || 0) - ((prev.bobberTiers || {})[bid] || 0);
+    if (gain > PA_MAX_BOBBER_BURST)
+      return { ok: false, reason: `bobber_burst:${bid}+${gain}` };
+  }
+
+  // Pearl upgrade total level burst (all upgrades combined)
+  const prevUpgradeTotal = Object.values(prev.pearlUpgrades || {}).reduce((a: number, v: any) => a + (Number(v) || 0), 0);
+  const nextUpgradeTotal = Object.values(next.pearlUpgrades || {}).reduce((a: number, v: any) => a + (Number(v) || 0), 0);
+  if (nextUpgradeTotal - prevUpgradeTotal > PA_PEARL_UPGRADE_TOTAL_BURST)
+    return { ok: false, reason: `upgrade_burst:+${nextUpgradeTotal - prevUpgradeTotal}` };
+
+  // Prestige burst
+  const prestigeDiff = (next.prestigeCount || 0) - (prev.prestigeCount || 0);
+  if (prestigeDiff > PA_MAX_PRESTIGE_BURST)
+    return { ok: false, reason: `prestige_burst:+${prestigeDiff}` };
+
+  // ── Regression detection ──────────────────────────────────────────────────
+  // Blocks a lower-progress state from overwriting a real save (reinstall / fresh-state exploit).
   const prevLife = (prev.stats?.lifeCoinsEarned || 0) + (prev.coins || 0);
   const nextLife = (next.stats?.lifeCoinsEarned || 0) + (next.coins || 0);
   const prevZone = PA_ZONE_ORDER.indexOf(prev.stats?.recHighestZone || prev.currentZone || 'pond');
@@ -2168,16 +2229,54 @@ function validatePASave(prev: any, next: any): { ok: boolean; reason?: string } 
   if (prevLife > 10000 && nextLife < prevLife / 100)
     return { ok: false, reason: `coin_regression:${prevLife}->${nextLife}` };
 
+  // ── Non-consumable fraud check ────────────────────────────────────────────
+  // If a non-consumable flag flipped false→true without a verified purchase receipt, reject.
+  const NC_FIELDS: Record<string, string> = {
+    removeAds:         'remove_ads',
+    autoSellPermanent: 'permanent_autoseller',
+    devSupportOwned:   'dev_support_package',
+  };
+  for (const [field, productId] of Object.entries(NC_FIELDS)) {
+    if (!prev[field] && next[field]) {
+      const verified = await getPAVerifiedProductIds(uid);
+      if (!verified.has(productId)) {
+        console.warn(`[PA] NC fraud uid=${uid}: ${field} set true without receipt for ${productId}`);
+        return { ok: false, reason: `nc_fraud:${field}` };
+      }
+    }
+  }
+
   return { ok: true };
 }
 
-app.post("/pa/save", express.json({ limit: "500kb" }), async (req, res) => {
-  const { uid, save } = req.body;
-  if (!uid || !save || typeof save !== "object")
+// ── Firebase token verification middleware for PA endpoints ──────────────────
+// Reads Authorization: Bearer <token>, verifies with Firebase Admin, and sets
+// res.locals.paUid to the authenticated uid. Rejects with 401/503 on failure.
+async function verifyPAToken(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!_fcmReady) {
+    return res.status(503).json({ ok: false, error: 'auth_unavailable' });
+  }
+  const header = req.headers['authorization'];
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ ok: false, error: 'missing_token' });
+  }
+  try {
+    const decoded = await firebaseAdmin.auth().verifyIdToken(header.slice(7));
+    res.locals.paUid = decoded.uid;
+    next();
+  } catch {
+    return res.status(401).json({ ok: false, error: 'invalid_token' });
+  }
+}
+
+app.post("/pa/save", verifyPAToken, express.json({ limit: "500kb" }), async (req, res) => {
+  const uid  = res.locals.paUid as string; // uid from verified token — never trust body
+  const { save } = req.body;
+  if (!save || typeof save !== "object")
     return res.status(400).json({ ok: false, error: "invalid_request" });
   const prev      = await loadPASave(uid);
   const prevData  = prev ? JSON.parse(prev.saveJson) : null;
-  const check     = validatePASave(prevData, save);
+  const check     = await validatePASave(prevData, save, uid);
   if (!check.ok) {
     console.warn(`[PA] Anti-cheat triggered uid=${uid}: ${check.reason}`);
     return res.status(400).json({ ok: false, error: "validation_failed", reason: check.reason });
@@ -2186,9 +2285,8 @@ app.post("/pa/save", express.json({ limit: "500kb" }), async (req, res) => {
   res.json({ ok });
 });
 
-app.get("/pa/load/:uid", async (req, res) => {
-  const { uid } = req.params;
-  if (!uid) return res.status(400).json({ ok: false });
+app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string; // uid from token — ignores URL param
   const data = await loadPASave(uid);
   if (!data) return res.json({ ok: true, save: null });
   res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt });
@@ -2328,14 +2426,14 @@ async function verifyWithGooglePlayPA(productId: string, purchaseToken: string):
   }
 }
 
-// POST /pa/iap/verify  { uid, productId, purchaseToken, orderId? }
+// POST /pa/iap/verify  { productId, purchaseToken, orderId? }
 // Verifies purchase with Google Play, records token (idempotent), returns grant payload.
 // Client applies the grant only after receiving { ok: true }.
-app.post("/pa/iap/verify", express.json(), async (req, res) => {
-  const { uid, productId, purchaseToken, orderId = '' } = req.body;
+// uid is taken from the verified Firebase token — never trusted from body.
+app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { productId, purchaseToken, orderId = '' } = req.body;
 
-  if (!uid || typeof uid !== 'string' || uid.length < 4)
-    return res.json({ ok: false, error: 'missing_uid' });
   if (!productId || typeof productId !== 'string')
     return res.json({ ok: false, error: 'invalid_product' });
   if (!purchaseToken || typeof purchaseToken !== 'string' || purchaseToken.length < 10)
@@ -2410,6 +2508,17 @@ app.get('/admin/pa/recover-by-email', paAdminMiddleware, async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// GET /admin/pa/export-saves — full export of all PA saves as JSON (for external backup)
+app.get('/admin/pa/export-saves', requireAdmin, async (_req, res) => {
+  if (!getDbStatus().available) return res.status(503).json({ error: 'db_unavailable' });
+  const saves = await exportAllPASaves();
+  if (!saves) return res.status(500).json({ error: 'export_failed' });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="pa-saves-${ts}.json"`);
+  res.send(JSON.stringify({ exportedAt: new Date().toISOString(), count: saves.length, saves }, null, 2));
 });
 
 // Manual save restore for a specific uid (admin only)

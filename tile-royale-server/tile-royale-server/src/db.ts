@@ -1595,6 +1595,16 @@ export async function loadPASave(uid: string): Promise<{ saveJson: string; updat
   return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
 }
 
+export async function exportAllPASaves(): Promise<Array<{ uid: string; save: any; updatedAt: string }> | null> {
+  const rows = await query(`SELECT uid, save_json, updated_at FROM pa_save_data ORDER BY updated_at DESC`);
+  if (!rows) return null;
+  return rows.map((r: any) => ({
+    uid:       r.uid,
+    save:      JSON.parse(r.save_json),
+    updatedAt: r.updated_at,
+  }));
+}
+
 // ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
 
 export async function checkAndRecordPARedeem(
@@ -2014,6 +2024,16 @@ export async function getPurchaseReceipt(purchaseToken: string): Promise<string 
 // PA UIDs are Firebase UIDs (distinct from TR player IDs) so there's no collision risk.
 export const recordPAPurchaseReceipt = recordPurchaseReceipt;
 export const getPAPurchaseReceipt    = getPurchaseReceipt;
+
+// Returns the set of product IDs that have been verified and granted for a given PA uid.
+// Used by validatePASave to detect non-consumable flags set without a real purchase.
+export async function getPAVerifiedProductIds(uid: string): Promise<Set<string>> {
+  const rows = await query(
+    `SELECT product_id FROM purchase_receipts WHERE player_id = $1`,
+    [uid]
+  );
+  return new Set((rows || []).map((r: any) => r.product_id as string));
+}
 
 // Returns all processed purchase tokens for a player (used by restore to skip already-granted items).
 export async function getProcessedTokens(playerId: string): Promise<Set<string>> {
