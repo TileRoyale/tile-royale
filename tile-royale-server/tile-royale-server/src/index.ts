@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -2300,6 +2300,42 @@ const PA_MIN_CLIENT_VERSION = "v0.1.5";
 const PA_LATEST_VERSION     = "v0.9.4.3";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
+});
+
+// ─── Patient Angler Remote Config ─────────────────────────────────────────────
+
+const PA_CONFIG_DEFAULTS: Record<string, unknown> = {
+  defaultFontScale:          100,   // applied to players who haven't customised font size
+  defaultBobberScale:        100,   // applied to players who haven't customised bobber size
+  fishSellMult:              1.0,   // global sell multiplier on top of all other bonuses
+  specialEventIntervalMin:   15,    // minutes between special events (min)
+  specialEventIntervalMax:   30,    // minutes between special events (max)
+  competitionEnabled:        true,
+  ghostShipEnabled:          true,
+  motd:                      null,  // string shown as a banner, null = no banner
+  motdType:                  'info' // 'info' | 'event' | 'warning'
+};
+
+// Public — clients poll this on every launch
+app.get("/pa/config", async (_req, res) => {
+  try {
+    const stored = await getPARemoteConfig();
+    res.json({ ...PA_CONFIG_DEFAULTS, ...stored });
+  } catch {
+    res.json(PA_CONFIG_DEFAULTS);
+  }
+});
+
+// Admin — update config values (partial update: existing keys not in body are kept)
+app.post("/admin/pa/config", requireAdmin, async (req, res) => {
+  try {
+    const current = await getPARemoteConfig();
+    const merged  = { ...current, ...req.body };
+    await setPARemoteConfig(merged);
+    res.json({ ok: true, config: { ...PA_CONFIG_DEFAULTS, ...merged } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
 });
 
 // ─── Patient Angler Redeem Codes ──────────────────────────────────────────────

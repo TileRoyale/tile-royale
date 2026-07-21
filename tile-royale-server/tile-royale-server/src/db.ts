@@ -478,6 +478,13 @@ async function createTables(): Promise<void> {
       gem_reward INTEGER      NOT NULL DEFAULT 0,
       claimed_at TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Patient Angler remote config: single-row key/value store
+    CREATE TABLE IF NOT EXISTS pa_remote_config (
+      key        TEXT         PRIMARY KEY,
+      value      JSONB        NOT NULL,
+      updated_at TIMESTAMPTZ  DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -2720,4 +2727,26 @@ export async function getPlayerGameStats(playerId: string): Promise<{
     console.error('[DB] getPlayerGameStats error:', err);
     return null;
   }
+}
+
+// ─── Patient Angler Remote Config ─────────────────────────────────────────────
+
+export async function getPARemoteConfig(): Promise<Record<string, unknown>> {
+  if (!pool) return {};
+  try {
+    const res = await pool.query("SELECT value FROM pa_remote_config WHERE key = 'config'");
+    return (res.rows[0]?.value as Record<string, unknown>) || {};
+  } catch {
+    return {};
+  }
+}
+
+export async function setPARemoteConfig(config: Record<string, unknown>): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO pa_remote_config (key, value, updated_at)
+     VALUES ('config', $1, now())
+     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()`,
+    [JSON.stringify(config)]
+  );
 }
