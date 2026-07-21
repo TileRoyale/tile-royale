@@ -2590,6 +2590,32 @@ app.get('/admin/pa/save-history/:uid', paAdminMiddleware, async (req, res) => {
   res.json({ uid, count: history.length, history: summary });
 });
 
+// POST /admin/pa/grant-diamonds  { uid, diamonds, reason }
+// Manually adds diamonds to a player's save (for support cases where purchase
+// was charged by Google Play but server verify failed due to network error).
+app.post('/admin/pa/grant-diamonds', paAdminMiddleware, express.json(), async (req, res) => {
+  const { uid, diamonds, reason = '' } = req.body;
+  if (!uid || typeof uid !== 'string') { res.status(400).json({ error: 'missing uid' }); return; }
+  const amount = parseInt(diamonds, 10);
+  if (!amount || amount < 1 || amount > 100000) { res.status(400).json({ error: 'invalid diamonds (1–100000)' }); return; }
+
+  const existing = await loadPASave(uid);
+  if (!existing) { res.status(404).json({ error: 'player not found' }); return; }
+
+  let save: any;
+  try { save = JSON.parse(existing.saveJson); } catch { res.status(500).json({ error: 'save parse error' }); return; }
+
+  const before = save.diamonds || 0;
+  save.diamonds = before + amount;
+  save._savedAt = Date.now();
+
+  const ok = await savePASave(uid, JSON.stringify(save));
+  if (!ok) { res.status(500).json({ error: 'db write failed' }); return; }
+
+  console.log(`[PA Admin] grant-diamonds: +${amount} to ${uid} (${before}→${save.diamonds}) reason="${reason}"`);
+  res.json({ ok: true, uid, before, after: save.diamonds, granted: amount });
+});
+
 app.get('/admin/pa/find-by-bobber', paAdminMiddleware, async (req, res) => {
   const bobberId = (req.query.id as string) || 'bc_worm';
   const rows = await query(
