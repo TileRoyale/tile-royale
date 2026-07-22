@@ -2254,6 +2254,27 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
 // ── Firebase token verification middleware for PA endpoints ──────────────────
 // Reads Authorization: Bearer <token>, verifies with Firebase Admin, and sets
 // res.locals.paUid to the authenticated uid. Rejects with 401/503 on failure.
+// Supports two token formats:
+//   "gcred:<google_oauth_id_token>" — fallback for devices where Firebase token delivery is broken
+//   "<firebase_id_token>"           — standard Firebase auth token
+
+// Cache for Google credential → Firebase UID mapping (avoids hitting tokeninfo on every request)
+const _gcredCache = new Map<string, { uid: string; exp: number }>();
+
+async function _verifyGoogleCred(googleToken: string): Promise<string> {
+  const cacheKey = googleToken.slice(-32);
+  const cached   = _gcredCache.get(cacheKey);
+  if (cached && Date.now() < cached.exp) return cached.uid;
+
+  const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(googleToken)}`);
+  const info  = await resp.json() as { sub?: string; error_description?: string };
+  if (!info.sub) throw new Error('invalid_google_token');
+
+  const fbUser = await firebaseAdmin.auth().getUserByProviderUid('google.com', info.sub);
+  _gcredCache.set(cacheKey, { uid: fbUser.uid, exp: Date.now() + 55 * 60 * 1000 });
+  return fbUser.uid;
+}
+
 async function verifyPAToken(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!_fcmReady) {
     return res.status(503).json({ ok: false, error: 'auth_unavailable' });
@@ -2262,9 +2283,14 @@ async function verifyPAToken(req: express.Request, res: express.Response, next: 
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ ok: false, error: 'missing_token' });
   }
+  const rawToken = header.slice(7);
   try {
-    const decoded = await firebaseAdmin.auth().verifyIdToken(header.slice(7));
-    res.locals.paUid = decoded.uid;
+    if (rawToken.startsWith('gcred:')) {
+      res.locals.paUid = await _verifyGoogleCred(rawToken.slice(6));
+    } else {
+      const decoded = await firebaseAdmin.auth().verifyIdToken(rawToken);
+      res.locals.paUid = decoded.uid;
+    }
     next();
   } catch {
     return res.status(401).json({ ok: false, error: 'invalid_token' });
