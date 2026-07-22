@@ -2345,7 +2345,7 @@ app.post("/admin/pa/config", requireAdmin, async (req, res) => {
 // For 'autoIncome': server marks as used, client computes 1h automation income locally.
 
 const PA_REDEEM_CODES: Record<string, {
-  rewardType: 'coins' | 'diamonds' | 'autoIncome';
+  rewardType: 'coins' | 'diamonds' | 'autoIncome' | 'save_restore';
   amount?: number;        // used for coins / diamonds
   bonusDiamonds?: number; // extra diamonds granted alongside autoIncome (requires client v0.9.3.6+)
   desc: string;
