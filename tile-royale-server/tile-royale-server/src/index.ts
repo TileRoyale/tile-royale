@@ -2358,6 +2358,7 @@ const PA_REDEEM_CODES: Record<string, {
   'PEARLS5':        { rewardType: 'diamonds', amount: 5,                       desc: '5 Black Pearls gift!' },
   'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,                      desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
   '300':            { rewardType: 'autoIncome', bonusDiamonds: 10,             desc: '1h automation income + 10 Diamonds. Enjoy!' },
+  'RCV48C16ECF':    { rewardType: 'save_restore', maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: 'Save restored!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2391,6 +2392,12 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   const result = await checkAndRecordPARedeem(uid, code);
   if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
   if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
+
+  if (entry.rewardType === 'save_restore') {
+    const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+    if (!rows || rows.length === 0) return res.json({ ok: false, error: 'no_save_found' });
+    return res.json({ ok: true, desc: entry.desc, reward: { rewardType: 'save_restore', save: rows[0].save_json } });
+  }
 
   const reward: Record<string, any> = { rewardType: entry.rewardType };
   if (entry.amount != null) reward.amount = entry.amount;
