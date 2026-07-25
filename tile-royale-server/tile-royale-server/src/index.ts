@@ -25,7 +25,7 @@ const SOLO_GEM_REWARDS: Record<number, number> = {
   910:50,920:50,930:50,940:50,950:200,960:50,970:50,980:50,990:50,1000:600,
 };
 
-// ─── Firebase Cloud Messaging ─────────────────────────────────────────────────
+// ─── Firebase Cloud Messaging (TileRoyale) ────────────────────────────────────
 // Set FIREBASE_SERVICE_ACCOUNT env var to the JSON content of a Firebase
 // service account key (from Firebase Console → Project Settings → Service Accounts).
 // When the var is absent the server runs normally but push notifications are skipped.
@@ -47,6 +47,32 @@ let _fcmReady = false;
     console.log('[FCM] ✅ Firebase Admin initialized');
   } catch(e: any) {
     console.error('[FCM] Failed to initialize Firebase Admin:', e?.message);
+  }
+})();
+
+// ─── Patient Angler Firebase Auth (separate project: patient-angler-fa70f) ────
+// Set PA_FIREBASE_SERVICE_ACCOUNT env var to the Patient Angler project service account.
+
+let _paFirebaseAuth: firebaseAdmin.auth.Auth | null = null;
+
+(function initPAFirebase() {
+  const envVal = (process.env.PA_FIREBASE_SERVICE_ACCOUNT || '').trim();
+  if (!envVal) {
+    console.log('[PA Firebase] PA_FIREBASE_SERVICE_ACCOUNT not set — PA auth unavailable');
+    return;
+  }
+  try {
+    // Value may be raw JSON (starts with {) or base64-encoded JSON
+    const raw = envVal.startsWith('{') ? envVal : Buffer.from(envVal, 'base64').toString('utf8');
+    const serviceAccount = JSON.parse(raw);
+    const app = firebaseAdmin.initializeApp(
+      { credential: firebaseAdmin.credential.cert(serviceAccount) },
+      'patient-angler'
+    );
+    _paFirebaseAuth = app.auth();
+    console.log('[PA Firebase] ✅ Patient Angler Firebase Admin initialized');
+  } catch(e: any) {
+    console.error('[PA Firebase] Failed:', e?.message);
   }
 })();
 
@@ -2267,16 +2293,26 @@ async function _verifyGoogleCred(googleToken: string): Promise<string> {
   if (cached && Date.now() < cached.exp) return cached.uid;
 
   const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(googleToken)}`);
-  const info  = await resp.json() as { sub?: string; error_description?: string };
-  if (!info.sub) throw new Error('invalid_google_token');
+  const info  = await resp.json() as { sub?: string; email?: string; error_description?: string };
+  if (!info.sub) throw new Error(`invalid_google_token: ${info.error_description}`);
 
-  const fbUser = await firebaseAdmin.auth().getUserByProviderUid('google.com', info.sub);
-  _gcredCache.set(cacheKey, { uid: fbUser.uid, exp: Date.now() + 55 * 60 * 1000 });
-  return fbUser.uid;
+  const auth = _paFirebaseAuth!;
+  let uid: string;
+  try {
+    const fbUser = await auth.getUserByProviderUid('google.com', info.sub);
+    uid = fbUser.uid;
+  } catch {
+    if (!info.email) throw new Error('no_email_fallback');
+    const fbUser = await auth.getUserByEmail(info.email);
+    uid = fbUser.uid;
+  }
+
+  _gcredCache.set(cacheKey, { uid, exp: Date.now() + 55 * 60 * 1000 });
+  return uid;
 }
 
 async function verifyPAToken(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (!_fcmReady) {
+  if (!_paFirebaseAuth) {
     return res.status(503).json({ ok: false, error: 'auth_unavailable' });
   }
   const header = req.headers['authorization'];
@@ -2288,11 +2324,12 @@ async function verifyPAToken(req: express.Request, res: express.Response, next: 
     if (rawToken.startsWith('gcred:')) {
       res.locals.paUid = await _verifyGoogleCred(rawToken.slice(6));
     } else {
-      const decoded = await firebaseAdmin.auth().verifyIdToken(rawToken);
+      const decoded = await _paFirebaseAuth.verifyIdToken(rawToken);
       res.locals.paUid = decoded.uid;
     }
     next();
-  } catch {
+  } catch (err: any) {
+    console.error('[PA] verifyPAToken failed:', err?.code || err?.message);
     return res.status(401).json({ ok: false, error: 'invalid_token' });
   }
 }
@@ -2323,7 +2360,7 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.9.5.0";
+const PA_LATEST_VERSION     = "v0.9.5.23";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2386,6 +2423,9 @@ const PA_REDEEM_CODES: Record<string, {
   '300':            { rewardType: 'autoIncome', bonusDiamonds: 10,             desc: '1h automation income + 10 Diamonds. Enjoy!' },
   'RCV48C16ECF':    { rewardType: 'save_restore', maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: 'Save restored!' },
   'RCV80F29BKT':    { rewardType: 'save_restore', maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: 'Save restored!' },
+  'CLOUDFIX':       { rewardType: 'autoIncome', amount: 48, bonusDiamonds: 50, expires: '2026-07-23T18:05:00Z', desc: 'Sorry for the cloud save issues — 48h automation income + 50 Diamonds!' },
+  'FIVE00':         { rewardType: 'diamonds', amount: 20, desc: 'Feel good gift — 20 Diamonds!' },
+  '4NANNA':         { rewardType: 'diamonds', amount: 100, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: 'Extra sorry — 100 Diamonds for you!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2429,7 +2469,8 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   }
 
   const reward: Record<string, any> = { rewardType: entry.rewardType };
-  if (entry.amount != null) reward.amount = entry.amount;
+  if (entry.amount        != null) reward.amount        = entry.amount;
+  if (entry.bonusDiamonds != null) reward.bonusDiamonds = entry.bonusDiamonds;
 
   res.json({ ok: true, desc: entry.desc, reward });
 });
