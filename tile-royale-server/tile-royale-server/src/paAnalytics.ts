@@ -711,7 +711,8 @@ export async function handleAdminSummary(_req: Request, res: Response): Promise<
         COUNT(*) FILTER (WHERE last_seen >= $1::timestamptz) AS today,
         COUNT(*) FILTER (WHERE last_seen >= $2::timestamptz) AS last7,
         COUNT(*) FILTER (WHERE last_seen >= $3::timestamptz) AS last30,
-        COUNT(*) FILTER (WHERE DATE(created_at) >= $4::date - INTERVAL '7 days') AS new7
+        COUNT(*) FILTER (WHERE DATE(created_at) >= $4::date - INTERVAL '7 days')  AS new7,
+        COUNT(*) FILTER (WHERE DATE(created_at) >= $4::date - INTERVAL '30 days') AS new30
       FROM pa_player_progress
     `, [d1, d7, d30, today]) || [{}],
     query(`
@@ -726,24 +727,27 @@ export async function handleAdminSummary(_req: Request, res: Response): Promise<
 
   const t = totals || {};
   const a = activity || {};
-  const total = Number(t.total_players) || 0;
+  const totalRaw = Number(t.total_players_raw) || 0;
+  const totalVerified = Number(t.total_players) || 0;
   res.json({
-    totalPlayers: total,
-    totalPlayersRaw: Number(t.total_players_raw) || 0,
+    totalPlayers: totalRaw,
+    totalPlayersVerified: totalVerified,
+    totalPlayersRaw: totalRaw,
     activeToday: Number(a.today) || 0,
     activeLast7: Number(a.last7) || 0,
     activeLast30: Number(a.last30) || 0,
     newLast7: Number(a.new7) || 0,
+    newLast30: Number(a.new30) || 0,
     avgCompletion: Number(t.avg_completion)?.toFixed(1),
     medianCompletion: Number(t.median_completion)?.toFixed(1),
     avgFishdex: Number(t.avg_fishdex)?.toFixed(1),
     medianFishdex: Number(t.median_fishdex)?.toFixed(1),
     avgMastery: Number(t.avg_mastery)?.toFixed(1),
     avgPrestige: Number(t.avg_prestige)?.toFixed(2),
-    prestigePercent: total ? ((Number(t.prestige_players)/total)*100).toFixed(1) : '0',
-    oceanPercent: total ? ((Number(t.ocean_players)/total)*100).toFixed(1) : '0',
-    autoDexCompletePercent: total ? ((Number(t.auto_dex_complete)/total)*100).toFixed(1) : '0',
-    manualDexCompletePercent: total ? ((Number(t.manual_dex_complete)/total)*100).toFixed(1) : '0',
+    prestigePercent: totalVerified ? ((Number(t.prestige_players)/totalVerified)*100).toFixed(1) : '0',
+    oceanPercent: totalVerified ? ((Number(t.ocean_players)/totalVerified)*100).toFixed(1) : '0',
+    autoDexCompletePercent: totalVerified ? ((Number(t.auto_dex_complete)/totalVerified)*100).toFixed(1) : '0',
+    manualDexCompletePercent: totalVerified ? ((Number(t.manual_dex_complete)/totalVerified)*100).toFixed(1) : '0',
     highestCompletion: Number(t.highest_completion)?.toFixed(1),
     highestIncome: Number(t.highest_income),
     highestFishRate: Number(t.highest_fish_rate)?.toFixed(2),
@@ -1084,11 +1088,12 @@ canvas{width:100%!important;height:120px!important}
 </div>
 <div class="main">
   <div class="cards" id="summary-cards">
-    <div class="card"><div class="val" id="s-total">—</div><div class="lbl">Total Players</div></div>
+    <div class="card"><div class="val" id="s-verified">—</div><div class="lbl">Total Players</div></div>
     <div class="card good"><div class="val" id="s-today">—</div><div class="lbl">Active Today</div></div>
     <div class="card"><div class="val" id="s-7d">—</div><div class="lbl">Active 7d</div></div>
     <div class="card"><div class="val" id="s-30d">—</div><div class="lbl">Active 30d</div></div>
     <div class="card"><div class="val" id="s-new7">—</div><div class="lbl">New 7d</div></div>
+    <div class="card"><div class="val" id="s-new30">—</div><div class="lbl">New 30d</div></div>
     <div class="card"><div class="val" id="s-avg-comp">—</div><div class="lbl">Avg Completion</div></div>
     <div class="card"><div class="val" id="s-med-comp">—</div><div class="lbl">Median Completion</div></div>
     <div class="card"><div class="val" id="s-avg-dex">—</div><div class="lbl">Avg Fishdex</div></div>
@@ -1238,11 +1243,12 @@ async function apiGet(path) {
 async function loadSummary() {
   try {
     const d = await apiGet('summary');
-    document.getElementById('s-total').textContent = d.totalPlayers;
+    document.getElementById('s-verified').textContent = d.totalPlayersVerified;
     document.getElementById('s-today').textContent = d.activeToday;
     document.getElementById('s-7d').textContent = d.activeLast7;
     document.getElementById('s-30d').textContent = d.activeLast30;
     document.getElementById('s-new7').textContent = d.newLast7;
+    document.getElementById('s-new30').textContent = d.newLast30;
     document.getElementById('s-avg-comp').textContent = (d.avgCompletion||'0')+'%';
     document.getElementById('s-med-comp').textContent = (d.medianCompletion||'0')+'%';
     document.getElementById('s-avg-dex').textContent = (d.avgFishdex||'0')+'%';
@@ -1252,7 +1258,7 @@ async function loadSummary() {
     document.getElementById('s-ocean-pct').textContent = (d.oceanPercent||'0')+'%';
     document.getElementById('s-auto-dex').textContent = (d.autoDexCompletePercent||'0')+'%';
     document.getElementById('s-version').textContent = d.latestVersion||'—';
-    document.getElementById('player-count').textContent = d.totalPlayers + ' players';
+    document.getElementById('player-count').textContent = d.totalPlayersVerified + ' players';
     document.getElementById('last-refresh').textContent = 'Refreshed ' + new Date().toLocaleTimeString();
   } catch(e) { console.warn('Summary load failed', e); }
 }
