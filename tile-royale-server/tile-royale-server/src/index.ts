@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, checkAndRecordPARedeem } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -25,7 +25,7 @@ const SOLO_GEM_REWARDS: Record<number, number> = {
   910:50,920:50,930:50,940:50,950:200,960:50,970:50,980:50,990:50,1000:600,
 };
 
-// ─── Firebase Cloud Messaging ─────────────────────────────────────────────────
+// ─── Firebase Cloud Messaging (TileRoyale) ────────────────────────────────────
 // Set FIREBASE_SERVICE_ACCOUNT env var to the JSON content of a Firebase
 // service account key (from Firebase Console → Project Settings → Service Accounts).
 // When the var is absent the server runs normally but push notifications are skipped.
@@ -47,6 +47,32 @@ let _fcmReady = false;
     console.log('[FCM] ✅ Firebase Admin initialized');
   } catch(e: any) {
     console.error('[FCM] Failed to initialize Firebase Admin:', e?.message);
+  }
+})();
+
+// ─── Patient Angler Firebase Auth (separate project: patient-angler-fa70f) ────
+// Set PA_FIREBASE_SERVICE_ACCOUNT env var to the Patient Angler project service account.
+
+let _paFirebaseAuth: firebaseAdmin.auth.Auth | null = null;
+
+(function initPAFirebase() {
+  const envVal = (process.env.PA_FIREBASE_SERVICE_ACCOUNT || '').trim();
+  if (!envVal) {
+    console.log('[PA Firebase] PA_FIREBASE_SERVICE_ACCOUNT not set — PA auth unavailable');
+    return;
+  }
+  try {
+    // Value may be raw JSON (starts with {) or base64-encoded JSON
+    const raw = envVal.startsWith('{') ? envVal : Buffer.from(envVal, 'base64').toString('utf8');
+    const serviceAccount = JSON.parse(raw);
+    const app = firebaseAdmin.initializeApp(
+      { credential: firebaseAdmin.credential.cert(serviceAccount) },
+      'patient-angler'
+    );
+    _paFirebaseAuth = app.auth();
+    console.log('[PA Firebase] ✅ Patient Angler Firebase Admin initialized');
+  } catch(e: any) {
+    console.error('[PA Firebase] Failed:', e?.message);
   }
 })();
 
@@ -2129,34 +2155,193 @@ gameServer.define("gauntlet", GauntletRoom)
 
 // ─── Patient Angler Anti-cheat ────────────────────────────────────────────────
 
-const PA_MAX_COIN_RATE    = 60000; // coins per second max (fleet-level income)
-const PA_MAX_DIAMOND_BURST = 1500; // max diamonds gained between saves
+const PA_MAX_COIN_RATE             = 100_000_000_000_000; // 100T coins/s — no practical cap for any zone
+const PA_MAX_DIAMOND_BURST         = 1500;                 // max diamonds gained between saves
+const PA_MAX_BLACK_PEARL_BURST     = 10000;                // max black pearls gained between saves
+const PA_MAX_BOBBER_TIER           = 15;                   // absolute max tier per bobber
+const PA_MAX_BOBBER_BURST          = 5;                    // max tiers gained per bobber per save
+const PA_MAX_PRESTIGE_BURST        = 3;                    // max prestiges per save
+const PA_PEARL_UPGRADE_TOTAL_BURST = 20;                   // max total upgrade levels gained per save
+const PA_ZONE_ORDER = ['pond','river','lake','bay','sea','ocean','abyss'];
+const PA_BOBBER_IDS = ['basic_bobber','sensitive_bobber','heavy_bobber','electronic_bobber'];
+const PA_PEARL_UPGRADE_MAXLEVEL: Record<string, number> = {
+  masterangler:   4,
+  ghostbusters:  50,
+  ghostwhisperer: 15,
+};
 
-function validatePASave(prev: any, next: any): { ok: boolean; reason?: string } {
-  if (!prev) return { ok: true };
-  const timeDiff  = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
-  const coinDiff  = (next.coins    || 0) - (prev.coins    || 0);
+async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: boolean; reason?: string }> {
+  // ── Absolute caps (apply to every save, including the first) ─────────────────
+
+  // Zone must be a known value
+  if (next.currentZone && !PA_ZONE_ORDER.includes(next.currentZone))
+    return { ok: false, reason: `invalid_zone:${next.currentZone}` };
+
+  // Bobber tiers can't exceed the game's physical maximum
+  for (const bid of PA_BOBBER_IDS) {
+    if (((next.bobberTiers || {})[bid] || 0) > PA_MAX_BOBBER_TIER)
+      return { ok: false, reason: `bobber_cap:${bid}=${(next.bobberTiers || {})[bid]}` };
+  }
+
+  // Pearl upgrades with hard maxLevel in-game
+  for (const [id, max] of Object.entries(PA_PEARL_UPGRADE_MAXLEVEL)) {
+    if (((next.pearlUpgrades || {})[id] || 0) > max)
+      return { ok: false, reason: `upgrade_cap:${id}=${(next.pearlUpgrades || {})[id]}>max${max}` };
+  }
+
+  // ── First save: enforce a clean initial state ─────────────────────────────
+  if (!prev) {
+    if ((next.coins || 0) > 50000)
+      return { ok: false, reason: `first_save_coins:${next.coins}` };
+    if ((next.blackPearls || 0) > 0)
+      return { ok: false, reason: `first_save_pearls:${next.blackPearls}` };
+    return { ok: true };
+  }
+
+  // ── Burst checks (require a previous save to compare against) ────────────
+  const timeDiff = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
+
+  // Coin generation rate
+  const coinDiff = (next.coins || 0) - (prev.coins || 0);
   if (coinDiff > timeDiff * PA_MAX_COIN_RATE)
     return { ok: false, reason: `coin_rate:${Math.round(coinDiff / timeDiff)}/s` };
-  const diaGain   = (next.diamonds || 0) - (prev.diamonds || 0);
+
+  // Diamond burst
+  const diaGain = (next.diamonds || 0) - (prev.diamonds || 0);
   if (diaGain > PA_MAX_DIAMOND_BURST + timeDiff * 0.5)
     return { ok: false, reason: `diamond_burst:${diaGain}` };
-  // Block fresh-install default state from overwriting a real save.
-  // A genuine save never has totalFish=0 when the previous save had meaningful coins.
-  const prevCoins = prev.coins || 0;
-  const nextFish  = (next.stats?.totalFish || 0) + (next.stats?.lifeCoinsEarned || 0);
-  if (prevCoins > 500 && nextFish === 0)
-    return { ok: false, reason: 'progress_regression' };
+
+  // Black pearl burst
+  const pearlGain = (next.blackPearls || 0) - (prev.blackPearls || 0);
+  if (pearlGain > PA_MAX_BLACK_PEARL_BURST)
+    return { ok: false, reason: `pearl_burst:${pearlGain}` };
+
+  // Bobber tier burst per bobber
+  for (const bid of PA_BOBBER_IDS) {
+    const gain = ((next.bobberTiers || {})[bid] || 0) - ((prev.bobberTiers || {})[bid] || 0);
+    if (gain > PA_MAX_BOBBER_BURST)
+      return { ok: false, reason: `bobber_burst:${bid}+${gain}` };
+  }
+
+  // Pearl upgrade total level burst (all upgrades combined)
+  let prevUpgradeTotal = 0;
+  let nextUpgradeTotal = 0;
+  for (const v of Object.values(prev.pearlUpgrades || {})) prevUpgradeTotal += Number(v) || 0;
+  for (const v of Object.values(next.pearlUpgrades || {})) nextUpgradeTotal += Number(v) || 0;
+  if (nextUpgradeTotal - prevUpgradeTotal > PA_PEARL_UPGRADE_TOTAL_BURST)
+    return { ok: false, reason: `upgrade_burst:+${nextUpgradeTotal - prevUpgradeTotal}` };
+
+  // Prestige burst
+  const prestigeDiff = (next.prestigeCount || 0) - (prev.prestigeCount || 0);
+  if (prestigeDiff > PA_MAX_PRESTIGE_BURST)
+    return { ok: false, reason: `prestige_burst:+${prestigeDiff}` };
+
+  // ── Regression detection ──────────────────────────────────────────────────
+  // Blocks a lower-progress state from overwriting a real save (reinstall / fresh-state exploit).
+  const prevLife = (prev.stats?.lifeCoinsEarned || 0) + (prev.coins || 0);
+  const nextLife = (next.stats?.lifeCoinsEarned || 0) + (next.coins || 0);
+  const prevZone = PA_ZONE_ORDER.indexOf(prev.stats?.recHighestZone || prev.currentZone || 'pond');
+  const nextZone = PA_ZONE_ORDER.indexOf(next.stats?.recHighestZone || next.currentZone || 'pond');
+  const prevRods = (prev.ownedRods || []).length;
+  const nextRods = (next.ownedRods || []).length;
+
+  // Zone regression: had river+ and now back to pond with almost no coins
+  if (prevZone > 0 && nextZone < prevZone && nextLife < prevLife / 20)
+    return { ok: false, reason: `zone_regression:${prev.stats?.recHighestZone}->${next.stats?.recHighestZone}` };
+
+  // Rod regression: had 3+ rods and now has 1 with almost no coins
+  if (prevRods >= 3 && nextRods <= 1 && nextLife < 1000)
+    return { ok: false, reason: `rod_regression:${prevRods}->${nextRods}` };
+
+  // Coin regression: lifetime coins dropped by 99%+ (reinstall default state)
+  if (prevLife > 10000 && nextLife < prevLife / 100)
+    return { ok: false, reason: `coin_regression:${prevLife}->${nextLife}` };
+
+  // ── Non-consumable fraud check ────────────────────────────────────────────
+  // If a non-consumable flag flipped false→true without a verified purchase receipt, reject.
+  const NC_FIELDS: Record<string, string> = {
+    removeAds:         'remove_ads',
+    autoSellPermanent: 'permanent_autoseller',
+    devSupportOwned:   'dev_support_package',
+  };
+  for (const [field, productId] of Object.entries(NC_FIELDS)) {
+    if (!prev[field] && next[field]) {
+      const verified = await getPAVerifiedProductIds(uid);
+      if (!verified.has(productId)) {
+        console.warn(`[PA] NC fraud uid=${uid}: ${field} set true without receipt for ${productId}`);
+        return { ok: false, reason: `nc_fraud:${field}` };
+      }
+    }
+  }
+
   return { ok: true };
 }
 
-app.post("/pa/save", express.json({ limit: "500kb" }), async (req, res) => {
-  const { uid, save } = req.body;
-  if (!uid || !save || typeof save !== "object")
+// ── Firebase token verification middleware for PA endpoints ──────────────────
+// Reads Authorization: Bearer <token>, verifies with Firebase Admin, and sets
+// res.locals.paUid to the authenticated uid. Rejects with 401/503 on failure.
+// Supports two token formats:
+//   "gcred:<google_oauth_id_token>" — fallback for devices where Firebase token delivery is broken
+//   "<firebase_id_token>"           — standard Firebase auth token
+
+// Cache for Google credential → Firebase UID mapping (avoids hitting tokeninfo on every request)
+const _gcredCache = new Map<string, { uid: string; exp: number }>();
+
+async function _verifyGoogleCred(googleToken: string): Promise<string> {
+  const cacheKey = googleToken.slice(-32);
+  const cached   = _gcredCache.get(cacheKey);
+  if (cached && Date.now() < cached.exp) return cached.uid;
+
+  const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(googleToken)}`);
+  const info  = await resp.json() as { sub?: string; email?: string; error_description?: string };
+  if (!info.sub) throw new Error(`invalid_google_token: ${info.error_description}`);
+
+  const auth = _paFirebaseAuth!;
+  let uid: string;
+  try {
+    const fbUser = await auth.getUserByProviderUid('google.com', info.sub);
+    uid = fbUser.uid;
+  } catch {
+    if (!info.email) throw new Error('no_email_fallback');
+    const fbUser = await auth.getUserByEmail(info.email);
+    uid = fbUser.uid;
+  }
+
+  _gcredCache.set(cacheKey, { uid, exp: Date.now() + 55 * 60 * 1000 });
+  return uid;
+}
+
+async function verifyPAToken(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!_paFirebaseAuth) {
+    return res.status(503).json({ ok: false, error: 'auth_unavailable' });
+  }
+  const header = req.headers['authorization'];
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ ok: false, error: 'missing_token' });
+  }
+  const rawToken = header.slice(7);
+  try {
+    if (rawToken.startsWith('gcred:')) {
+      res.locals.paUid = await _verifyGoogleCred(rawToken.slice(6));
+    } else {
+      const decoded = await _paFirebaseAuth.verifyIdToken(rawToken);
+      res.locals.paUid = decoded.uid;
+    }
+    next();
+  } catch (err: any) {
+    console.error('[PA] verifyPAToken failed:', err?.code || err?.message);
+    return res.status(401).json({ ok: false, error: 'invalid_token' });
+  }
+}
+
+app.post("/pa/save", verifyPAToken, express.json({ limit: "500kb" }), async (req, res) => {
+  const uid  = res.locals.paUid as string; // uid from verified token — never trust body
+  const { save } = req.body;
+  if (!save || typeof save !== "object")
     return res.status(400).json({ ok: false, error: "invalid_request" });
   const prev      = await loadPASave(uid);
   const prevData  = prev ? JSON.parse(prev.saveJson) : null;
-  const check     = validatePASave(prevData, save);
+  const check     = await validatePASave(prevData, save, uid);
   if (!check.ok) {
     console.warn(`[PA] Anti-cheat triggered uid=${uid}: ${check.reason}`);
     return res.status(400).json({ ok: false, error: "validation_failed", reason: check.reason });
@@ -2165,9 +2350,8 @@ app.post("/pa/save", express.json({ limit: "500kb" }), async (req, res) => {
   res.json({ ok });
 });
 
-app.get("/pa/load/:uid", async (req, res) => {
-  const { uid } = req.params;
-  if (!uid) return res.status(400).json({ ok: false });
+app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string; // uid from token — ignores URL param
   const data = await loadPASave(uid);
   if (!data) return res.json({ ok: true, save: null });
   res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt });
@@ -2176,9 +2360,45 @@ app.get("/pa/load/:uid", async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.8.3";
+const PA_LATEST_VERSION     = "v0.9.5.23";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
+});
+
+// ─── Patient Angler Remote Config ─────────────────────────────────────────────
+
+const PA_CONFIG_DEFAULTS: Record<string, unknown> = {
+  defaultFontScale:          100,   // applied to players who haven't customised font size
+  defaultBobberScale:        100,   // applied to players who haven't customised bobber size
+  fishSellMult:              1.0,   // global sell multiplier on top of all other bonuses
+  specialEventIntervalMin:   15,    // minutes between special events (min)
+  specialEventIntervalMax:   30,    // minutes between special events (max)
+  competitionEnabled:        true,
+  ghostShipEnabled:          true,
+  motd:                      null,  // string shown as a banner, null = no banner
+  motdType:                  'info' // 'info' | 'event' | 'warning'
+};
+
+// Public — clients poll this on every launch
+app.get("/pa/config", async (_req, res) => {
+  try {
+    const stored = await getPARemoteConfig();
+    res.json({ ...PA_CONFIG_DEFAULTS, ...stored });
+  } catch {
+    res.json(PA_CONFIG_DEFAULTS);
+  }
+});
+
+// Admin — update config values (partial update: existing keys not in body are kept)
+app.post("/admin/pa/config", requireAdmin, async (req, res) => {
+  try {
+    const current = await getPARemoteConfig();
+    const merged  = { ...current, ...req.body };
+    await setPARemoteConfig(merged);
+    res.json({ ok: true, config: { ...PA_CONFIG_DEFAULTS, ...merged } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
 });
 
 // ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
@@ -2188,16 +2408,24 @@ app.get("/pa/version", (_req, res) => {
 // For 'autoIncome': server marks as used, client computes 1h automation income locally.
 
 const PA_REDEEM_CODES: Record<string, {
-  rewardType: 'coins' | 'diamonds' | 'autoIncome';
-  amount?: number;   // used for coins / diamonds
+  rewardType: 'coins' | 'diamonds' | 'autoIncome' | 'save_restore';
+  amount?: number;        // used for coins / diamonds
+  bonusDiamonds?: number; // extra diamonds granted alongside autoIncome (requires client v0.9.3.6+)
   desc: string;
-  maxUses?: number;  // omit = unlimited
-  expires?: string;  // ISO date string
+  maxUses?: number;   // omit = unlimited; enforced via pa_codes_used count
+  targetUid?: string; // if set, only this Firebase uid may redeem the code
+  expires?: string;   // ISO date string
 }> = {
-  'REVIEW':         { rewardType: 'autoIncome',                  desc: '1h automation income — thank you for the review!' },
-  'LAUNCH':         { rewardType: 'coins',    amount: 500,       desc: 'Launch celebration gift!' },
-  'PEARLS5':        { rewardType: 'diamonds', amount: 5,         desc: '5 Black Pearls gift!' },
-  'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,        desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
+  'REVIEW':         { rewardType: 'autoIncome',                                desc: '1h automation income — thank you for the review!' },
+  'LAUNCH':         { rewardType: 'coins',    amount: 500,                     desc: 'Launch celebration gift!' },
+  'PEARLS5':        { rewardType: 'diamonds', amount: 5,                       desc: '5 Black Pearls gift!' },
+  'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,                      desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
+  '300':            { rewardType: 'autoIncome', bonusDiamonds: 10,             desc: '1h automation income + 10 Diamonds. Enjoy!' },
+  'RCV48C16ECF':    { rewardType: 'save_restore', maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: 'Save restored!' },
+  'RCV80F29BKT':    { rewardType: 'save_restore', maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: 'Save restored!' },
+  'CLOUDFIX':       { rewardType: 'autoIncome', amount: 48, bonusDiamonds: 50, expires: '2026-07-23T18:05:00Z', desc: 'Sorry for the cloud save issues — 48h automation income + 50 Diamonds!' },
+  'FIVE00':         { rewardType: 'diamonds', amount: 20, desc: 'Feel good gift — 20 Diamonds!' },
+  '4NANNA':         { rewardType: 'diamonds', amount: 100, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: 'Extra sorry — 100 Diamonds for you!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2215,15 +2443,34 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     return res.json({ ok: false, error: 'invalid_code' });
   if (entry.expires && new Date() > new Date(entry.expires))
     return res.json({ ok: false, error: 'expired' });
+  // targetUid: code is locked to a specific player — others see invalid_code
+  if (entry.targetUid && entry.targetUid !== uid)
+    return res.json({ ok: false, error: 'invalid_code' });
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'server_error' });
+
+  // maxUses: check total redemption count before allowing
+  if (entry.maxUses != null) {
+    const rows = await query(`SELECT COUNT(*)::INT AS n FROM pa_codes_used WHERE code = $1`, [code]);
+    const used = rows?.[0]?.n ?? 0;
+    if (used >= entry.maxUses) return res.json({ ok: false, error: 'invalid_code' });
+  }
 
   const result = await checkAndRecordPARedeem(uid, code);
   if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
   if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
 
+  if (entry.rewardType === 'save_restore') {
+    const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+    if (!rows || rows.length === 0) return res.json({ ok: false, error: 'no_save_found' });
+    const raw = rows[0].save_json;
+    const saveObj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return res.json({ ok: true, desc: entry.desc, reward: { rewardType: 'save_restore', save: saveObj } });
+  }
+
   const reward: Record<string, any> = { rewardType: entry.rewardType };
-  if (entry.amount != null) reward.amount = entry.amount;
+  if (entry.amount        != null) reward.amount        = entry.amount;
+  if (entry.bonusDiamonds != null) reward.bonusDiamonds = entry.bonusDiamonds;
 
   res.json({ ok: true, desc: entry.desc, reward });
 });
@@ -2266,10 +2513,10 @@ const PA_PACKAGE_NAME = "com.henlygames.patientangler";
 
 // Server-authoritative PA product catalog — must match iap.js DIAMOND_PACK_MAP exactly.
 const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'; diamonds?: number; grant: Record<string, any> }> = {
-  starter:               { type: 'consumable',     diamonds: 80,   grant: { diamonds: 80   } },
-  pouch:                 { type: 'consumable',     diamonds: 200,  grant: { diamonds: 200  } },
-  chest:                 { type: 'consumable',     diamonds: 550,  grant: { diamonds: 550  } },
-  vault:                 { type: 'consumable',     diamonds: 1200, grant: { diamonds: 1200 } },
+  starter:               { type: 'consumable',     diamonds: 200,  grant: { diamonds: 200  } },
+  pouch:                 { type: 'consumable',     diamonds: 400,  grant: { diamonds: 400  } },
+  chest:                 { type: 'consumable',     diamonds: 1100, grant: { diamonds: 1100 } },
+  vault:                 { type: 'consumable',     diamonds: 2500, grant: { diamonds: 2500 } },
   remove_ads:            { type: 'non_consumable',              grant: { removeAds: true } },
   permanent_autoseller:  { type: 'non_consumable',              grant: { permanentAutoSell: true } },
   dev_support_package:   { type: 'non_consumable',              grant: { devSupport: true } },
@@ -2305,14 +2552,14 @@ async function verifyWithGooglePlayPA(productId: string, purchaseToken: string):
   }
 }
 
-// POST /pa/iap/verify  { uid, productId, purchaseToken, orderId? }
+// POST /pa/iap/verify  { productId, purchaseToken, orderId? }
 // Verifies purchase with Google Play, records token (idempotent), returns grant payload.
 // Client applies the grant only after receiving { ok: true }.
-app.post("/pa/iap/verify", express.json(), async (req, res) => {
-  const { uid, productId, purchaseToken, orderId = '' } = req.body;
+// uid is taken from the verified Firebase token — never trusted from body.
+app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { productId, purchaseToken, orderId = '' } = req.body;
 
-  if (!uid || typeof uid !== 'string' || uid.length < 4)
-    return res.json({ ok: false, error: 'missing_uid' });
   if (!productId || typeof productId !== 'string')
     return res.json({ ok: false, error: 'invalid_product' });
   if (!purchaseToken || typeof purchaseToken !== 'string' || purchaseToken.length < 10)
@@ -2389,12 +2636,106 @@ app.get('/admin/pa/recover-by-email', paAdminMiddleware, async (req, res) => {
   }
 });
 
+// GET /admin/pa/export-saves — full export of all PA saves as JSON (for external backup)
+app.get('/admin/pa/export-saves', requireAdmin, async (_req, res) => {
+  if (!getDbStatus().available) return res.status(503).json({ error: 'db_unavailable' });
+  const saves = await exportAllPASaves();
+  if (!saves) return res.status(500).json({ error: 'export_failed' });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="pa-saves-${ts}.json"`);
+  res.send(JSON.stringify({ exportedAt: new Date().toISOString(), count: saves.length, saves }, null, 2));
+});
+
 // Manual save restore for a specific uid (admin only)
 app.post('/admin/pa/restore-save', paAdminMiddleware, express.json({ limit: '500kb' }), async (req, res) => {
   const { uid, save } = req.body;
   if (!uid || !save) { res.status(400).json({ error: 'missing uid or save' }); return; }
   const ok = await savePASave(uid, JSON.stringify(save));
   res.json({ ok });
+});
+
+// Find all saves that contain a specific bobber cosmetic id (for player recovery by unique cosmetic)
+// View last 3 save snapshots for a player (for manual recovery)
+app.get('/admin/pa/save-history/:uid', paAdminMiddleware, async (req, res) => {
+  const { uid } = req.params;
+  const history = await loadPASaveHistory(uid);
+  const summary = history.map(h => {
+    try {
+      const s = JSON.parse(h.saveJson);
+      return {
+        savedAt: h.savedAt,
+        coins: s.coins,
+        zone: s.currentZone,
+        recHighestZone: s.stats?.recHighestZone,
+        lifeCoinsEarned: s.stats?.lifeCoinsEarned,
+        ownedRods: s.ownedRods,
+        automationCount: (s.ownedAutomation || []).length,
+        bobbers: s.unlockedBobberCosmetics,
+      };
+    } catch { return { savedAt: h.savedAt, parseError: true }; }
+  });
+  res.json({ uid, count: history.length, history: summary });
+});
+
+// POST /admin/pa/grant-diamonds  { uid, diamonds, reason }
+// Manually adds diamonds to a player's save (for support cases where purchase
+// was charged by Google Play but server verify failed due to network error).
+app.post('/admin/pa/grant-diamonds', paAdminMiddleware, express.json(), async (req, res) => {
+  const { uid, diamonds, reason = '' } = req.body;
+  if (!uid || typeof uid !== 'string') { res.status(400).json({ error: 'missing uid' }); return; }
+  const amount = parseInt(diamonds, 10);
+  if (!amount || amount < 1 || amount > 100000) { res.status(400).json({ error: 'invalid diamonds (1–100000)' }); return; }
+
+  const existing = await loadPASave(uid);
+  if (!existing) { res.status(404).json({ error: 'player not found' }); return; }
+
+  let save: any;
+  try { save = JSON.parse(existing.saveJson); } catch { res.status(500).json({ error: 'save parse error' }); return; }
+
+  const before = save.diamonds || 0;
+  save.diamonds = before + amount;
+  save._savedAt = Date.now();
+
+  const ok = await savePASave(uid, JSON.stringify(save));
+  if (!ok) { res.status(500).json({ error: 'db write failed' }); return; }
+
+  console.log(`[PA Admin] grant-diamonds: +${amount} to ${uid} (${before}→${save.diamonds}) reason="${reason}"`);
+  res.json({ ok: true, uid, before, after: save.diamonds, granted: amount });
+});
+
+// GET /admin/pa/code-status?codes=KW9F4T2M,KW3R8X5N
+app.get('/admin/pa/code-status', paAdminMiddleware, async (req, res) => {
+  const codes = ((req.query.codes as string) || '').split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+  if (!codes.length) { res.status(400).json({ error: 'missing codes param' }); return; }
+  const rows = await query(
+    `SELECT code, uid, redeemed_at FROM pa_codes_used WHERE code = ANY($1) ORDER BY redeemed_at`,
+    [codes]
+  );
+  const used = new Set((rows || []).map((r: any) => r.code));
+  const result = codes.map(code => ({
+    code,
+    used: used.has(code),
+    ...(rows || []).find((r: any) => r.code === code) || {},
+  }));
+  res.json({ result });
+});
+
+app.get('/admin/pa/find-by-bobber', paAdminMiddleware, async (req, res) => {
+  const bobberId = (req.query.id as string) || 'bc_worm';
+  const rows = await query(
+    `SELECT uid, updated_at,
+            (save_json::jsonb->>'coins')::bigint AS coins,
+            save_json::jsonb->'unlockedBobberCosmetics' AS bobbers,
+            save_json::jsonb->>'equippedBobberCosmetic' AS equipped,
+            save_json::jsonb->>'currentZone' AS zone,
+            (save_json::jsonb->>'_savedAt')::bigint AS saved_at
+     FROM pa_save_data
+     WHERE save_json::jsonb->'unlockedBobberCosmetics' ? $1
+     ORDER BY updated_at DESC`,
+    [bobberId]
+  );
+  res.json({ count: rows?.length ?? 0, rows: rows ?? [] });
 });
 app.get('/admin/analytics/api/funnel',            paAdminMiddleware, handleAdminFunnel);
 app.get('/admin/analytics/api/zones',             paAdminMiddleware, handleAdminZones);

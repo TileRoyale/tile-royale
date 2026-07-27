@@ -172,6 +172,15 @@ async function createTables(): Promise<void> {
       updated_at   TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Rolling backup of the last 3 saves per player (auto-purged beyond 3)
+    CREATE TABLE IF NOT EXISTS pa_save_history (
+      id           SERIAL       PRIMARY KEY,
+      uid          TEXT         NOT NULL,
+      save_json    TEXT         NOT NULL,
+      saved_at     TIMESTAMPTZ  DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS pa_save_history_uid_idx ON pa_save_history (uid, saved_at DESC);
+
     -- Patient Angler redeem code uses: one row per (code, uid) pair
     CREATE TABLE IF NOT EXISTS pa_codes_used (
       code        TEXT         NOT NULL,
@@ -468,6 +477,13 @@ async function createTables(): Promise<void> {
       level_num  INTEGER      NOT NULL,
       gem_reward INTEGER      NOT NULL DEFAULT 0,
       claimed_at TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Patient Angler remote config: single-row key/value store
+    CREATE TABLE IF NOT EXISTS pa_remote_config (
+      key        TEXT         PRIMARY KEY,
+      value      JSONB        NOT NULL,
+      updated_at TIMESTAMPTZ  DEFAULT now()
     );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
@@ -1541,6 +1557,19 @@ export async function loadPlayerData(playerId: string): Promise<{ saveJson: stri
 export async function savePASave(uid: string, saveJson: string): Promise<boolean> {
   if (!pool || !dbAvailable) return false;
   try {
+    // Archive current save to history before overwriting (keep last 3 per player)
+    await query(
+      `INSERT INTO pa_save_history (uid, save_json, saved_at)
+       SELECT uid, save_json, now() FROM pa_save_data WHERE uid = $1`,
+      [uid]
+    );
+    await query(
+      `DELETE FROM pa_save_history WHERE id IN (
+         SELECT id FROM pa_save_history WHERE uid = $1
+         ORDER BY saved_at DESC OFFSET 3
+       )`,
+      [uid]
+    );
     await query(
       `INSERT INTO pa_save_data (uid, save_json, updated_at)
        VALUES ($1, $2, now())
@@ -1556,6 +1585,14 @@ export async function savePASave(uid: string, saveJson: string): Promise<boolean
   }
 }
 
+export async function loadPASaveHistory(uid: string): Promise<Array<{ saveJson: string; savedAt: string }>> {
+  const rows = await query(
+    `SELECT save_json, saved_at FROM pa_save_history WHERE uid = $1 ORDER BY saved_at DESC LIMIT 3`,
+    [uid]
+  );
+  return (rows || []).map((r: any) => ({ saveJson: r.save_json, savedAt: r.saved_at }));
+}
+
 export async function loadPASave(uid: string): Promise<{ saveJson: string; updatedAt: string } | null> {
   const rows = await query(
     `SELECT save_json, updated_at FROM pa_save_data WHERE uid = $1`,
@@ -1563,6 +1600,16 @@ export async function loadPASave(uid: string): Promise<{ saveJson: string; updat
   );
   if (!rows?.length) return null;
   return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
+}
+
+export async function exportAllPASaves(): Promise<Array<{ uid: string; save: any; updatedAt: string }> | null> {
+  const rows = await query(`SELECT uid, save_json, updated_at FROM pa_save_data ORDER BY updated_at DESC`);
+  if (!rows) return null;
+  return rows.map((r: any) => ({
+    uid:       r.uid,
+    save:      JSON.parse(r.save_json),
+    updatedAt: r.updated_at,
+  }));
 }
 
 // ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
@@ -1978,6 +2025,21 @@ export async function getPurchaseReceipt(purchaseToken: string): Promise<string 
     [purchaseToken]
   );
   return rows && rows.length > 0 ? rows[0].granted_json : null;
+}
+
+// Patient Angler IAP receipt functions — aliases to the shared purchase_receipts table.
+// PA UIDs are Firebase UIDs (distinct from TR player IDs) so there's no collision risk.
+export const recordPAPurchaseReceipt = recordPurchaseReceipt;
+export const getPAPurchaseReceipt    = getPurchaseReceipt;
+
+// Returns the set of product IDs that have been verified and granted for a given PA uid.
+// Used by validatePASave to detect non-consumable flags set without a real purchase.
+export async function getPAVerifiedProductIds(uid: string): Promise<Set<string>> {
+  const rows = await query(
+    `SELECT product_id FROM purchase_receipts WHERE player_id = $1`,
+    [uid]
+  );
+  return new Set((rows || []).map((r: any) => r.product_id as string));
 }
 
 // Returns all processed purchase tokens for a player (used by restore to skip already-granted items).
@@ -2665,4 +2727,26 @@ export async function getPlayerGameStats(playerId: string): Promise<{
     console.error('[DB] getPlayerGameStats error:', err);
     return null;
   }
+}
+
+// ─── Patient Angler Remote Config ─────────────────────────────────────────────
+
+export async function getPARemoteConfig(): Promise<Record<string, unknown>> {
+  if (!pool) return {};
+  try {
+    const res = await pool.query("SELECT value FROM pa_remote_config WHERE key = 'config'");
+    return (res.rows[0]?.value as Record<string, unknown>) || {};
+  } catch {
+    return {};
+  }
+}
+
+export async function setPARemoteConfig(config: Record<string, unknown>): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO pa_remote_config (key, value, updated_at)
+     VALUES ('config', $1, now())
+     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()`,
+    [JSON.stringify(config)]
+  );
 }
