@@ -2360,7 +2360,7 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.9.5.23";
+const PA_LATEST_VERSION     = "v0.9.9.2";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2702,6 +2702,29 @@ app.post('/admin/pa/grant-diamonds', paAdminMiddleware, express.json(), async (r
 
   console.log(`[PA Admin] grant-diamonds: +${amount} to ${uid} (${before}→${save.diamonds}) reason="${reason}"`);
   res.json({ ok: true, uid, before, after: save.diamonds, granted: amount });
+});
+
+// POST /admin/pa/grant-remove-ads  { uid }
+// Manually activates remove-ads on a player's save (for support cases).
+app.post('/admin/pa/grant-remove-ads', paAdminMiddleware, express.json(), async (req, res) => {
+  const { uid } = req.body;
+  if (!uid || typeof uid !== 'string') { res.status(400).json({ error: 'missing uid' }); return; }
+
+  const existing = await loadPASave(uid);
+  if (!existing) { res.status(404).json({ error: 'player not found' }); return; }
+
+  let save: any;
+  try { save = JSON.parse(existing.saveJson); } catch { res.status(500).json({ error: 'save parse error' }); return; }
+
+  const before = !!save.removeAds;
+  save.removeAds = true;
+  save._savedAt = Date.now();
+
+  const ok = await savePASave(uid, JSON.stringify(save));
+  if (!ok) { res.status(500).json({ error: 'db write failed' }); return; }
+
+  console.log(`[PA Admin] grant-remove-ads: ${uid} (${before}→true)`);
+  res.json({ ok: true, uid, before, after: true });
 });
 
 // GET /admin/pa/code-status?codes=KW9F4T2M,KW3R8X5N
