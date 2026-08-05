@@ -2360,7 +2360,7 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v0.9.9.2";
+const PA_LATEST_VERSION     = "v1.0.4.14";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2376,7 +2376,16 @@ const PA_CONFIG_DEFAULTS: Record<string, unknown> = {
   competitionEnabled:        true,
   ghostShipEnabled:          true,
   motd:                      null,  // string shown as a banner, null = no banner
-  motdType:                  'info' // 'info' | 'event' | 'warning'
+  motdType:                  'info', // 'info' | 'event' | 'warning'
+  // Cost overrides — { itemId: cost } objects; absent keys keep their in-code defaults
+  autoCostOverrides:         {},    // AUTOMATION base costs   e.g. { "reinforced_net": 1000 }
+  storageCostOverrides:      {},    // STORAGE_ITEMS costs     e.g. { "bucket": 30 }
+  rodCostOverrides:          {},    // RODS purchase costs     e.g. { "river_rod": 5000 }
+  rodTierCostOverrides:      {},    // RODS baseTierCost       e.g. { "river_rod": 3000 }
+  bobberCostOverrides:       {},    // BOBBERS baseCost        e.g. { "heavy_bobber": 1000 }
+  seagullBaitBaseCost:       10000, // tier-0 seagull bait cost (scales * 5^tier)
+  costScaleMult:             1.22,  // per-purchase cost scale factor (default 1.22 = +22% each buy)
+  rodTierCostsOverrides:     {},    // fixed-tier rods: { "sea_rod": [t1,t2,t3], "ocean_rod": [t1,t2,t3] }
 };
 
 // Public — clients poll this on every launch
@@ -2409,8 +2418,9 @@ app.post("/admin/pa/config", requireAdmin, async (req, res) => {
 
 const PA_REDEEM_CODES: Record<string, {
   rewardType: 'coins' | 'diamonds' | 'autoIncome' | 'save_restore';
-  amount?: number;        // used for coins / diamonds
-  bonusDiamonds?: number; // extra diamonds granted alongside autoIncome (requires client v0.9.3.6+)
+  amount?: number;               // used for coins / diamonds
+  bonusDiamonds?: number;        // extra diamonds alongside autoIncome
+  autoIncomePackages?: number;   // extra Automation Income Packages alongside any reward
   desc: string;
   maxUses?: number;   // omit = unlimited; enforced via pa_codes_used count
   targetUid?: string; // if set, only this Firebase uid may redeem the code
@@ -2426,6 +2436,8 @@ const PA_REDEEM_CODES: Record<string, {
   'CLOUDFIX':       { rewardType: 'autoIncome', amount: 48, bonusDiamonds: 50, expires: '2026-07-23T18:05:00Z', desc: 'Sorry for the cloud save issues — 48h automation income + 50 Diamonds!' },
   'FIVE00':         { rewardType: 'diamonds', amount: 20, desc: 'Feel good gift — 20 Diamonds!' },
   '4NANNA':         { rewardType: 'diamonds', amount: 100, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: 'Extra sorry — 100 Diamonds for you!' },
+  'YAYLAUNCH':      { rewardType: 'diamonds', amount: 25, autoIncomePackages: 3, desc: 'Happy launch! 🎉 25 Diamonds + 3 Automation Income Packages!' },
+  'GIFT24CP':       { rewardType: 'diamonds', amount: 24, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: 'Here are 24 Diamonds — enjoy!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2469,8 +2481,9 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   }
 
   const reward: Record<string, any> = { rewardType: entry.rewardType };
-  if (entry.amount        != null) reward.amount        = entry.amount;
-  if (entry.bonusDiamonds != null) reward.bonusDiamonds = entry.bonusDiamonds;
+  if (entry.amount             != null) reward.amount             = entry.amount;
+  if (entry.bonusDiamonds      != null) reward.bonusDiamonds      = entry.bonusDiamonds;
+  if (entry.autoIncomePackages != null) reward.autoIncomePackages = entry.autoIncomePackages;
 
   res.json({ ok: true, desc: entry.desc, reward });
 });
