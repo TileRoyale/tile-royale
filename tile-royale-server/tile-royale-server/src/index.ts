@@ -2360,7 +2360,7 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.4.14";
+const PA_LATEST_VERSION     = "v1.0.5.25";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2431,13 +2431,9 @@ const PA_REDEEM_CODES: Record<string, {
   'PEARLS5':        { rewardType: 'diamonds', amount: 5,                       desc: '5 Black Pearls gift!' },
   'THANKS4TESTING': { rewardType: 'diamonds', amount: 10,                      desc: 'Thank you for testing! Enjoy 10 Diamonds.' },
   '300':            { rewardType: 'autoIncome', bonusDiamonds: 10,             desc: '1h automation income + 10 Diamonds. Enjoy!' },
-  'RCV48C16ECF':    { rewardType: 'save_restore', maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: 'Save restored!' },
-  'RCV80F29BKT':    { rewardType: 'save_restore', maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: 'Save restored!' },
   'CLOUDFIX':       { rewardType: 'autoIncome', amount: 48, bonusDiamonds: 50, expires: '2026-07-23T18:05:00Z', desc: 'Sorry for the cloud save issues — 48h automation income + 50 Diamonds!' },
   'FIVE00':         { rewardType: 'diamonds', amount: 20, desc: 'Feel good gift — 20 Diamonds!' },
-  '4NANNA':         { rewardType: 'diamonds', amount: 100, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: 'Extra sorry — 100 Diamonds for you!' },
   'YAYLAUNCH':      { rewardType: 'diamonds', amount: 25, autoIncomePackages: 3, desc: 'Happy launch! 🎉 25 Diamonds + 3 Automation Income Packages!' },
-  'GIFT24CP':       { rewardType: 'diamonds', amount: 24, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: 'Here are 24 Diamonds — enjoy!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2533,6 +2529,9 @@ const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'
   remove_ads:            { type: 'non_consumable',              grant: { removeAds: true } },
   permanent_autoseller:  { type: 'non_consumable',              grant: { permanentAutoSell: true } },
   dev_support_package:   { type: 'non_consumable',              grant: { devSupport: true } },
+  'ei-event-reward':     { type: 'consumable',                  grant: { eiAllTiersUnlocked: true } },
+  time_skip_12:          { type: 'consumable',                  grant: { autoIncomePackages: 12 } },
+  time_skip_24:          { type: 'consumable',                  grant: { autoIncomePackages: 24 } },
 };
 
 async function verifyWithGooglePlayPA(productId: string, purchaseToken: string): Promise<boolean> {
