@@ -48,6 +48,12 @@ export async function initDb(): Promise<void> {
     dbAvailable = false;
     dbError = err?.message || String(err);
     console.error("[DB] ❌ Connection failed:", dbError);
+    if (err?.code)     console.error("[DB]    pg error code:", err.code);
+    if (err?.table)    console.error("[DB]    table:", err.table);
+    if (err?.column)   console.error("[DB]    column:", err.column);
+    if (err?.position) console.error("[DB]    position:", err.position);
+    if (err?.hint)     console.error("[DB]    hint:", err.hint);
+    if (err?.where)    console.error("[DB]    where:", err.where);
     pool = null;
   }
 }
@@ -188,6 +194,33 @@ async function createTables(): Promise<void> {
       redeemed_at TIMESTAMPTZ  DEFAULT now(),
       PRIMARY KEY (code, uid)
     );
+
+    -- Migration: if pa_purchase_receipts was created with wrong column name, drop it so
+    -- the CREATE TABLE below rebuilds it correctly. Table should be empty since all
+    -- IAP verifications fail when the DB is unavailable due to this schema mismatch.
+    DO $migration$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema='public' AND table_name='pa_purchase_receipts')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema='public' AND table_name='pa_purchase_receipts'
+                         AND column_name='player_id') THEN
+        DROP TABLE pa_purchase_receipts;
+      END IF;
+    END $migration$;
+
+    -- Patient Angler IAP receipts — separate from TR purchase_receipts because
+    -- PA uses Firebase UIDs (TEXT), not UUID player IDs.
+    CREATE TABLE IF NOT EXISTS pa_purchase_receipts (
+      id             SERIAL       PRIMARY KEY,
+      player_id      TEXT         NOT NULL,
+      product_id     TEXT         NOT NULL,
+      purchase_token TEXT         NOT NULL UNIQUE,
+      order_id       TEXT         NOT NULL DEFAULT '',
+      granted_json   TEXT         NOT NULL,
+      purchased_at   TIMESTAMPTZ  DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS pa_purchase_receipts_player_idx ON pa_purchase_receipts (player_id);
 
     -- Push tokens: one row per FCM token (UNIQUE on token, indexed by player)
     CREATE TABLE IF NOT EXISTS push_tokens (
@@ -2027,16 +2060,45 @@ export async function getPurchaseReceipt(purchaseToken: string): Promise<string 
   return rows && rows.length > 0 ? rows[0].granted_json : null;
 }
 
-// Patient Angler IAP receipt functions — aliases to the shared purchase_receipts table.
-// PA UIDs are Firebase UIDs (distinct from TR player IDs) so there's no collision risk.
-export const recordPAPurchaseReceipt = recordPurchaseReceipt;
-export const getPAPurchaseReceipt    = getPurchaseReceipt;
+// Patient Angler IAP receipt functions — use pa_purchase_receipts (TEXT player_id).
+// Cannot use the shared purchase_receipts table because that table requires UUID player IDs
+// and PA uses Firebase UIDs which are not valid UUIDs.
+
+export async function recordPAPurchaseReceipt(
+  playerId: string,
+  productId: string,
+  purchaseToken: string,
+  orderId: string,
+  grantedJson: string
+): Promise<'ok' | 'already_processed' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    await pool.query(
+      `INSERT INTO pa_purchase_receipts (player_id, product_id, purchase_token, order_id, granted_json)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [playerId, productId, purchaseToken, orderId || '', grantedJson]
+    );
+    return 'ok';
+  } catch (err: any) {
+    if (err.code === '23505') return 'already_processed';
+    console.error('[DB] recordPAPurchaseReceipt error:', err);
+    return 'error';
+  }
+}
+
+export async function getPAPurchaseReceipt(purchaseToken: string): Promise<string | null> {
+  const rows = await query(
+    `SELECT granted_json FROM pa_purchase_receipts WHERE purchase_token = $1`,
+    [purchaseToken]
+  );
+  return rows && rows.length > 0 ? rows[0].granted_json : null;
+}
 
 // Returns the set of product IDs that have been verified and granted for a given PA uid.
 // Used by validatePASave to detect non-consumable flags set without a real purchase.
 export async function getPAVerifiedProductIds(uid: string): Promise<Set<string>> {
   const rows = await query(
-    `SELECT product_id FROM purchase_receipts WHERE player_id = $1`,
+    `SELECT product_id FROM pa_purchase_receipts WHERE player_id = $1`,
     [uid]
   );
   return new Set((rows || []).map((r: any) => r.product_id as string));

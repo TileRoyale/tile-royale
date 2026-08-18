@@ -220,7 +220,9 @@ async function verifyUid(req: Request): Promise<string | null> {
   if (authHeader.startsWith('Bearer ')) {
     try {
       const token = authHeader.slice(7);
-      const decoded = await firebaseAdmin.auth().verifyIdToken(token);
+      // Must use the Patient Angler named app — default app is Tile Royale (different Firebase project)
+      const auth = firebaseAdmin.app('patient-angler').auth();
+      const decoded = await auth.verifyIdToken(token);
       return decoded.uid;
     } catch { return null; }
   }
@@ -699,9 +701,9 @@ export async function handleAdminSummary(_req: Request, res: Response): Promise<
         MAX(game_completion_percent)                         AS highest_completion,
         MAX(estimated_hourly_income)                         AS highest_income,
         MAX(current_fish_rate)                               AS highest_fish_rate,
-        MAX(app_version)                                     AS latest_version,
+        (SELECT app_version FROM pa_player_progress WHERE build_number ~ '^[0-9]+$' ORDER BY build_number::integer DESC LIMIT 1) AS latest_version,
         COUNT(*) FILTER (WHERE prestige_count > 0)           AS prestige_players,
-        COUNT(*) FILTER (WHERE highest_zone = 'ocean')       AS ocean_players,
+        COUNT(*) FILTER (WHERE highest_zone = 'ocean' OR highest_zone LIKE '%_cavern') AS ocean_plus_players,
         COUNT(*) FILTER (WHERE automation_fishdex_percent >= 100) AS auto_dex_complete,
         COUNT(*) FILTER (WHERE manual_fishdex_percent >= 100)    AS manual_dex_complete
       FROM pa_player_progress
@@ -745,7 +747,7 @@ export async function handleAdminSummary(_req: Request, res: Response): Promise<
     avgMastery: Number(t.avg_mastery)?.toFixed(1),
     avgPrestige: Number(t.avg_prestige)?.toFixed(2),
     prestigePercent: totalVerified ? ((Number(t.prestige_players)/totalVerified)*100).toFixed(1) : '0',
-    oceanPercent: totalVerified ? ((Number(t.ocean_players)/totalVerified)*100).toFixed(1) : '0',
+    oceanPercent: totalVerified ? ((Number(t.ocean_plus_players)/totalVerified)*100).toFixed(1) : '0',
     autoDexCompletePercent: totalVerified ? ((Number(t.auto_dex_complete)/totalVerified)*100).toFixed(1) : '0',
     manualDexCompletePercent: totalVerified ? ((Number(t.manual_dex_complete)/totalVerified)*100).toFixed(1) : '0',
     highestCompletion: Number(t.highest_completion)?.toFixed(1),
@@ -888,7 +890,10 @@ export async function handleAdminZones(_req: Request, res: Response): Promise<vo
     FROM pa_player_progress
     WHERE highest_zone IS NOT NULL
     GROUP BY highest_zone
-    ORDER BY ARRAY_POSITION(ARRAY['pond','river','lake','bay','sea','ocean'], highest_zone) DESC NULLS LAST
+    ORDER BY ARRAY_POSITION(ARRAY['pond','river','lake','bay','sea','ocean',
+      'emerald_cavern','amber_cavern','amethyst_cavern','ruby_cavern',
+      'aquamarine_cavern','opal_cavern','obsidian_cavern','topaz_cavern',
+      'sapphire_cavern','blue_diamond_cavern'], highest_zone) DESC NULLS LAST
   `) || [];
   res.json(rows);
 }
@@ -925,7 +930,7 @@ export async function handleAdminCohorts(_req: Request, res: Response): Promise<
       COUNT(*) FILTER (WHERE last_seen >= created_at + INTERVAL '30 days')             AS active_day30,
       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY game_completion_percent)             AS median_completion,
       COUNT(*) FILTER (WHERE prestige_count > 0) * 100.0 / NULLIF(COUNT(*),0)         AS prestige_rate,
-      COUNT(*) FILTER (WHERE highest_zone = 'ocean') * 100.0 / NULLIF(COUNT(*),0)     AS ocean_rate
+      COUNT(*) FILTER (WHERE highest_zone = 'ocean' OR highest_zone LIKE '%_cavern') * 100.0 / NULLIF(COUNT(*),0) AS ocean_rate
     FROM pa_player_progress
     GROUP BY DATE_TRUNC('week', created_at)
     ORDER BY cohort_week DESC
@@ -1100,7 +1105,7 @@ canvas{width:100%!important;height:120px!important}
     <div class="card"><div class="val" id="s-med-dex">—</div><div class="lbl">Median Fishdex</div></div>
     <div class="card"><div class="val" id="s-avg-mastery">—</div><div class="lbl">Avg Mastery</div></div>
     <div class="card"><div class="val" id="s-prestige-pct">—</div><div class="lbl">Prestiged %</div></div>
-    <div class="card"><div class="val" id="s-ocean-pct">—</div><div class="lbl">Reached Ocean %</div></div>
+    <div class="card"><div class="val" id="s-ocean-pct">—</div><div class="lbl">Ocean+ %</div></div>
     <div class="card"><div class="val" id="s-auto-dex">—</div><div class="lbl">Auto Dex 100%</div></div>
     <div class="card"><div class="val" id="s-version">—</div><div class="lbl">Latest Version</div></div>
   </div>
@@ -1112,6 +1117,7 @@ canvas{width:100%!important;height:120px!important}
     <div class="tab" onclick="switchTab('versions')">Versions</div>
     <div class="tab" onclick="switchTab('cohorts')">Cohorts</div>
     <div class="tab" onclick="switchTab('quality')">Data Quality</div>
+    <div class="tab" onclick="switchTab('config')">⚙ Config</div>
   </div>
 
   <!-- Players Tab -->
@@ -1201,7 +1207,7 @@ canvas{width:100%!important;height:120px!important}
   <div class="tab-content" id="tab-cohorts">
     <h2>Weekly Cohorts <span style="font-size:11px;color:#8b949e">(retention is approximate — based on last_seen vs created_at)</span></h2>
     <div style="overflow-x:auto"><table id="cohorts-table" class="cohort-table">
-      <thead><tr><th>Cohort Week</th><th>New Players</th><th>D+1</th><th>D+7</th><th>D+30</th><th>Median Complete%</th><th>Prestige%</th><th>Ocean%</th></tr></thead>
+      <thead><tr><th>Cohort Week</th><th>New Players</th><th>D+1</th><th>D+7</th><th>D+30</th><th>Median Complete%</th><th>Prestige%</th><th>Ocean+%</th></tr></thead>
       <tbody id="cohorts-tbody"></tbody>
     </table></div>
   </div>
@@ -1210,6 +1216,127 @@ canvas{width:100%!important;height:120px!important}
   <div class="tab-content" id="tab-quality">
     <h2>Data Quality Warnings</h2>
     <div id="quality-content">Loading…</div>
+  </div>
+
+  <div class="tab-content" id="tab-config">
+    <div style="max-width:800px">
+      <div id="cfg-status" style="margin-bottom:12px;display:none;padding:8px 12px;border-radius:6px;font-size:12px"></div>
+
+      <!-- General -->
+      <div class="section-block">
+        <div class="section-title">General</div>
+        <table style="width:100%"><tbody>
+          <tr><td style="color:#8b949e;width:240px;padding:6px 10px">Fish Sell Multiplier</td>
+              <td><input type="number" id="cfg-fishSellMult" step="0.1" min="0.1" style="width:100px"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Event Interval Min (min)</td>
+              <td><input type="number" id="cfg-eventMin" step="1" min="1" style="width:100px"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Event Interval Max (min)</td>
+              <td><input type="number" id="cfg-eventMax" step="1" min="1" style="width:100px"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Competition Enabled</td>
+              <td><input type="checkbox" id="cfg-compEnabled" style="width:16px;height:16px;cursor:pointer"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Ghost Ship Enabled</td>
+              <td><input type="checkbox" id="cfg-gsEnabled" style="width:16px;height:16px;cursor:pointer"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">MOTD Text (blank = hidden)</td>
+              <td><input type="text" id="cfg-motd" style="width:400px" placeholder="Leave blank for no banner"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">MOTD Type</td>
+              <td><select id="cfg-motdType"><option value="info">info</option><option value="event">event</option><option value="warning">warning</option></select></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Seagull Bait Base Cost (tier 0)</td>
+              <td><input type="number" id="cfg-seagullBase" step="1" min="1" style="width:120px"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Upgrade Cost Multiplier (per buy)</td>
+              <td><input type="number" id="cfg-costScale" step="0.01" min="1.0" max="5.0" style="width:100px" placeholder="default: 1.22"></td></tr>
+        </tbody></table>
+      </div>
+
+      <!-- Automation -->
+      <div class="section-block">
+        <div class="section-title">Automation Costs (blank = use code default)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Unit</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Catches/h</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Default cost</th>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Override cost</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">c/h per 1k¢ (default)</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">c/h per 1k¢ (override)</th>
+          </tr></thead>
+          <tbody id="cfg-auto-rows"></tbody>
+        </table>
+      </div>
+
+      <!-- Storage -->
+      <div class="section-block">
+        <div class="section-title">Storage Costs (blank = use code default)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Item</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Slots</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Default cost</th>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Override cost</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Slots/1k¢ (default)</th>
+            <th style="text-align:right;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Slots/1k¢ (override)</th>
+          </tr></thead>
+          <tbody id="cfg-storage-rows"></tbody>
+        </table>
+      </div>
+
+      <!-- Rod purchase costs -->
+      <div class="section-block">
+        <div class="section-title">Rod Purchase Costs (blank = use code default)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none;width:220px">Rod</th>
+            <th style="text-align:left;padding:5px 4px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Default</th>
+            <th style="text-align:left;padding:5px 8px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Override</th>
+          </tr></thead>
+          <tbody id="cfg-rod-rows"></tbody>
+        </table>
+      </div>
+
+      <!-- Rod tier costs (formula-based: basic/river/lake/bay) -->
+      <div class="section-block">
+        <div class="section-title">Rod Tier Upgrade Base Costs — Formula rods (blank = use code default)</div>
+        <div style="color:#8b949e;font-size:11px;margin-bottom:6px">Cost = baseTierCost × 10^tier. Only applies to Basic/River/Lake/Bay rods.</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none;width:220px">Rod</th>
+            <th style="text-align:left;padding:5px 4px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Default</th>
+            <th style="text-align:left;padding:5px 8px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Override</th>
+          </tr></thead>
+          <tbody id="cfg-rodtier-rows"></tbody>
+        </table>
+      </div>
+
+      <!-- Rod tier costs (fixed arrays: sea/ocean/carbon/mythic/abyss) -->
+      <div class="section-block">
+        <div class="section-title">Rod Tier Upgrade Fixed Costs — Sea+ rods (blank = use code default)</div>
+        <div style="color:#8b949e;font-size:11px;margin-bottom:6px">These rods have fixed costs per tier. Tier 1 / Tier 2 / Tier 3 listed left to right.</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none;width:140px">Rod</th>
+            <th style="text-align:center;padding:5px 4px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none" colspan="2">Tier 1</th>
+            <th style="text-align:center;padding:5px 4px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none" colspan="2">Tier 2</th>
+            <th style="text-align:center;padding:5px 4px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none" colspan="2">Tier 3</th>
+          </tr></thead>
+          <tbody id="cfg-rodfixed-rows"></tbody>
+        </table>
+      </div>
+
+      <!-- Bobber costs -->
+      <div class="section-block">
+        <div class="section-title">Bobber Upgrade Costs (blank = use code default)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 10px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none;width:220px">Bobber</th>
+            <th style="text-align:left;padding:5px 4px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Default</th>
+            <th style="text-align:left;padding:5px 8px;color:#58a6ff;font-size:11px;font-weight:600;border-bottom:1px solid #30363d;background:none">Override</th>
+          </tr></thead>
+          <tbody id="cfg-bobber-rows"></tbody>
+        </table>
+      </div>
+
+      <button class="btn-primary" onclick="saveConfig()" style="margin-top:4px;padding:10px 28px;font-size:13px">Save Config</button>
+      <button onclick="loadConfig()" style="margin-top:4px;margin-left:8px;padding:10px 18px;font-size:13px">Reload</button>
+    </div>
   </div>
 </div>
 
@@ -1478,7 +1605,7 @@ function closeDetail() { document.getElementById('detail-overlay').classList.rem
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const tabs = ['players','funnel','zones','versions','cohorts','quality'];
+    const tabs = ['players','funnel','zones','versions','cohorts','quality','config'];
     t.classList.toggle('active', tabs[i] === name);
   });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-'+name));
@@ -1487,6 +1614,252 @@ function switchTab(name) {
   if (name === 'versions') loadVersions();
   if (name === 'cohorts')  loadCohorts();
   if (name === 'quality')  loadQuality();
+  if (name === 'config')   loadConfig();
+}
+
+// ── Config Tab ────────────────────────────────────────────────────────────────
+const CFG_AUTO = [
+  {id:'fishing_net',    label:'Fishing Net',         def:100,         rate:60  },
+  {id:'reinforced_net', label:'Reinforced Net',       def:3000,        rate:45  },
+  {id:'river_net',      label:'River Net',            def:15000,       rate:30  },
+  {id:'local_fisher',   label:'Local Fisher',         def:3000,        rate:30  },
+  {id:'skilled_fisher', label:'Skilled Fisher',       def:30000,       rate:15  },
+  {id:'veteran_fisher', label:'Veteran Fisher',       def:300000,      rate:8   },
+  {id:'row_boat',       label:'Row Boat',             def:350000,      rate:8   },
+  {id:'motor_boat',     label:'Motor Boat',           def:1200000,     rate:3   },
+  {id:'fishing_boat',   label:'Fishing Boat',         def:4000000,     rate:1.5 },
+  {id:'small_fleet',    label:'Small Fleet',          def:125000000,   rate:0.5 },
+  {id:'large_fleet',    label:'Large Fleet',          def:500000000,   rate:0.25},
+  {id:'deep_sea_fleet', label:'Deep Sea Fleet',       def:2500000000,  rate:0.1 },
+];
+const CFG_STORAGE = [
+  {id:'bucket',      label:'Bucket',               def:50,        cap:5    },
+  {id:'icebox',      label:'Ice Box',              def:200,       cap:20   },
+  {id:'coolerbox',   label:'Cooler Box',           def:600,       cap:50   },
+  {id:'fridge',      label:'Portable Fridge',      def:2000,      cap:150  },
+  {id:'chest',       label:'Chest',                def:10000,     cap:500  },
+  {id:'large_chest', label:'Large Chest',          def:40000,     cap:2000 },
+  {id:'freezer',     label:'Freezer',              def:250000,    cap:8000 },
+  {id:'walkinfreezer',label:'Walk-in Freezer',     def:50000000,  cap:2000 },
+  {id:'harborcs',    label:'Harbor Cold Storage',  def:250000000, cap:10000},
+];
+const CFG_RODS = [
+  {id:'basic_rod',label:'Basic Rod',def:0},{id:'river_rod',label:'River Rod',def:9000},
+  {id:'lake_rod',label:'Lake Rod',def:90000},{id:'bay_rod',label:'Bay Rod',def:900000},
+  {id:'sea_rod',label:'Sea Rod',def:625000000},{id:'ocean_rod',label:'Ocean Rod',def:62500000000},
+];
+const CFG_RODTIER = [
+  {id:'basic_rod',label:'Basic Rod',def:1000},{id:'river_rod',label:'River Rod',def:5000},
+  {id:'lake_rod',label:'Lake Rod',def:25000},{id:'bay_rod',label:'Bay Rod',def:100000},
+];
+const CFG_RODTIER_FIXED = [
+  {id:'sea_rod',    label:'Sea Rod',    def:[1250000000,     12500000000,      125000000000     ]},
+  {id:'ocean_rod',  label:'Ocean Rod',  def:[125000000000,   1250000000000,    12500000000000   ]},
+  {id:'carbon_rod', label:'Carbon Rod', def:[20000000000000, 200000000000000,  2000000000000000 ]},
+  {id:'mythic_rod', label:'Mythic Rod', def:[20000000000000, 200000000000000,  2000000000000000 ]},
+  {id:'abyss_rod',  label:'Abyss Rod',  def:[20000000000000, 200000000000000,  2000000000000000 ]},
+];
+const CFG_BOBBERS = [
+  {id:'basic_bobber',label:'Basic Bobber',def:800},{id:'sensitive_bobber',label:'Sensitive Bobber',def:1200},
+  {id:'heavy_bobber',label:'Heavy Bobber',def:2000},{id:'electronic_bobber',label:'Electronic Bobber',def:5000},
+];
+
+const _fmtN = n => n >= 1e9 ? (n/1e9).toFixed(2)+'B' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(Math.round(n));
+const _inpStyle = 'width:130px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:4px 8px;border-radius:4px;font-size:12px;font-family:inherit';
+const _tdR = s => \`<td style="text-align:right;padding:5px 10px;color:#e6edf3">\${s}</td>\`;
+const _tdG = (id,s) => \`<td style="text-align:right;padding:5px 10px;color:#3fb950;font-weight:600" id="\${id}">\${s}</td>\`;
+
+function _autoEff(catchesH, cost) {
+  if (!cost || cost <= 0) return '—';
+  return (catchesH / cost * 1000).toFixed(2);
+}
+
+function _cfgAutoRows(overrides) {
+  const tb = document.getElementById('cfg-auto-rows');
+  if (!tb) return;
+  tb.innerHTML = CFG_AUTO.map(it => {
+    const catchH = Math.round(3600 / it.rate);
+    const defEff = _autoEff(catchH, it.def);
+    const ovVal  = overrides && overrides[it.id] != null ? overrides[it.id] : '';
+    const ovEff  = ovVal !== '' ? _autoEff(catchH, Number(ovVal)) : '—';
+    return \`<tr>
+      <td style="padding:5px 10px;color:#c9d1d9">\${it.label}</td>
+      \${_tdR(catchH + '/h')}
+      \${_tdR(_fmtN(it.def) + '¢')}
+      <td style="padding:5px 8px"><input type="number" id="auto-\${it.id}" value="\${ovVal}" placeholder="\${_fmtN(it.def)}" step="1" min="0" style="\${_inpStyle}" oninput="_updateAutoEff('\${it.id}',\${catchH})"></td>
+      \${_tdR(defEff)}
+      \${_tdG('auto-eff-\${it.id}', ovEff)}
+    </tr>\`;
+  }).join('');
+}
+
+function _updateAutoEff(id, catchH) {
+  const el  = document.getElementById(\`auto-\${id}\`);
+  const out = document.getElementById(\`auto-eff-\${id}\`);
+  if (!el || !out) return;
+  const v = el.value.trim();
+  out.textContent = v !== '' && Number(v) > 0 ? _autoEff(catchH, Number(v)) : '—';
+}
+
+function _cfgStorageRows(overrides) {
+  const tb = document.getElementById('cfg-storage-rows');
+  if (!tb) return;
+  tb.innerHTML = CFG_STORAGE.map(it => {
+    const defEff = it.def > 0 ? (it.cap / it.def * 1000).toFixed(3) : '—';
+    const ovVal  = overrides && overrides[it.id] != null ? overrides[it.id] : '';
+    const ovEff  = ovVal !== '' && Number(ovVal) > 0 ? (it.cap / Number(ovVal) * 1000).toFixed(3) : '—';
+    return \`<tr>
+      <td style="padding:5px 10px;color:#c9d1d9">\${it.label}</td>
+      \${_tdR(it.cap.toLocaleString())}
+      \${_tdR(_fmtN(it.def) + '¢')}
+      <td style="padding:5px 8px"><input type="number" id="sto-\${it.id}" value="\${ovVal}" placeholder="\${_fmtN(it.def)}" step="1" min="0" style="\${_inpStyle}" oninput="_updateStoEff('\${it.id}',\${it.cap})"></td>
+      \${_tdR(defEff)}
+      \${_tdG('sto-eff-\${it.id}', ovEff)}
+    </tr>\`;
+  }).join('');
+}
+
+function _updateStoEff(id, cap) {
+  const el  = document.getElementById(\`sto-\${id}\`);
+  const out = document.getElementById(\`sto-eff-\${id}\`);
+  if (!el || !out) return;
+  const v = el.value.trim();
+  out.textContent = v !== '' && Number(v) > 0 ? (cap / Number(v) * 1000).toFixed(3) : '—';
+}
+
+function _cfgRows(tbodyId, items, prefix) {
+  const tb = document.getElementById(tbodyId);
+  if (!tb) return;
+  tb.innerHTML = items.map(it => \`<tr>
+    <td style="color:#8b949e;width:220px;padding:5px 10px">\${it.label}</td>
+    <td style="color:#555;font-size:11px;padding:5px 4px;white-space:nowrap">\${_fmtN(it.def)}</td>
+    <td style="padding:5px 8px"><input type="number" id="\${prefix}-\${it.id}" placeholder="override…" step="1" min="0" style="\${_inpStyle}"></td>
+  </tr>\`).join('');
+}
+
+function _cfgReadOverrides(items, prefix) {
+  const out = {};
+  items.forEach(it => {
+    const el = document.getElementById(\`\${prefix}-\${it.id}\`);
+    const v = el && el.value.trim();
+    if (v !== '' && v !== null && !isNaN(Number(v))) out[it.id] = Number(v);
+  });
+  return out;
+}
+
+function _cfgFillOverrides(items, prefix, overrides) {
+  items.forEach(it => {
+    const el = document.getElementById(\`\${prefix}-\${it.id}\`);
+    if (!el) return;
+    el.value = (overrides && overrides[it.id] != null) ? overrides[it.id] : '';
+  });
+}
+
+function _cfgFixedTierRows(tbodyId, items, overrides) {
+  const tb = document.getElementById(tbodyId);
+  if (!tb) return;
+  tb.innerHTML = items.map(it => {
+    const cols = it.def.map((d, i) => {
+      const rodOv = overrides && overrides[it.id];
+      const ovVal = (rodOv && rodOv[i] != null) ? rodOv[i] : '';
+      return \`<td style="padding:5px 4px;color:#555;font-size:11px;white-space:nowrap">\${_fmtN(d)}</td>
+              <td style="padding:5px 6px"><input type="number" id="rdf-\${it.id}-\${i}" value="\${ovVal}" placeholder="override…" step="1" min="0" style="\${_inpStyle}"></td>\`;
+    }).join('');
+    return \`<tr><td style="color:#8b949e;width:140px;padding:5px 10px">\${it.label}</td>\${cols}</tr>\`;
+  }).join('');
+}
+
+function _cfgReadFixedTierOverrides(items) {
+  const out = {};
+  items.forEach(it => {
+    const vals = it.def.map((_, i) => {
+      const el = document.getElementById(\`rdf-\${it.id}-\${i}\`);
+      const v = el && el.value.trim();
+      return (v !== '' && !isNaN(Number(v))) ? Number(v) : null;
+    });
+    if (vals.some(v => v !== null)) out[it.id] = vals;
+  });
+  return out;
+}
+
+function _cfgFillFixedTierOverrides(items, overrides) {
+  items.forEach(it => {
+    const rodOv = overrides && overrides[it.id];
+    it.def.forEach((_, i) => {
+      const el = document.getElementById(\`rdf-\${it.id}-\${i}\`);
+      if (el) el.value = (rodOv && rodOv[i] != null) ? rodOv[i] : '';
+    });
+  });
+}
+
+function _cfgStatus(msg, ok) {
+  const el = document.getElementById('cfg-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = ok ? '#1a3a1a' : '#3a1a1a';
+  el.style.color = ok ? '#3fb950' : '#fc8181';
+  el.style.border = \`1px solid \${ok ? '#3fb950' : '#fc8181'}\`;
+}
+
+async function loadConfig() {
+  // Render skeleton rows first (empty overrides), then fill after fetch
+  _cfgAutoRows({});
+  _cfgStorageRows({});
+  _cfgRows('cfg-rod-rows',     CFG_RODS,    'rod');
+  _cfgRows('cfg-rodtier-rows',  CFG_RODTIER,       'rdt');
+  _cfgFixedTierRows('cfg-rodfixed-rows', CFG_RODTIER_FIXED, {});
+  _cfgRows('cfg-bobber-rows',  CFG_BOBBERS, 'bob');
+  try {
+    const res = await fetch('/pa/config', {cache:'no-store'});
+    const cfg = await res.json();
+    document.getElementById('cfg-fishSellMult').value  = cfg.fishSellMult ?? 1.0;
+    document.getElementById('cfg-eventMin').value      = cfg.specialEventIntervalMin ?? 15;
+    document.getElementById('cfg-eventMax').value      = cfg.specialEventIntervalMax ?? 30;
+    document.getElementById('cfg-compEnabled').checked = cfg.competitionEnabled !== false;
+    document.getElementById('cfg-gsEnabled').checked   = cfg.ghostShipEnabled   !== false;
+    document.getElementById('cfg-motd').value          = cfg.motd || '';
+    document.getElementById('cfg-motdType').value      = cfg.motdType || 'info';
+    document.getElementById('cfg-seagullBase').value   = cfg.seagullBaitBaseCost ?? 10000;
+    document.getElementById('cfg-costScale').value     = cfg.costScaleMult ?? 1.22;
+    // Re-render efficiency tables with loaded overrides
+    _cfgAutoRows(cfg.autoCostOverrides);
+    _cfgStorageRows(cfg.storageCostOverrides);
+    _cfgFillOverrides(CFG_RODS,    'rod', cfg.rodCostOverrides);
+    _cfgFillOverrides(CFG_RODTIER, 'rdt', cfg.rodTierCostOverrides);
+    _cfgFixedTierRows('cfg-rodfixed-rows', CFG_RODTIER_FIXED, cfg.rodTierCostsOverrides || {});
+    _cfgFillOverrides(CFG_BOBBERS, 'bob', cfg.bobberCostOverrides);
+    _cfgStatus('Config loaded.', true);
+    setTimeout(() => { const e=document.getElementById('cfg-status'); if(e) e.style.display='none'; }, 2000);
+  } catch(e) { _cfgStatus('Failed to load config: ' + e.message, false); }
+}
+
+async function saveConfig() {
+  const motdVal = document.getElementById('cfg-motd').value.trim();
+  const body = {
+    fishSellMult:              parseFloat(document.getElementById('cfg-fishSellMult').value) || 1.0,
+    specialEventIntervalMin:   parseInt(document.getElementById('cfg-eventMin').value)  || 15,
+    specialEventIntervalMax:   parseInt(document.getElementById('cfg-eventMax').value)  || 30,
+    competitionEnabled:        document.getElementById('cfg-compEnabled').checked,
+    ghostShipEnabled:          document.getElementById('cfg-gsEnabled').checked,
+    motd:                      motdVal || null,
+    motdType:                  document.getElementById('cfg-motdType').value,
+    seagullBaitBaseCost:       parseInt(document.getElementById('cfg-seagullBase').value) || 10000,
+    costScaleMult:             parseFloat(document.getElementById('cfg-costScale').value) || 1.22,
+    autoCostOverrides:         _cfgReadOverrides(CFG_AUTO,    'auto'),
+    storageCostOverrides:      _cfgReadOverrides(CFG_STORAGE, 'sto'),
+    rodCostOverrides:          _cfgReadOverrides(CFG_RODS,    'rod'),
+    rodTierCostOverrides:      _cfgReadOverrides(CFG_RODTIER, 'rdt'),
+    rodTierCostsOverrides:     _cfgReadFixedTierOverrides(CFG_RODTIER_FIXED),
+    bobberCostOverrides:       _cfgReadOverrides(CFG_BOBBERS, 'bob'),
+  };
+  try {
+    const res = await fetch('/admin/pa/config', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _cfgStatus('✓ Config saved! Players will see new prices on next app launch.', true);
+  } catch(e) { _cfgStatus('Save failed: ' + e.message, false); }
 }
 
 function sortBy(col) { _sortDir = _sortCol===col&&_sortDir==='desc'?'asc':'desc'; _sortCol = col; _page=1; loadPlayers(); }

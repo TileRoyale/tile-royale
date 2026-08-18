@@ -2263,6 +2263,7 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
     removeAds:         'remove_ads',
     autoSellPermanent: 'permanent_autoseller',
     devSupportOwned:   'dev_support_package',
+    devSupportOwned2:  'dev_support_package_2',
   };
   for (const [field, productId] of Object.entries(NC_FIELDS)) {
     if (!prev[field] && next[field]) {
@@ -2359,8 +2360,13 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
 
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
 // Bump PA_LATEST_VERSION with every new release (shows soft "update available" banner)
+// Public landing page — used for PixelPicked badge verification and general info
+app.get("/", (_req, res) => {
+  res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Patient Angler — Idle Fishing</title><style>body{margin:0;background:#0d1117;color:#c9d1d9;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:20px;text-align:center}h1{font-size:1.6rem;margin:0}p{color:#8b949e;margin:0;font-size:0.95rem}a{color:#58a6ff}</style></head><body><h1>🎣 Patient Angler — Idle Fishing</h1><p>Android idle fishing game — available on Google Play.</p><a href="https://play.google.com/store/apps/details?id=com.henlygames.patientangler" target="_blank" rel="noopener">View on Google Play</a><a href="https://pixelpicked.com/game/5kzrchCPja3/patient-angler-idle-fishing/" target="_blank" rel="noopener"><img src="https://api.pixelpicked.com/badges/5kzrchCPja3/live.png?theme=dark" width="250" height="54" alt="Approved on PixelPicked"></a></body></html>`);
+});
+
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.5.25";
+const PA_LATEST_VERSION     = "v1.0.7.20.7";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2417,14 +2423,22 @@ app.post("/admin/pa/config", requireAdmin, async (req, res) => {
 // For 'autoIncome': server marks as used, client computes 1h automation income locally.
 
 const PA_REDEEM_CODES: Record<string, {
-  rewardType: 'coins' | 'diamonds' | 'autoIncome' | 'save_restore';
-  amount?: number;               // used for coins / diamonds
-  bonusDiamonds?: number;        // extra diamonds alongside autoIncome
-  autoIncomePackages?: number;   // extra Automation Income Packages alongside any reward
+  // New flexible reward fields — use any combination
+  diamonds?: number;
+  blackPearls?: number;
+  coins?: number;
+  autoIncomePackages?: number;
+  bobberCosmetics?: string[];
+  patchArrayAppend?: Record<string, string[]>;
+  // Legacy fields — kept for backward compatibility with existing codes
+  rewardType?: 'coins' | 'diamonds' | 'autoIncome' | 'blackPearls' | 'save_restore';
+  amount?: number;
+  bonusDiamonds?: number;
+  patch?: Record<string, any>;
   desc: string;
-  maxUses?: number;   // omit = unlimited; enforced via pa_codes_used count
-  targetUid?: string; // if set, only this Firebase uid may redeem the code
-  expires?: string;   // ISO date string
+  maxUses?: number;
+  targetUid?: string;
+  expires?: string;
 }> = {
   'REVIEW':         { rewardType: 'autoIncome',                                desc: '1h automation income — thank you for the review!' },
   'LAUNCH':         { rewardType: 'coins',    amount: 500,                     desc: 'Launch celebration gift!' },
@@ -2434,6 +2448,19 @@ const PA_REDEEM_CODES: Record<string, {
   'CLOUDFIX':       { rewardType: 'autoIncome', amount: 48, bonusDiamonds: 50, expires: '2026-07-23T18:05:00Z', desc: 'Sorry for the cloud save issues — 48h automation income + 50 Diamonds!' },
   'FIVE00':         { rewardType: 'diamonds', amount: 20, desc: 'Feel good gift — 20 Diamonds!' },
   'YAYLAUNCH':      { rewardType: 'diamonds', amount: 25, autoIncomePackages: 3, desc: 'Happy launch! 🎉 25 Diamonds + 3 Automation Income Packages!' },
+  '1STEVENT':       { rewardType: 'diamonds', amount: 10, autoIncomePackages: 1, desc: 'First Event gift! 10 Diamonds + 1 Auto Income Pack.' },
+  'AUTOSELLGRANT7X': { rewardType: 'save_restore', patch: { autoSellPermanent: true, autoSellEnabled: true }, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: 'Permanent Auto Seller unlocked!' },
+  'STARTERPK8VQ2':   { rewardType: 'diamonds', amount: 200, maxUses: 1, desc: 'Starter Pack delivered — 200 Diamonds! Sorry for the delay.' },
+  'EXPTEST24':       { rewardType: 'diamonds', amount: 24, maxUses: 1, targetUid: 'BdY5lhITlTVHiej376i4Iu6kHEm1', desc: 'Expedition test' },
+  'GEM20BDY5K':      { diamonds: 20, maxUses: 1, targetUid: 'BdY5lhITlTVHiej376i4Iu6kHEm1', desc: '20 Diamonds gift!' },
+  'YNOT':            { rewardType: 'diamonds', amount: 10, autoIncomePackages: 2, expires: '2026-08-15T23:59:59Z', desc: '10 Diamonds + 2 Auto Income Tokens!' },
+  'CLOSE21K':        { diamonds: 10, autoIncomePackages: 2, desc: '10 Diamonds + 2 Auto Income Tokens!' },
+  'GEM50SLT9X':      { rewardType: 'diamonds',      amount: 50,                                        maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Sorry for the trouble — 50 Diamonds gift!' },
+  'EILOCK8SLT':      { rewardType: 'save_restore',  patch: { _eiAllTiersUnlocked: true },                                                maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Event Island tiers unlocked!' },
+  'EIFIX2BEN':       { rewardType: 'save_restore',  patch: { _eiAllTiersUnlocked: true },                                                maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Event Island tiers unlocked!' },
+  'BOBBER8BEN':      { rewardType: 'save_restore',  patchArrayAppend: { unlockedBobberCosmetics: ['bc_founders'] },                      maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Founders bobber unlocked!' },
+  'FOUNDERS8BEN':    { diamonds: 55, blackPearls: 55, autoIncomePackages: 7, bobberCosmetics: ['bc_founders'], maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Founders Event — all tier rewards!' },
+  'FOUNDERSBEN2':    { bobberCosmetics: ['bc_founders'], maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Founders Bobber — event reward!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2469,6 +2496,24 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
 
   if (entry.rewardType === 'save_restore') {
+    // patchArrayAppend: read cloud save, append new items to specified arrays, return only those arrays as patch
+    if (entry.patchArrayAppend) {
+      const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+      const raw = rows?.[0]?.save_json;
+      const saveObj: Record<string, any> = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+      const resultPatch: Record<string, any[]> = {};
+      for (const [key, items] of Object.entries(entry.patchArrayAppend)) {
+        const existing: string[] = Array.isArray(saveObj[key]) ? saveObj[key] : [];
+        const merged = [...existing];
+        for (const item of items) { if (!merged.includes(item)) merged.push(item); }
+        resultPatch[key] = merged;
+      }
+      return res.json({ ok: true, desc: entry.desc, reward: { rewardType: 'save_restore', save: resultPatch } });
+    }
+    // If the code entry has a patch, return just the patch fields (client does Object.assign(G, patch))
+    if (entry.patch) {
+      return res.json({ ok: true, desc: entry.desc, reward: { rewardType: 'save_restore', save: entry.patch } });
+    }
     const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
     if (!rows || rows.length === 0) return res.json({ ok: false, error: 'no_save_found' });
     const raw = rows[0].save_json;
@@ -2476,10 +2521,21 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     return res.json({ ok: true, desc: entry.desc, reward: { rewardType: 'save_restore', save: saveObj } });
   }
 
-  const reward: Record<string, any> = { rewardType: entry.rewardType };
-  if (entry.amount             != null) reward.amount             = entry.amount;
-  if (entry.bonusDiamonds      != null) reward.bonusDiamonds      = entry.bonusDiamonds;
-  if (entry.autoIncomePackages != null) reward.autoIncomePackages = entry.autoIncomePackages;
+  const reward: Record<string, any> = {};
+  if (entry.rewardType) {
+    // Legacy mode
+    reward.rewardType = entry.rewardType;
+    if (entry.amount             != null) reward.amount             = entry.amount;
+    if (entry.bonusDiamonds      != null) reward.bonusDiamonds      = entry.bonusDiamonds;
+    if (entry.autoIncomePackages != null) reward.autoIncomePackages = entry.autoIncomePackages;
+  } else {
+    // New flexible mode — any combination of reward fields
+    if (entry.diamonds           != null) reward.diamonds           = entry.diamonds;
+    if (entry.blackPearls        != null) reward.blackPearls        = entry.blackPearls;
+    if (entry.coins              != null) reward.coins              = entry.coins;
+    if (entry.autoIncomePackages != null) reward.autoIncomePackages = entry.autoIncomePackages;
+    if (entry.bobberCosmetics    != null) reward.bobberCosmetics    = entry.bobberCosmetics;
+  }
 
   res.json({ ok: true, desc: entry.desc, reward });
 });
@@ -2529,7 +2585,9 @@ const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'
   remove_ads:            { type: 'non_consumable',              grant: { removeAds: true } },
   permanent_autoseller:  { type: 'non_consumable',              grant: { permanentAutoSell: true } },
   dev_support_package:   { type: 'non_consumable',              grant: { devSupport: true } },
-  'ei-event-reward':     { type: 'consumable',                  grant: { eiAllTiersUnlocked: true } },
+  dev_support_package_2: { type: 'non_consumable',              grant: { devSupport2: true } },
+  prestige_pack:         { type: 'consumable',     diamonds: 100, grant: { diamonds: 100 } },
+  'ei_event_reward':     { type: 'consumable',                  grant: { eiAllTiersUnlocked: true } },
   time_skip_12:          { type: 'consumable',                  grant: { autoIncomePackages: 12 } },
   time_skip_24:          { type: 'consumable',                  grant: { autoIncomePackages: 24 } },
 };
@@ -2648,6 +2706,46 @@ app.get('/admin/pa/recover-by-email', paAdminMiddleware, async (req, res) => {
   }
 });
 
+// GET /admin/pa/player/:uid — view player save + IAP purchases by UID
+app.get('/admin/pa/player/:uid', paAdminMiddleware, async (req, res) => {
+  const { uid } = req.params;
+  if (!uid) { res.status(400).json({ error: 'missing uid' }); return; }
+  try {
+    const [saveRows, purchaseRows] = await Promise.all([
+      query('SELECT save_json, updated_at FROM pa_save_data WHERE uid=$1', [uid]),
+      query('SELECT product_id, order_id, granted_json, purchased_at FROM pa_purchase_receipts WHERE player_id=$1 ORDER BY purchased_at DESC', [uid]),
+    ]);
+    let fbUser: any = null;
+    try { fbUser = await firebaseAdmin.auth().getUser(uid); } catch {}
+    res.json({
+      uid,
+      email: fbUser?.email || null,
+      displayName: fbUser?.displayName || null,
+      currentSave: saveRows?.[0] ? { updatedAt: saveRows[0].updated_at, save: JSON.parse(saveRows[0].save_json) } : null,
+      purchases: purchaseRows || [],
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /admin/pa/grant-ei-reward — manually set _eiAllTiersUnlocked on a player's save
+app.post('/admin/pa/grant-ei-reward', paAdminMiddleware, express.json(), async (req, res) => {
+  const { uid } = req.body;
+  if (!uid) { res.status(400).json({ error: 'missing uid' }); return; }
+  try {
+    const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+    if (!rows?.[0]) { res.status(404).json({ error: 'save not found' }); return; }
+    const save = JSON.parse(rows[0].save_json);
+    if (save._eiAllTiersUnlocked) { res.json({ ok: true, note: 'already set' }); return; }
+    save._eiAllTiersUnlocked = true;
+    const ok = await savePASave(uid, JSON.stringify(save));
+    res.json({ ok, note: '_eiAllTiersUnlocked patched' });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /admin/pa/export-saves — full export of all PA saves as JSON (for external backup)
 app.get('/admin/pa/export-saves', requireAdmin, async (_req, res) => {
   if (!getDbStatus().available) return res.status(503).json({ error: 'db_unavailable' });
@@ -2754,6 +2852,38 @@ app.get('/admin/pa/code-status', paAdminMiddleware, async (req, res) => {
     ...(rows || []).find((r: any) => r.code === code) || {},
   }));
   res.json({ result });
+});
+
+// GET /admin/pa/db-schema?table=... — check column names for a table (bypasses dbAvailable)
+app.get('/admin/pa/db-schema', paAdminMiddleware, async (req, res) => {
+  const tableName = (req.query.table as string || 'pa_purchase_receipts').replace(/[^a-z_]/g, '');
+  const url = process.env.DATABASE_URL;
+  if (!url) { res.json({ error: 'no DATABASE_URL' }); return; }
+  const { Pool: PgPool } = await import('pg');
+  const tmpPool = new PgPool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 1 });
+  try {
+    const result = await tmpPool.query(
+      `SELECT column_name, data_type, is_nullable FROM information_schema.columns
+       WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`,
+      [tableName]
+    );
+    res.json({ table: tableName, columns: result.rows });
+  } catch (e: any) {
+    res.json({ error: e.message });
+  } finally {
+    await tmpPool.end().catch(() => {});
+  }
+});
+
+// GET /admin/pa/find-by-token?token=... — look up player by Google Play purchase token
+app.get('/admin/pa/find-by-token', paAdminMiddleware, async (req, res) => {
+  const token = (req.query.token as string || '').trim();
+  if (!token) { res.status(400).json({ error: 'missing token' }); return; }
+  const rows = await query(
+    `SELECT player_id, product_id, purchased_at FROM pa_purchase_receipts WHERE purchase_token = $1`,
+    [token]
+  );
+  res.json({ rows: rows || [] });
 });
 
 app.get('/admin/pa/find-by-bobber', paAdminMiddleware, async (req, res) => {
