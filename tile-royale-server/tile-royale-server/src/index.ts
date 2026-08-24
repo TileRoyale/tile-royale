@@ -2205,6 +2205,9 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
 
   // ── Burst checks (require a previous save to compare against) ────────────
   const timeDiff = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
+  // Scale discrete-action burst limits by days elapsed since last accepted save.
+  // prev._savedAt is server-stored so the client cannot inflate timeDiff.
+  const daysSinceSave = Math.max(1, timeDiff / 86400);
 
   // Coin generation rate
   const coinDiff = (next.coins || 0) - (prev.coins || 0);
@@ -2216,9 +2219,10 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
   if (diaGain > PA_MAX_DIAMOND_BURST + timeDiff * 0.5)
     return { ok: false, reason: `diamond_burst:${diaGain}` };
 
-  // Black pearl burst
+  // Black pearl burst — pearls scale with prestige tier so this limit is intentionally large;
+  // prestige burst above is the real gate on pearl cheating.
   const pearlGain = (next.blackPearls || 0) - (prev.blackPearls || 0);
-  if (pearlGain > PA_MAX_BLACK_PEARL_BURST)
+  if (pearlGain > PA_MAX_BLACK_PEARL_BURST * 1000 * daysSinceSave)
     return { ok: false, reason: `pearl_burst:${pearlGain}` };
 
   // Bobber tier burst per bobber
@@ -2228,17 +2232,17 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
       return { ok: false, reason: `bobber_burst:${bid}+${gain}` };
   }
 
-  // Pearl upgrade total level burst (all upgrades combined)
+  // Pearl upgrade total level burst (scales with days — saves rejected for days can accumulate)
   let prevUpgradeTotal = 0;
   let nextUpgradeTotal = 0;
   for (const v of Object.values(prev.pearlUpgrades || {})) prevUpgradeTotal += Number(v) || 0;
   for (const v of Object.values(next.pearlUpgrades || {})) nextUpgradeTotal += Number(v) || 0;
-  if (nextUpgradeTotal - prevUpgradeTotal > PA_PEARL_UPGRADE_TOTAL_BURST)
+  if (nextUpgradeTotal - prevUpgradeTotal > PA_PEARL_UPGRADE_TOTAL_BURST * daysSinceSave)
     return { ok: false, reason: `upgrade_burst:+${nextUpgradeTotal - prevUpgradeTotal}` };
 
-  // Prestige burst
+  // Prestige burst (scales with days — 3/day is a fair ceiling)
   const prestigeDiff = (next.prestigeCount || 0) - (prev.prestigeCount || 0);
-  if (prestigeDiff > PA_MAX_PRESTIGE_BURST)
+  if (prestigeDiff > PA_MAX_PRESTIGE_BURST * daysSinceSave)
     return { ok: false, reason: `prestige_burst:+${prestigeDiff}` };
 
   // ── Regression detection ──────────────────────────────────────────────────
