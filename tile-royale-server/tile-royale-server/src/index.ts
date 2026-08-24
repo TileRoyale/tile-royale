@@ -2162,7 +2162,12 @@ const PA_MAX_BOBBER_TIER           = 15;                   // absolute max tier 
 const PA_MAX_BOBBER_BURST          = 5;                    // max tiers gained per bobber per save
 const PA_MAX_PRESTIGE_BURST        = 3;                    // max prestiges per save
 const PA_PEARL_UPGRADE_TOTAL_BURST = 20;                   // max total upgrade levels gained per save
-const PA_ZONE_ORDER = ['pond','river','lake','bay','sea','ocean','abyss'];
+const PA_ZONE_ORDER = [
+  'pond','river','lake','bay','sea','ocean','trench','maelstrom','abyss',
+  'emerald_cavern','amber_cavern','amethyst_cavern','ruby_cavern',
+  'aquamarine_cavern','opal_cavern','obsidian_cavern','topaz_cavern',
+  'sapphire_cavern','blue_diamond_cavern',
+];
 const PA_BOBBER_IDS = ['basic_bobber','sensitive_bobber','heavy_bobber','electronic_bobber'];
 const PA_PEARL_UPGRADE_MAXLEVEL: Record<string, number> = {
   masterangler:   4,
@@ -2366,7 +2371,7 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.7.20.7";
+const PA_LATEST_VERSION     = "v1.0.7.24";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2429,6 +2434,8 @@ const PA_REDEEM_CODES: Record<string, {
   coins?: number;
   autoIncomePackages?: number;
   bobberCosmetics?: string[];
+  treasureMaps?: number;
+  treasureMapFragments?: number;
   patchArrayAppend?: Record<string, string[]>;
   // Legacy fields — kept for backward compatibility with existing codes
   rewardType?: 'coins' | 'diamonds' | 'autoIncome' | 'blackPearls' | 'save_restore';
@@ -2461,6 +2468,8 @@ const PA_REDEEM_CODES: Record<string, {
   'BOBBER8BEN':      { rewardType: 'save_restore',  patchArrayAppend: { unlockedBobberCosmetics: ['bc_founders'] },                      maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Founders bobber unlocked!' },
   'FOUNDERS8BEN':    { diamonds: 55, blackPearls: 55, autoIncomePackages: 7, bobberCosmetics: ['bc_founders'], maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Founders Event — all tier rewards!' },
   'FOUNDERSBEN2':    { bobberCosmetics: ['bc_founders'], maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Founders Bobber — event reward!' },
+  'MAPS3':           { treasureMaps: 2, desc: '2 Treasure Maps — happy exploring!' },
+  'LOSTISLES':       { treasureMapFragments: 20, desc: '20 Treasure Map Fragments — go explore the Lost Isles!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2534,7 +2543,9 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.blackPearls        != null) reward.blackPearls        = entry.blackPearls;
     if (entry.coins              != null) reward.coins              = entry.coins;
     if (entry.autoIncomePackages != null) reward.autoIncomePackages = entry.autoIncomePackages;
-    if (entry.bobberCosmetics    != null) reward.bobberCosmetics    = entry.bobberCosmetics;
+    if (entry.bobberCosmetics        != null) reward.bobberCosmetics        = entry.bobberCosmetics;
+    if (entry.treasureMaps           != null) reward.treasureMaps           = entry.treasureMaps;
+    if (entry.treasureMapFragments   != null) reward.treasureMapFragments   = entry.treasureMapFragments;
   }
 
   res.json({ ok: true, desc: entry.desc, reward });
