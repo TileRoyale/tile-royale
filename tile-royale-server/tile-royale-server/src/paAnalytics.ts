@@ -710,13 +710,13 @@ export async function handleAdminSummary(_req: Request, res: Response): Promise<
     `) || [{}],
     query(`
       SELECT
-        COUNT(*) FILTER (WHERE last_seen >= $1::timestamptz) AS today,
-        COUNT(*) FILTER (WHERE last_seen >= $2::timestamptz) AS last7,
-        COUNT(*) FILTER (WHERE last_seen >= $3::timestamptz) AS last30,
-        COUNT(*) FILTER (WHERE DATE(created_at) >= $4::date - INTERVAL '7 days')  AS new7,
-        COUNT(*) FILTER (WHERE DATE(created_at) >= $4::date - INTERVAL '30 days') AS new30
+        COUNT(*) FILTER (WHERE DATE(last_seen AT TIME ZONE 'UTC') = $3::date) AS today,
+        COUNT(*) FILTER (WHERE last_seen >= $1::timestamptz) AS last7,
+        COUNT(*) FILTER (WHERE last_seen >= $2::timestamptz) AS last30,
+        COUNT(*) FILTER (WHERE DATE(created_at AT TIME ZONE 'UTC') >= $3::date - INTERVAL '7 days')  AS new7,
+        COUNT(*) FILTER (WHERE DATE(created_at AT TIME ZONE 'UTC') >= $3::date - INTERVAL '30 days') AS new30
       FROM pa_player_progress
-    `, [d1, d7, d30, today]) || [{}],
+    `, [d7, d30, today]) || [{}],
     query(`
       SELECT app_version, COUNT(*) AS cnt
       FROM pa_player_progress

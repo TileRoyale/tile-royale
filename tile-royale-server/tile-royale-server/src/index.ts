@@ -2155,13 +2155,7 @@ gameServer.define("gauntlet", GauntletRoom)
 
 // ─── Patient Angler Anti-cheat ────────────────────────────────────────────────
 
-const PA_MAX_COIN_RATE             = 100_000_000_000_000; // 100T coins/s — no practical cap for any zone
-const PA_MAX_DIAMOND_BURST         = 1500;                 // max diamonds gained between saves
-const PA_MAX_BLACK_PEARL_BURST     = 10000;                // max black pearls gained between saves
 const PA_MAX_BOBBER_TIER           = 15;                   // absolute max tier per bobber
-const PA_MAX_BOBBER_BURST          = 5;                    // max tiers gained per bobber per save
-const PA_MAX_PRESTIGE_BURST        = 3;                    // max prestiges per save
-const PA_PEARL_UPGRADE_TOTAL_BURST = 20;                   // max total upgrade levels gained per save
 const PA_ZONE_ORDER = [
   'pond','river','lake','bay','sea','ocean','trench','maelstrom','abyss',
   'emerald_cavern','amber_cavern','amethyst_cavern','ruby_cavern',
@@ -2194,56 +2188,8 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
       return { ok: false, reason: `upgrade_cap:${id}=${(next.pearlUpgrades || {})[id]}>max${max}` };
   }
 
-  // ── First save: enforce a clean initial state ─────────────────────────────
-  if (!prev) {
-    if ((next.coins || 0) > 50000)
-      return { ok: false, reason: `first_save_coins:${next.coins}` };
-    if ((next.blackPearls || 0) > 0)
-      return { ok: false, reason: `first_save_pearls:${next.blackPearls}` };
-    return { ok: true };
-  }
-
-  // ── Burst checks (require a previous save to compare against) ────────────
-  const timeDiff = Math.max(((next._savedAt || Date.now()) - (prev._savedAt || 0)) / 1000, 1);
-  // Scale discrete-action burst limits by days elapsed since last accepted save.
-  // prev._savedAt is server-stored so the client cannot inflate timeDiff.
-  const daysSinceSave = Math.max(1, timeDiff / 86400);
-
-  // Coin generation rate
-  const coinDiff = (next.coins || 0) - (prev.coins || 0);
-  if (coinDiff > timeDiff * PA_MAX_COIN_RATE)
-    return { ok: false, reason: `coin_rate:${Math.round(coinDiff / timeDiff)}/s` };
-
-  // Diamond burst
-  const diaGain = (next.diamonds || 0) - (prev.diamonds || 0);
-  if (diaGain > PA_MAX_DIAMOND_BURST + timeDiff * 0.5)
-    return { ok: false, reason: `diamond_burst:${diaGain}` };
-
-  // Black pearl burst — pearls scale with prestige tier so this limit is intentionally large;
-  // prestige burst above is the real gate on pearl cheating.
-  const pearlGain = (next.blackPearls || 0) - (prev.blackPearls || 0);
-  if (pearlGain > PA_MAX_BLACK_PEARL_BURST * 1000 * daysSinceSave)
-    return { ok: false, reason: `pearl_burst:${pearlGain}` };
-
-  // Bobber tier burst per bobber
-  for (const bid of PA_BOBBER_IDS) {
-    const gain = ((next.bobberTiers || {})[bid] || 0) - ((prev.bobberTiers || {})[bid] || 0);
-    if (gain > PA_MAX_BOBBER_BURST)
-      return { ok: false, reason: `bobber_burst:${bid}+${gain}` };
-  }
-
-  // Pearl upgrade total level burst (scales with days — saves rejected for days can accumulate)
-  let prevUpgradeTotal = 0;
-  let nextUpgradeTotal = 0;
-  for (const v of Object.values(prev.pearlUpgrades || {})) prevUpgradeTotal += Number(v) || 0;
-  for (const v of Object.values(next.pearlUpgrades || {})) nextUpgradeTotal += Number(v) || 0;
-  if (nextUpgradeTotal - prevUpgradeTotal > PA_PEARL_UPGRADE_TOTAL_BURST * daysSinceSave)
-    return { ok: false, reason: `upgrade_burst:+${nextUpgradeTotal - prevUpgradeTotal}` };
-
-  // Prestige burst (scales with days — 3/day is a fair ceiling)
-  const prestigeDiff = (next.prestigeCount || 0) - (prev.prestigeCount || 0);
-  if (prestigeDiff > PA_MAX_PRESTIGE_BURST * daysSinceSave)
-    return { ok: false, reason: `prestige_burst:+${prestigeDiff}` };
+  // ── First save: no previous state to compare against — absolute caps above are sufficient ──
+  if (!prev) return { ok: true };
 
   // ── Regression detection ──────────────────────────────────────────────────
   // Blocks a lower-progress state from overwriting a real save (reinstall / fresh-state exploit).
@@ -2523,8 +2469,23 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
       }
       return res.json({ ok: true, desc: entry.desc, reward: { rewardType: 'save_restore', save: resultPatch } });
     }
-    // If the code entry has a patch, return just the patch fields (client does Object.assign(G, patch))
+    // If the code entry has a patch, return just the patch fields (client does Object.assign(G, patch)).
+    // Also apply any NC fields from the patch directly to the DB save so the next client upload
+    // doesn't fail the nc_fraud check (prev[field]=false → next[field]=true without receipt).
     if (entry.patch) {
+      const NC_PROMO_FIELDS = new Set(['autoSellPermanent', 'removeAds', 'devSupportOwned', 'devSupportOwned2']);
+      const ncPatch = Object.fromEntries(Object.entries(entry.patch).filter(([k]) => NC_PROMO_FIELDS.has(k)));
+      if (Object.keys(ncPatch).length > 0) {
+        try {
+          const ncRows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+          if (ncRows?.[0]?.save_json) {
+            const ncSave = typeof ncRows[0].save_json === 'string' ? JSON.parse(ncRows[0].save_json) : ncRows[0].save_json;
+            Object.assign(ncSave, ncPatch);
+            await savePASave(uid, JSON.stringify(ncSave));
+            console.log(`[PA promo] NC patch applied to DB for ${uid}:`, ncPatch);
+          }
+        } catch (e) { console.error('[PA promo] NC patch DB update failed:', e); }
+      }
       return res.json({ ok: true, desc: entry.desc, reward: { rewardType: 'save_restore', save: entry.patch } });
     }
     const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
@@ -2759,6 +2720,33 @@ app.post('/admin/pa/grant-ei-reward', paAdminMiddleware, express.json(), async (
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// POST /admin/pa/patch-nc-fields — sets NC (non-consumable) fields in a player's DB save to true.
+// Used to fix saves blocked by nc_fraud when the field was legitimately granted via promo code.
+// Only allows setting NC fields to true; never removes/downgrades.
+app.post('/admin/pa/patch-nc-fields', requireAdmin, express.json(), async (req, res) => {
+  const { uid, patch } = req.body;
+  if (!uid || !patch || typeof patch !== 'object') {
+    res.status(400).json({ error: 'missing uid or patch' }); return;
+  }
+  const NC_ALLOWED = new Set(['autoSellPermanent', 'autoSellEnabled', 'removeAds', 'devSupportOwned', 'devSupportOwned2']);
+  const safePatch: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (NC_ALLOWED.has(k) && v === true) safePatch[k] = true;
+  }
+  if (!Object.keys(safePatch).length) { res.status(400).json({ error: 'no valid NC fields in patch' }); return; }
+  try {
+    const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+    if (!rows?.[0]) { res.status(404).json({ error: 'save not found' }); return; }
+    const save = typeof rows[0].save_json === 'string' ? JSON.parse(rows[0].save_json) : rows[0].save_json;
+    const before: Record<string, any> = {};
+    for (const k of Object.keys(safePatch)) before[k] = save[k];
+    Object.assign(save, safePatch);
+    const ok = await savePASave(uid, JSON.stringify(save));
+    console.log(`[PA Admin] patch-nc-fields: uid=${uid} patch=${JSON.stringify(safePatch)}`);
+    res.json({ ok, uid, patched: safePatch, before });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /admin/pa/export-saves — full export of all PA saves as JSON (for external backup)
