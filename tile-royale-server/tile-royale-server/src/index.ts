@@ -2749,6 +2749,29 @@ app.post('/admin/pa/patch-nc-fields', requireAdmin, express.json(), async (req, 
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /admin/pa/grant-bobber — appends a bobber cosmetic id to a player's unlockedBobberCosmetics.
+// Idempotent: does nothing if the player already has the bobber.
+app.post('/admin/pa/grant-bobber', requireAdmin, express.json(), async (req, res) => {
+  const { uid, bobberId } = req.body;
+  if (!uid || !bobberId || typeof bobberId !== 'string') {
+    res.status(400).json({ error: 'missing uid or bobberId' }); return;
+  }
+  try {
+    const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+    if (!rows?.[0]) { res.status(404).json({ error: 'save not found' }); return; }
+    const save = typeof rows[0].save_json === 'string' ? JSON.parse(rows[0].save_json) : rows[0].save_json;
+    const cosmetics: string[] = Array.isArray(save.unlockedBobberCosmetics) ? save.unlockedBobberCosmetics : ['bc_basic'];
+    if (cosmetics.includes(bobberId)) {
+      res.json({ ok: true, uid, note: 'already_has_bobber', bobberId }); return;
+    }
+    cosmetics.push(bobberId);
+    save.unlockedBobberCosmetics = cosmetics;
+    const ok = await savePASave(uid, JSON.stringify(save));
+    console.log(`[PA Admin] grant-bobber: uid=${uid} bobberId=${bobberId}`);
+    res.json({ ok, uid, bobberId, totalCosmetics: cosmetics.length });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /admin/pa/export-saves — full export of all PA saves as JSON (for external backup)
 app.get('/admin/pa/export-saves', requireAdmin, async (_req, res) => {
   if (!getDbStatus().available) return res.status(503).json({ error: 'db_unavailable' });
