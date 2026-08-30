@@ -6,7 +6,9 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig } from "./db";
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig,
+  getCEActivePlayerCount, getCEContribution, upsertCEContribution, getCECommunityTotal, getCELeaderboard,
+  getCEClaimedMilestones, hasCEMilestoneClaim, recordCEMilestoneClaim } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -2321,7 +2323,7 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.7.24";
+const PA_LATEST_VERSION     = "v1.0.7.32";
 app.get("/pa/version", (_req, res) => {
   res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
 });
@@ -2347,6 +2349,9 @@ const PA_CONFIG_DEFAULTS: Record<string, unknown> = {
   seagullBaitBaseCost:       10000, // tier-0 seagull bait cost (scales * 5^tier)
   costScaleMult:             1.22,  // per-purchase cost scale factor (default 1.22 = +22% each buy)
   rodTierCostsOverrides:     {},    // fixed-tier rods: { "sea_rod": [t1,t2,t3], "ocean_rod": [t1,t2,t3] }
+  communityEvent:            null,  // active community event config or null
+  // Array of { productId, discountPct, until } — shown as badge in store; null = no sale
+  saleConfig:                null,
 };
 
 // Public — clients poll this on every launch
@@ -2369,6 +2374,216 @@ app.post("/admin/pa/config", requireAdmin, async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
   }
+});
+
+// ─── Community Event admin endpoint ──────────────────────────────────────────
+
+// POST /admin/pa/community/start
+// Counts 7-day active PA players, computes target = count × 50 000,
+// and stores the event in remote config.
+// Body: { eventId, name, durationHours, milestones, target?, endsAt? }
+// target and endsAt override the auto-computed values when provided.
+app.post('/admin/pa/community/start', requireAdmin, async (req, res) => {
+  const { eventId, name, durationHours = 48, milestones = [], target: targetOverride, endsAt: endsAtOverride } = req.body;
+  if (!eventId || !name) return res.status(400).json({ ok: false, error: 'eventId and name required' });
+
+  const activePlayers = await getCEActivePlayerCount(7);
+  const target        = targetOverride != null ? Number(targetOverride) : activePlayers * 50000;
+  const endsAt        = endsAtOverride  != null ? Number(endsAtOverride)  : Date.now() + Number(durationHours) * 3600 * 1000;
+
+  const communityEvent = { eventId, name, endsAt, target, activePlayers, milestones };
+  const current = await getPARemoteConfig();
+  await setPARemoteConfig({ ...current, communityEvent });
+
+  console.log(`[CE] Started event "${name}" id=${eventId} target=${target} (${activePlayers} × 50k) ends=${new Date(endsAt).toISOString()}`);
+  res.json({ ok: true, event: communityEvent });
+});
+
+// DELETE /admin/pa/community/stop — clears the active event from config
+app.delete('/admin/pa/community/stop', requireAdmin, async (_req, res) => {
+  const current = await getPARemoteConfig();
+  await setPARemoteConfig({ ...current, communityEvent: null });
+  res.json({ ok: true });
+});
+
+// GET /admin/pa/community/player-count  — read-only, no side effects
+app.get('/admin/pa/community/player-count', requireAdmin, async (_req, res) => {
+  const activePlayers = await getCEActivePlayerCount(7);
+  res.json({ ok: true, activePlayers, projectedTarget: activePlayers * 50000 });
+});
+
+// ─── Community Event endpoints ────────────────────────────────────────────────
+
+// Helper: get the active event config from remote config
+async function _ceGetActiveCfg(): Promise<Record<string,unknown> | null> {
+  try {
+    const stored = await getPARemoteConfig();
+    const cfg = { ...PA_CONFIG_DEFAULTS, ...stored };
+    const ev = cfg.communityEvent as Record<string,unknown> | null;
+    if (!ev || !ev.eventId || typeof ev.endsAt !== 'number' || ev.endsAt < Date.now()) return null;
+    return ev;
+  } catch { return null; }
+}
+
+// GET /pa/community/status?eventId=...
+app.get('/pa/community/status', verifyPAToken, async (req, res) => {
+  const uid     = res.locals.paUid as string;
+  const eventId = (req.query.eventId as string) || '';
+  if (!eventId) return res.status(400).json({ ok: false, error: 'missing_event_id' });
+
+  const ev = await _ceGetActiveCfg();
+  if (!ev || ev.eventId !== eventId) return res.json({ ok: true, status: null, eventActive: false });
+
+  const [playerTotal, communityTotal, milestonesClaimed] = await Promise.all([
+    getCEContribution(uid, eventId),
+    getCECommunityTotal(eventId),
+    getCEClaimedMilestones(uid, eventId),
+  ]);
+
+  res.json({
+    ok: true,
+    status: { playerId: uid, playerTotal, communityTotal, milestonesClaimed },
+  });
+});
+
+// POST /pa/community/contribute  { eventId, amount }
+app.post('/pa/community/contribute', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { eventId, amount } = req.body;
+  if (!eventId || typeof amount !== 'number' || amount <= 0) {
+    return res.status(400).json({ ok: false, error: 'invalid_request' });
+  }
+
+  const ev = await _ceGetActiveCfg();
+  if (!ev || ev.eventId !== eventId) return res.json({ ok: false, error: 'event_not_active' });
+
+  // Anti-cheat: max 10000 fish per flush (300/s buffed max × 30s interval + headroom)
+  const safeAmount = Math.min(Math.floor(amount), 10000);
+
+  // Get player display name from save data
+  let displayName: string | null = null;
+  try {
+    const saveRows = await query(
+      `SELECT save_json::jsonb->>'playerName' AS name FROM pa_save_data WHERE uid=$1`, [uid]
+    );
+    displayName = saveRows?.[0]?.name || null;
+  } catch { /* ignore */ }
+
+  await upsertCEContribution(uid, eventId, safeAmount, displayName || undefined);
+
+  const [playerTotal, communityTotal, milestonesClaimed] = await Promise.all([
+    getCEContribution(uid, eventId),
+    getCECommunityTotal(eventId),
+    getCEClaimedMilestones(uid, eventId),
+  ]);
+
+  res.json({
+    ok: true,
+    status: { playerId: uid, playerTotal, communityTotal, milestonesClaimed },
+  });
+});
+
+// GET /pa/community/leaderboard?eventId=...
+app.get('/pa/community/leaderboard', verifyPAToken, async (req, res) => {
+  const eventId = (req.query.eventId as string) || '';
+  if (!eventId) return res.status(400).json({ ok: false, error: 'missing_event_id' });
+  const rows = await getCELeaderboard(eventId, 100);
+  res.json({ ok: true, rows });
+});
+
+// POST /pa/community/claim  { eventId, milestonePct }
+app.post('/pa/community/claim', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { eventId, milestonePct } = req.body;
+  if (!eventId || typeof milestonePct !== 'number') {
+    return res.status(400).json({ ok: false, error: 'invalid_request' });
+  }
+
+  const ev = await _ceGetActiveCfg();
+  if (!ev || ev.eventId !== eventId) return res.json({ ok: false, error: 'event_not_active' });
+
+  const milestones = ev.milestones as Array<Record<string,unknown>>;
+  const ms = milestones.find(m => Number(m.pct) === milestonePct);
+  if (!ms) return res.json({ ok: false, error: 'unknown_milestone' });
+
+  // Check if already claimed
+  if (await hasCEMilestoneClaim(uid, eventId, milestonePct)) {
+    return res.json({ ok: false, error: 'already_claimed' });
+  }
+
+  const [playerTotal, communityTotal] = await Promise.all([
+    getCEContribution(uid, eventId),
+    getCECommunityTotal(eventId),
+  ]);
+  const communityPct = ev.target ? (communityTotal / Number(ev.target) * 100) : 0;
+  const playerPct    = ev.target ? (playerTotal    / Number(ev.target) * 100) : 0;
+
+  // Community milestone: community must have reached pct%
+  if (communityPct < milestonePct) {
+    return res.json({ ok: false, error: 'milestone_not_reached' });
+  }
+
+  await recordCEMilestoneClaim(uid, eventId, milestonePct);
+  const milestonesClaimed = await getCEClaimedMilestones(uid, eventId);
+
+  // Build reward — blackPearls with optional bonus diamonds and bobber
+  const reward: Record<string,unknown> = {
+    type:       ms.type,
+    reward_pct: ms.reward_pct,
+  };
+  if (ms.bonusDiamonds) reward.bonusDiamonds = ms.bonusDiamonds;
+  if (ms.bonusBobber) {
+    const bb = ms.bonusBobber as Record<string,unknown>;
+    if (playerPct >= Number(bb.minPlayerPct)) {
+      reward.bonusBobber = bb.id;
+    }
+  }
+
+  res.json({
+    ok: true,
+    reward,
+    status: { playerId: uid, playerTotal, communityTotal, milestonesClaimed },
+  });
+});
+
+// POST /pa/community/claim-bobber  { eventId }
+// Separate bobber claim for players who qualified AFTER claiming the 100% milestone.
+// Uses sentinel milestonePct=101 in pa_community_claims to track separately.
+app.post('/pa/community/claim-bobber', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { eventId } = req.body;
+  if (!eventId) return res.status(400).json({ ok: false, error: 'invalid_request' });
+
+  const ev = await _ceGetActiveCfg();
+  if (!ev || ev.eventId !== eventId) return res.json({ ok: false, error: 'event_not_active' });
+
+  const ms100 = (ev.milestones as Array<Record<string,unknown>>).find(m => Number(m.pct) === 100 && m.bonusBobber);
+  if (!ms100) return res.json({ ok: false, error: 'no_bobber_milestone' });
+
+  if (await hasCEMilestoneClaim(uid, eventId, 101)) {
+    return res.json({ ok: false, error: 'already_claimed' });
+  }
+
+  const [playerTotal, communityTotal] = await Promise.all([
+    getCEContribution(uid, eventId),
+    getCECommunityTotal(eventId),
+  ]);
+  const communityPct = ev.target ? (communityTotal / Number(ev.target) * 100) : 0;
+  const playerPct    = ev.target ? (playerTotal    / Number(ev.target) * 100) : 0;
+
+  if (communityPct < 100) return res.json({ ok: false, error: 'milestone_not_reached' });
+
+  const bb = ms100.bonusBobber as Record<string,unknown>;
+  if (playerPct < Number(bb.minPlayerPct)) return res.json({ ok: false, error: 'not_qualified' });
+
+  await recordCEMilestoneClaim(uid, eventId, 101);
+  const milestonesClaimed = await getCEClaimedMilestones(uid, eventId);
+
+  res.json({
+    ok: true,
+    reward: { bonusBobber: bb.id },
+    status: { playerId: uid, playerTotal, communityTotal, milestonesClaimed },
+  });
 });
 
 // ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
@@ -2420,6 +2635,8 @@ const PA_REDEEM_CODES: Record<string, {
   'FOUNDERSBEN2':    { bobberCosmetics: ['bc_founders'], maxUses: 1, targetUid: 'bEn4s0MPDQPa6Yr97RQjoFuCStf2', desc: 'Founders Bobber — event reward!' },
   'MAPS3':           { treasureMaps: 2, desc: '2 Treasure Maps — happy exploring!' },
   'LOSTISLES':       { treasureMapFragments: 20, desc: '20 Treasure Map Fragments — go explore the Lost Isles!' },
+  'GEM50Y4KW2':      { diamonds: 50, maxUses: 1, targetUid: '70bYhYFIXebyQvGWmYcQleEKuim2', desc: '50 Diamonds gift!' },
+  'GEM48CP9RX':      { diamonds: 48, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: '48 Diamonds gift!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
