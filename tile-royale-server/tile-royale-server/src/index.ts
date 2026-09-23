@@ -6,9 +6,20 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig,
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig, getPAPurchaseReceiptFull, isPAVoidedPurchaseProcessed, recordPAVoidedPurchase,
   getCEActivePlayerCount, getCEContribution, upsertCEContribution, getCECommunityTotal, getCELeaderboard,
-  getCEClaimedMilestones, hasCEMilestoneClaim, recordCEMilestoneClaim } from "./db";
+  getCEClaimedMilestones, hasCEMilestoneClaim, recordCEMilestoneClaim,
+  hasCELbClaim, recordCELbClaim, getCEPlayerPercentile,
+  getCELbGrant, createOrGetCELbGrant, ackCELbGrant, getCEUnackedGrants,
+  getCEArchivedEventsInWindow,
+  archiveCEEvent, getCEArchivedEvent, upsertCEArchivedEvent,
+  upsertEiLbScore, getEiLeaderboard, getEiLbScore, hasEiLbClaim, recordEiLbClaim, deleteEiLbEntries, deleteEiLbEntriesByName,
+  popPACorrections, setPACorrections, peekPACorrections,
+  getPool, getAciGoalComplete, setAciGoalComplete, getActiveAciCompetition, createAciCompetition,
+  getAciResult, getAciLeaderboard, getAciParticipantCount,
+  hasAciRewardClaim, recordAciRewardClaim, getAciPlayerRank,
+  openAciBottle, redeemAciBottleCode, reportAciCasts, getAciCastCount,
+  getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 
@@ -2157,9 +2168,10 @@ gameServer.define("gauntlet", GauntletRoom)
 
 // ─── Patient Angler Anti-cheat ────────────────────────────────────────────────
 
-const PA_MAX_BOBBER_TIER           = 15;                   // absolute max tier per bobber
+const PA_MAX_BOBBER_TIER           = 100;                  // absolute max tier per bobber
 const PA_ZONE_ORDER = [
   'pond','river','lake','bay','sea','ocean','trench','maelstrom','abyss',
+  'forgotten_isle',
   'emerald_cavern','amber_cavern','amethyst_cavern','ruby_cavern',
   'aquamarine_cavern','opal_cavern','obsidian_cavern','topaz_cavern',
   'sapphire_cavern','blue_diamond_cavern',
@@ -2311,8 +2323,9 @@ app.post("/pa/save", verifyPAToken, express.json({ limit: "500kb" }), async (req
 app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string; // uid from token — ignores URL param
   const data = await loadPASave(uid);
-  if (!data) return res.json({ ok: true, save: null });
-  res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt });
+  const corrections = await popPACorrections(uid); // one-shot admin override; null if none pending
+  if (!data) return res.json({ ok: true, save: null, ...(corrections ? { corrections } : {}) });
+  res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt, ...(corrections ? { corrections } : {}) });
 });
 
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
@@ -2323,9 +2336,23 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.7.32";
+const PA_LATEST_VERSION     = "v1.0.7.64";
+// Set to null when there is no active announcement.
+// track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
+// minBuild: first versionCode that should show the popup.
+// texts: localized announcement body keyed by locale code; 'en' is the required fallback.
+const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+  track: 'production',
+  minBuild: 493,
+  texts: {
+    en: "• Fishdex: new \"Go to zone\" button\n• Kraken/Ancient Vault bonus attempt fixed\n• Fishing Festival: Grand Prize display, Rare Bobber, leaderboard rewards fixed\n• New Catch Streak system for manual fishing, with ad protection\n• New collectible: Message in a Bottle\n• Increased ACI Auto Income Token rewards\n• Bug fixes: Forgotten Isle popup, Momentum display, IAP Prestige Pack recovery, shop buttons",
+    et: "• Kalaraamat: uus nupp \"Go to zone\"\n• Kraken/Ancient Vault'i lisakatse parandatud\n• Kalapüügifestival: Suurauhind, Haruldane Ujuk, edetabeli auhinnad parandatud\n• Uus Catch Streak süsteem käsitsi püügiks, koos reklaamikaitsega\n• Uus kogutav ese: Sõnumipudel\n• Suurendatud ACI Auto Income Tokeni auhinnad\n• Veaparandused: Unustatud Saare hüpik, Momentumi kuva, IAP Prestige Paketi taastamine, poe nupud",
+  }
+};
 app.get("/pa/version", (_req, res) => {
-  res.json({ minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION });
+  const payload: Record<string, unknown> = { minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION };
+  if (PA_ANNOUNCEMENT) payload.announcement = PA_ANNOUNCEMENT;
+  res.json(payload);
 });
 
 // ─── Patient Angler Remote Config ─────────────────────────────────────────────
@@ -2358,7 +2385,15 @@ const PA_CONFIG_DEFAULTS: Record<string, unknown> = {
 app.get("/pa/config", async (_req, res) => {
   try {
     const stored = await getPARemoteConfig();
-    res.json({ ...PA_CONFIG_DEFAULTS, ...stored });
+    const cfg = { ...PA_CONFIG_DEFAULTS, ...stored };
+    // Hide communityEvent from clients until its startsAt has passed
+    if (cfg.communityEvent) {
+      const ev = cfg.communityEvent as Record<string,unknown>;
+      if (ev.startsAt && Number(ev.startsAt) > Date.now()) {
+        cfg.communityEvent = null;
+      }
+    }
+    res.json(cfg);
   } catch {
     res.json(PA_CONFIG_DEFAULTS);
   }
@@ -2381,22 +2416,55 @@ app.post("/admin/pa/config", requireAdmin, async (req, res) => {
 // POST /admin/pa/community/start
 // Counts 7-day active PA players, computes target = count × 50 000,
 // and stores the event in remote config.
-// Body: { eventId, name, durationHours, milestones, target?, endsAt? }
-// target and endsAt override the auto-computed values when provided.
+// Body: { eventId, name, durationHours, milestones, target?, startsAt?, endsAt? }
+// startsAt defaults to now; endsAt defaults to startsAt + durationHours.
+// target overrides the auto-computed activePlayers × 75 000.
 app.post('/admin/pa/community/start', requireAdmin, async (req, res) => {
-  const { eventId, name, durationHours = 48, milestones = [], target: targetOverride, endsAt: endsAtOverride } = req.body;
+  const { eventId, name, durationHours = 168, milestones = [], lbTiers, isAciGoalEvent,
+          target: targetOverride, startsAt: startsAtOverride, endsAt: endsAtOverride } = req.body;
   if (!eventId || !name) return res.status(400).json({ ok: false, error: 'eventId and name required' });
 
   const activePlayers = await getCEActivePlayerCount(7);
-  const target        = targetOverride != null ? Number(targetOverride) : activePlayers * 50000;
-  const endsAt        = endsAtOverride  != null ? Number(endsAtOverride)  : Date.now() + Number(durationHours) * 3600 * 1000;
+  const target        = targetOverride   != null ? Number(targetOverride)   : activePlayers * 75000;
+  const startsAt      = startsAtOverride != null ? Number(startsAtOverride) : Date.now();
+  const endsAt        = endsAtOverride   != null ? Number(endsAtOverride)   : startsAt + Number(durationHours) * 3600 * 1000;
 
-  const communityEvent = { eventId, name, endsAt, target, activePlayers, milestones };
+  const communityEvent: Record<string,unknown> = { eventId, name, startsAt, endsAt, target, activePlayers, milestones };
+  if (lbTiers)         communityEvent.lbTiers        = lbTiers;
+  if (isAciGoalEvent)  communityEvent.isAciGoalEvent = true;
+
+  // Archive immutable event config before making it live — allows post-event reward claims
+  await archiveCEEvent(eventId, communityEvent);
+
   const current = await getPARemoteConfig();
   await setPARemoteConfig({ ...current, communityEvent });
 
-  console.log(`[CE] Started event "${name}" id=${eventId} target=${target} (${activePlayers} × 50k) ends=${new Date(endsAt).toISOString()}`);
+  console.log(`[CE] Scheduled event "${name}" id=${eventId} target=${target} (${activePlayers} × 75k) starts=${new Date(startsAt).toISOString()} ends=${new Date(endsAt).toISOString()}${isAciGoalEvent ? ' [ACI goal]' : ''}`);
   res.json({ ok: true, event: communityEvent });
+});
+
+// POST /admin/pa/community/repair-timestamps
+// Admin-only: atomically correct startsAt/endsAt on both live config and archive.
+// Preserves all other event fields (milestones, lbTiers, target, etc.).
+// Body: { eventId, startsAt, endsAt }  (both as ms-since-epoch numbers)
+app.post('/admin/pa/community/repair-timestamps', requireAdmin, async (req, res) => {
+  const { eventId, startsAt, endsAt } = req.body;
+  if (!eventId || typeof startsAt !== 'number' || typeof endsAt !== 'number') {
+    return res.status(400).json({ ok: false, error: 'eventId, startsAt and endsAt (ms) required' });
+  }
+  // Patch live config
+  const current = await getPARemoteConfig();
+  const cfg = { ...PA_CONFIG_DEFAULTS, ...current };
+  const liveEv = cfg.communityEvent as Record<string,unknown> | null;
+  if (!liveEv || liveEv.eventId !== eventId) {
+    return res.status(400).json({ ok: false, error: 'event not in live config' });
+  }
+  const patchedEv = { ...liveEv, startsAt, endsAt };
+  await setPARemoteConfig({ ...current, communityEvent: patchedEv });
+  // Patch archive (upsert with corrected timestamps)
+  await upsertCEArchivedEvent(eventId, patchedEv);
+  console.log(`[CE] Repaired timestamps for ${eventId}: starts=${new Date(startsAt).toISOString()} ends=${new Date(endsAt).toISOString()}`);
+  res.json({ ok: true, event: patchedEv });
 });
 
 // DELETE /admin/pa/community/stop — clears the active event from config
@@ -2409,7 +2477,39 @@ app.delete('/admin/pa/community/stop', requireAdmin, async (_req, res) => {
 // GET /admin/pa/community/player-count  — read-only, no side effects
 app.get('/admin/pa/community/player-count', requireAdmin, async (_req, res) => {
   const activePlayers = await getCEActivePlayerCount(7);
-  res.json({ ok: true, activePlayers, projectedTarget: activePlayers * 50000 });
+  res.json({ ok: true, activePlayers, projectedTarget: activePlayers * 75000 });
+});
+
+// GET /admin/pa/community/leaderboard?eventId=...  — read-only, no side effects
+app.get('/admin/pa/community/leaderboard', requireAdmin, async (req, res) => {
+  const eventId = (req.query.eventId as string) || '';
+  if (!eventId) return res.status(400).json({ ok: false, error: 'missing_eventId' });
+  const [rows, communityTotal] = await Promise.all([
+    getCELeaderboard(eventId, 500),
+    getCECommunityTotal(eventId),
+  ]);
+  res.json({ ok: true, eventId, communityTotal, rows });
+});
+
+// POST /admin/pa/community/add-bot  { eventId, botId, displayName, contribution }
+// Injects a single fixed-value contribution row (not tied to a real account) directly into the
+// leaderboard and community total for the given event. botId must be unique per bot; re-calling with
+// the same botId ADDS to its existing contribution (same upsert used for real players), so each bot
+// should only be added once. Nothing ever updates the row again afterward — the value stays frozen.
+app.post('/admin/pa/community/add-bot', requireAdmin, express.json(), async (req, res) => {
+  const { eventId, botId, displayName, contribution } = req.body || {};
+  if (!eventId || typeof eventId !== 'string') return res.status(400).json({ ok: false, error: 'missing_eventId' });
+  if (!botId || typeof botId !== 'string') return res.status(400).json({ ok: false, error: 'missing_botId' });
+  if (typeof contribution !== 'number' || !Number.isFinite(contribution) || contribution <= 0) {
+    return res.status(400).json({ ok: false, error: 'invalid_contribution' });
+  }
+  const playerId = 'bot_' + botId;
+  await upsertCEContribution(playerId, eventId, contribution, typeof displayName === 'string' ? displayName : 'Angler');
+  const [newContribution, communityTotal] = await Promise.all([
+    getCEContribution(playerId, eventId),
+    getCECommunityTotal(eventId),
+  ]);
+  res.json({ ok: true, playerId, eventId, contribution: newContribution, communityTotal });
 });
 
 // ─── Community Event endpoints ────────────────────────────────────────────────
@@ -2420,8 +2520,33 @@ async function _ceGetActiveCfg(): Promise<Record<string,unknown> | null> {
     const stored = await getPARemoteConfig();
     const cfg = { ...PA_CONFIG_DEFAULTS, ...stored };
     const ev = cfg.communityEvent as Record<string,unknown> | null;
-    if (!ev || !ev.eventId || typeof ev.endsAt !== 'number' || ev.endsAt < Date.now()) return null;
+    if (!ev || !ev.eventId) return null;
+    const endsAt   = Number(ev.endsAt);
+    const startsAt = Number(ev.startsAt);
+    if (!endsAt   || endsAt   < Date.now()) return null;
+    if ( startsAt && startsAt > Date.now()) return null;
     return ev;
+  } catch { return null; }
+}
+
+// Helper: get event config by ID — tries active config first, then archive
+// Used for post-event claim endpoints (milestone, bobber, lb) with a 30-day grace window
+const CE_POST_EVENT_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+async function _ceGetEventCfgById(eventId: string): Promise<Record<string,unknown> | null> {
+  // Try active config first
+  try {
+    const stored = await getPARemoteConfig();
+    const cfg = { ...PA_CONFIG_DEFAULTS, ...stored };
+    const ev = cfg.communityEvent as Record<string,unknown> | null;
+    if (ev && ev.eventId === eventId) return ev;
+  } catch {}
+  // Fall back to archive (post-event grace window)
+  try {
+    const archived = await getCEArchivedEvent(eventId);
+    if (!archived) return null;
+    const endsAt = Number(archived.endsAt);
+    if (endsAt && Date.now() - endsAt > CE_POST_EVENT_GRACE_MS) return null;
+    return archived;
   } catch { return null; }
 }
 
@@ -2477,6 +2602,21 @@ app.post('/pa/community/contribute', verifyPAToken, async (req, res) => {
     getCEClaimedMilestones(uid, eventId),
   ]);
 
+  // ACI goal: when the designated CE event hits its target, permanently record goal complete
+  // and auto-create the first competition if none exists
+  if (ev.isAciGoalEvent && ev.target && communityTotal >= Number(ev.target)) {
+    const existing = await getAciGoalComplete();
+    if (!existing) {
+      await setAciGoalComplete(eventId);
+      const activeComp = await getActiveAciCompetition();
+      if (!activeComp) {
+        const nameIndex = Math.floor(Math.random() * (ACI_COMPETITION_NAMES as string[]).length);
+        const compId    = require('crypto').randomUUID() as string;
+        await createAciCompetition(compId, nameIndex, null);
+      }
+    }
+  }
+
   res.json({
     ok: true,
     status: { playerId: uid, playerTotal, communityTotal, milestonesClaimed },
@@ -2487,8 +2627,727 @@ app.post('/pa/community/contribute', verifyPAToken, async (req, res) => {
 app.get('/pa/community/leaderboard', verifyPAToken, async (req, res) => {
   const eventId = (req.query.eventId as string) || '';
   if (!eventId) return res.status(400).json({ ok: false, error: 'missing_event_id' });
-  const rows = await getCELeaderboard(eventId, 100);
+  // Player-facing leaderboard shows top 50 only (matches Event Island's top50 list).
+  const rows = await getCELeaderboard(eventId, 50);
   res.json({ ok: true, rows });
+});
+
+// ── Anglers Competition Island ────────────────────────────────────────────────
+
+const ACI_FISH_DATA: Array<{ fishId:string; zones:string[]; rarity:string; baseValue:number; weightMinG:number; weightMaxG:number; w1legendary:boolean }> = [
+  { fishId:'crucian_carp',      zones:['pond'],               rarity:'common',   baseValue:2,   weightMinG:100,  weightMaxG:4500,  w1legendary:false },
+  { fishId:'roach',             zones:['pond','river'],        rarity:'common',   baseValue:2,   weightMinG:50,   weightMaxG:1800,  w1legendary:false },
+  { fishId:'tench',             zones:['pond','river','lake'], rarity:'uncommon', baseValue:7,   weightMinG:200,  weightMaxG:5000,  w1legendary:false },
+  { fishId:'goldfish',          zones:['pond'],               rarity:'uncommon', baseValue:8,   weightMinG:50,   weightMaxG:2000,  w1legendary:false },
+  { fishId:'small_perch',       zones:['pond','river'],        rarity:'common',   baseValue:2,   weightMinG:30,   weightMaxG:800,   w1legendary:false },
+  { fishId:'stone_loach',       zones:['pond'],               rarity:'uncommon', baseValue:6,   weightMinG:5,    weightMaxG:50,    w1legendary:false },
+  { fishId:'stickleback',       zones:['pond'],               rarity:'common',   baseValue:1,   weightMinG:2,    weightMaxG:10,    w1legendary:false },
+  { fishId:'pumpkinseed',       zones:['pond'],               rarity:'rare',     baseValue:11,  weightMinG:20,   weightMaxG:300,   w1legendary:false },
+  { fishId:'weatherfish',       zones:['pond'],               rarity:'rare',     baseValue:13,  weightMinG:10,   weightMaxG:150,   w1legendary:false },
+  { fishId:'common_bream',      zones:['pond','river'],        rarity:'common',   baseValue:3,   weightMinG:200,  weightMaxG:8000,  w1legendary:false },
+  { fishId:'giant_crucian_carp',zones:['pond'],               rarity:'epic',     baseValue:39,  weightMinG:500,  weightMaxG:6000,  w1legendary:false },
+  { fishId:'brown_trout',       zones:['river','lake'],        rarity:'rare',     baseValue:40,  weightMinG:100,  weightMaxG:10000, w1legendary:false },
+  { fishId:'grayling',          zones:['river'],              rarity:'uncommon', baseValue:16,  weightMinG:50,   weightMaxG:2500,  w1legendary:false },
+  { fishId:'barbel',            zones:['river'],              rarity:'uncommon', baseValue:11,  weightMinG:200,  weightMaxG:10000, w1legendary:false },
+  { fishId:'chub',              zones:['river'],              rarity:'common',   baseValue:5,   weightMinG:100,  weightMaxG:4000,  w1legendary:false },
+  { fishId:'pike',              zones:['river','lake'],        rarity:'rare',     baseValue:44,  weightMinG:500,  weightMaxG:25000, w1legendary:false },
+  { fishId:'burbot',            zones:['river'],              rarity:'epic',     baseValue:140, weightMinG:100,  weightMaxG:7000,  w1legendary:false },
+  { fishId:'large_perch',       zones:['lake'],               rarity:'common',   baseValue:10,  weightMinG:100,  weightMaxG:3000,  w1legendary:false },
+  { fishId:'zander',            zones:['lake'],               rarity:'uncommon', baseValue:31,  weightMinG:200,  weightMaxG:12000, w1legendary:false },
+  { fishId:'whitefish',         zones:['lake','bay'],          rarity:'uncommon', baseValue:34,  weightMinG:100,  weightMaxG:3000,  w1legendary:false },
+  { fishId:'vendace',           zones:['lake'],               rarity:'uncommon', baseValue:25,  weightMinG:20,   weightMaxG:400,   w1legendary:false },
+  { fishId:'eel',               zones:['lake','bay'],          rarity:'rare',     baseValue:66,  weightMinG:100,  weightMaxG:3000,  w1legendary:false },
+  { fishId:'carp',              zones:['lake'],               rarity:'common',   baseValue:13,  weightMinG:500,  weightMaxG:20000, w1legendary:false },
+  { fishId:'catfish',           zones:['lake'],               rarity:'epic',     baseValue:175, weightMinG:2000, weightMaxG:80000, w1legendary:false },
+  { fishId:'morning_perch',     zones:['pond'],               rarity:'uncommon', baseValue:4,   weightMinG:30,   weightMaxG:800,   w1legendary:false },
+  { fishId:'afternoon_roach',   zones:['pond'],               rarity:'common',   baseValue:3,   weightMinG:50,   weightMaxG:1800,  w1legendary:false },
+  { fishId:'dawn_trout',        zones:['river'],              rarity:'rare',     baseValue:44,  weightMinG:100,  weightMaxG:10000, w1legendary:false },
+  { fishId:'midnight_eel',      zones:['river'],              rarity:'epic',     baseValue:140, weightMinG:100,  weightMaxG:3000,  w1legendary:false },
+  { fishId:'evening_catfish',   zones:['lake'],               rarity:'uncommon', baseValue:31,  weightMinG:500,  weightMaxG:30000, w1legendary:false },
+  { fishId:'night_pike',        zones:['lake'],               rarity:'rare',     baseValue:53,  weightMinG:500,  weightMaxG:25000, w1legendary:false },
+  { fishId:'predawn_zander',      zones:['lake'],  rarity:'rare',      baseValue:35,  weightMinG:200, weightMaxG:12000, w1legendary:false },
+  // W1 legendary fish — baseValue:0 and weight ranges match base species (canonical)
+  { fishId:'crimson_crown_perch', zones:['pond'],  rarity:'legendary', baseValue:0, weightMinG:30,  weightMaxG:800,   w1legendary:true },  // → small_perch
+  { fishId:'golden_veil_carp',    zones:['pond'],  rarity:'legendary', baseValue:0, weightMinG:500, weightMaxG:20000, w1legendary:true },  // → carp
+  { fishId:'silver_ribbon_loach', zones:['pond'],  rarity:'legendary', baseValue:0, weightMinG:5,   weightMaxG:50,    w1legendary:true },  // → stone_loach
+  { fishId:'emerald_grayling',    zones:['river'], rarity:'legendary', baseValue:0, weightMinG:50,  weightMaxG:2500,  w1legendary:true },  // → grayling
+  { fishId:'marbleback_barbel',   zones:['river'], rarity:'legendary', baseValue:0, weightMinG:200, weightMaxG:10000, w1legendary:true },  // → barbel
+  { fishId:'redfin_chub',         zones:['river'], rarity:'legendary', baseValue:0, weightMinG:100, weightMaxG:4000,  w1legendary:true },  // → chub
+  { fishId:'blueglass_char',      zones:['lake'],  rarity:'legendary', baseValue:0, weightMinG:100, weightMaxG:10000, w1legendary:true },  // → brown_trout
+  { fishId:'copperplate_bream',   zones:['lake'],  rarity:'legendary', baseValue:0, weightMinG:200, weightMaxG:8000,  w1legendary:true },  // → common_bream
+  { fishId:'frostback_pike',      zones:['lake'],  rarity:'legendary', baseValue:0, weightMinG:500, weightMaxG:25000, w1legendary:true },  // → pike
+];
+const ACI_LOOT_TABLE = [
+  { type:'common',   weight:37 },
+  { type:'uncommon', weight:16 },
+  { type:'rare',     weight: 9 },
+  { type:'epic',     weight: 3 },
+];
+const ACI_SIZE_TABLE = [
+  { size:1,  weight:70,  mult:0.30 },
+  { size:2,  weight:100, mult:0.36 },
+  { size:3,  weight:120, mult:0.43 },
+  { size:4,  weight:135, mult:0.51 },
+  { size:5,  weight:140, mult:0.60 },
+  { size:6,  weight:135, mult:0.68 },
+  { size:7,  weight:120, mult:0.76 },
+  { size:8,  weight:100, mult:0.84 },
+  { size:9,  weight:80,  mult:0.92 },
+  { size:10, weight:62,  mult:1.00 },
+  { size:11, weight:46,  mult:1.10 },
+  { size:12, weight:33,  mult:1.22 },
+  { size:13, weight:22,  mult:1.36 },
+  { size:14, weight:14,  mult:1.52 },
+  { size:15, weight:8,   mult:1.72 },
+  { size:16, weight:4,   mult:1.96 },
+  { size:17, weight:2,   mult:2.25 },
+  { size:18, weight:6,   mult:2.60, trophy:true },
+  { size:19, weight:4,   mult:3.00, trophy:true },
+  { size:20, weight:2,   mult:3.50, trophy:true },
+] as Array<{ size:number; weight:number; mult:number; trophy?:boolean }>;
+const ACI_SIZE_TOTAL = ACI_SIZE_TABLE.reduce((s, e) => s + e.weight, 0); // 1203
+const ACI_COMPETITION_NAMES = [
+  "The Wobbly Bobber Cup","The Suspicious Splash-Off","The Great Bait Debate",
+  "The Hook, Line & Panic Classic","The Slightly Damp Derby","The Rodfather Invitational",
+  "The Battle of the Buckets","The Reel Deal Rumble","The Tiny Fish, Big Dreams Cup",
+  "The Net Profit Challenge","The Midnight Minnow Madness","The Carp Diem Classic",
+  "The Pike and Prejudice Cup","The Trout of Control Tournament","The Codfather Cup",
+  "The Perch Perfect Challenge","The Bream Team Showdown","The Lure Loser Bracket",
+  "The Fish Whispering Finals","The Bobber Bonanza","The Slippery Trophy Sprint",
+  "The One That Got Away Open","The Accidental Angler Cup","The Wet Sock Invitational",
+  "The Mystery Ripple Rumble","The No Refunds Fishing Derby","The Floating Boot Championship",
+  "The Serious Fisher, Silly Hat Cup","The Bite Me Classic","The Cast Away Clash",
+  "The Almost Professional Open","The Fin-tastic Finale Qualifier","The Gill Thrill Tournament",
+  "The Reel Weird Cup","The Lake Mistake Challenge","The River Riddle Derby",
+  "The Baywatch Bobber Cup","The Seaweed Strategy Open","The Anchor Trouble Tournament",
+  "The Trophy or Trash Trials","The Hungry Hook Championship","The Fishy Business Open",
+  "The Splash Tax Invitational","The Current Affairs Cup","The Bait Regret Rumble",
+  "The Legendary Maybe League","The Plankton Problem Cup","The Overconfident Angler Open",
+  "The Waders Full of Hope Derby","The Net Gains Classic","The Cast First, Think Later Cup",
+  "The Bobber Anxiety Open","The Reel Estate Tournament","The Deep End Derby",
+  "The Fish Forecast Finals","The Hooked on Trouble Cup","The Minnow Management Challenge",
+  "The Rod Rage Rumble","The Slightly Illegal Worm Cup","The Professional Splashing Open",
+];
+
+const _aciNormalPools: Record<string, typeof ACI_FISH_DATA> = { common:[], uncommon:[], rare:[], epic:[] };
+const _aciW1LegPool: typeof ACI_FISH_DATA = [];
+for (const f of ACI_FISH_DATA) {
+  if (f.w1legendary) _aciW1LegPool.push(f);
+  else if (_aciNormalPools[f.rarity]) _aciNormalPools[f.rarity].push(f);
+}
+
+const _aciValidFishIds = new Set(ACI_FISH_DATA.map(f => f.fishId));
+
+function _aciWtRand<T extends { weight:number }>(table: T[]): T {
+  const total = table.reduce((s, e) => s + e.weight, 0);
+  let r = Math.floor(Math.random() * total);
+  for (const e of table) { r -= e.weight; if (r < 0) return e; }
+  return table[table.length - 1];
+}
+
+function _rollAciCatch() {
+  let fishDef: typeof ACI_FISH_DATA[0];
+  let rarity: string;
+  if (Math.random() < 1 / 50_000_000 && _aciW1LegPool.length > 0) {
+    fishDef = _aciW1LegPool[Math.floor(Math.random() * _aciW1LegPool.length)];
+    rarity  = 'legendary';
+  } else {
+    const entry = _aciWtRand(ACI_LOOT_TABLE);
+    rarity  = entry.type;
+    const pool = _aciNormalPools[rarity] || _aciNormalPools.common;
+    fishDef = pool[Math.floor(Math.random() * pool.length)];
+  }
+  // SIZE_TABLE weighted roll → sizeQ in [1..3000]
+  const sizeRandPt = Math.floor(Math.random() * ACI_SIZE_TOTAL);
+  let cumBefore = 0, cumAfter = 0;
+  let sizeRow: typeof ACI_SIZE_TABLE[0] = ACI_SIZE_TABLE[ACI_SIZE_TABLE.length - 1];
+  for (const e of ACI_SIZE_TABLE) {
+    cumAfter = cumBefore + e.weight;
+    if (sizeRandPt < cumAfter) { sizeRow = e; break; }
+    cumBefore = cumAfter;
+  }
+  const bucketLow  = Math.floor(cumBefore  * 3000 / ACI_SIZE_TOTAL);
+  const bucketHigh = Math.floor(cumAfter   * 3000 / ACI_SIZE_TOTAL);
+  const sizeQ      = Math.max(1, bucketLow + Math.floor(Math.random() * Math.max(1, bucketHigh - bucketLow)) + 1);
+  // Weight roll
+  const weightRoll = Math.floor(Math.random() * 3000);
+  const wRangeMg   = (fishDef.weightMaxG - fishDef.weightMinG) * 1000;
+  const weightMg   = fishDef.weightMinG * 1000 + Math.floor(weightRoll * wRangeMg / 2999);
+  const scoreRank       = BigInt(Math.min(3000, sizeQ)) * 3000n * BigInt(Math.max(1, weightMg));
+  const value           = Math.max(1, Math.round((fishDef.baseValue || 1) * sizeRow.mult));
+  const w1legendary     = !!fishDef.w1legendary;
+  const aciMaxDisplaySize = fishDef.zones.includes('lake') ? 3000
+    : fishDef.zones.some((z: string) => z === 'river') ? 2500 : 1500;
+  return { fishId: fishDef.fishId, rarity, sizeRow, sizeQ, weightMg, scoreRank,
+           value, w1legendary, aciMaxDisplaySize };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { randomUUID: _aciUUID } = require('crypto') as { randomUUID: () => string };
+
+// GET /pa/aci/comp
+app.get('/pa/aci/comp', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const [aciGoalEventId, comp] = await Promise.all([
+    getAciGoalComplete(),
+    getActiveAciCompetition(),
+  ]);
+  if (!comp) {
+    return res.json({
+      ok: true, comp: null,
+      aciGoalComplete: !!aciGoalEventId,
+      serverTime: Date.now(),
+    });
+  }
+  const participation = await getAciResult(comp.comp_id, uid);
+  res.json({
+    ok: true,
+    comp: {
+      compId:    comp.comp_id,
+      nameIndex: comp.name_index,
+      name:      ACI_COMPETITION_NAMES[comp.name_index] || 'Competition',
+      startsAt:  comp.starts_at,
+      endsAt:    comp.ends_at,
+    },
+    aciGoalComplete: !!aciGoalEventId,
+    participated:    !!participation,
+    bestScore:       participation ? participation.score_rank.toString() : null,
+    serverTime:      Date.now(),
+  });
+});
+
+// DELETE /admin/pa/aci/comp  — admin: end the active competition immediately
+app.delete('/admin/pa/aci/comp', requireAdmin, async (_req, res) => {
+  const dbPool = getPool();
+  if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const comp = await getActiveAciCompetition();
+  if (!comp) return res.json({ ok: false, error: 'no_active_competition' });
+  await dbPool.query(`UPDATE aci_competitions SET ends_at = now() WHERE comp_id = $1`, [comp.comp_id]);
+  res.json({ ok: true, ended: comp.comp_id });
+});
+
+// POST /pa/aci/comp/create  — admin: start a new competition immediately
+app.post('/pa/aci/comp/create', requireAdmin, async (req, res) => {
+  const existing = await getActiveAciCompetition();
+  if (existing) {
+    return res.json({ ok: false, error: 'competition_already_active', compId: existing.comp_id });
+  }
+  const prevAll = await (getPool()!).query(
+    `SELECT name_index FROM aci_competitions ORDER BY starts_at DESC LIMIT 1`
+  ).catch(() => ({ rows: [] as any[] }));
+  const prevIdx = prevAll.rows[0]?.name_index ?? null;
+  let nameIdx: number;
+  do { nameIdx = Math.floor(Math.random() * ACI_COMPETITION_NAMES.length); }
+  while (nameIdx === prevIdx && ACI_COMPETITION_NAMES.length > 1);
+  const compId = _aciUUID();
+  await createAciCompetition(compId, nameIdx, null);
+  res.json({ ok: true, compId, nameIndex: nameIdx, name: ACI_COMPETITION_NAMES[nameIdx] });
+});
+
+// POST /pa/aci/cast/start  { compId }
+app.post('/pa/aci/cast/start', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { compId } = req.body;
+  if (!compId) return res.status(400).json({ ok: false, error: 'missing_comp_id' });
+  const comp = await getActiveAciCompetition();
+  if (!comp || comp.comp_id !== compId) {
+    return res.json({ ok: false, error: 'competition_not_active' });
+  }
+  const biteDelayMs = 2000 + Math.floor(Math.random() * 3001);
+  const dbPool = getPool();
+  if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const client = await dbPool.connect();
+  try {
+    await client.query('BEGIN');
+    // Cancel any prior unused token for this player in this comp
+    await client.query(
+      `UPDATE aci_cast_tokens SET used=true WHERE uid=$1 AND comp_id=$2 AND used=false`,
+      [uid, compId]
+    );
+    const token      = _aciUUID();
+    const biteReadyAt = new Date(Date.now() + biteDelayMs);
+    await client.query(
+      `INSERT INTO aci_cast_tokens (token, uid, comp_id, used, bite_ready_at, created_at)
+       VALUES ($1,$2,$3,false,$4,now())`,
+      [token, uid, compId, biteReadyAt]
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true, token, biteDelayMs });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('ACI cast/start error:', err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /pa/aci/cast/complete  { token }
+app.post('/pa/aci/cast/complete', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ ok: false, error: 'missing_token' });
+  const dbPool = getPool();
+  if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const client = await dbPool.connect();
+  try {
+    await client.query('BEGIN');
+    const tRow = (await client.query(
+      `SELECT * FROM aci_cast_tokens WHERE token=$1 FOR UPDATE`, [token]
+    )).rows[0];
+    if (!tRow) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: false, error: 'token_not_found' });
+    }
+    if (tRow.uid !== uid) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: false, error: 'token_owner_mismatch' });
+    }
+    // Idempotent: return stored result if token was already completed
+    if (tRow.used && tRow.result_json) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: true, catch: JSON.parse(tRow.result_json), isNewBest: false, cached: true });
+    }
+    if (tRow.used) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: false, error: 'token_already_used' });
+    }
+    // Verify comp still active
+    const compRow = (await client.query(
+      `SELECT comp_id FROM aci_competitions WHERE comp_id=$1 AND ends_at > now()`, [tRow.comp_id]
+    )).rows[0];
+    if (!compRow) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: false, error: 'competition_expired' });
+    }
+    // Generate fish + score
+    const cd = _rollAciCatch();
+    const catchObj = {
+      fishId:           cd.fishId,
+      rarity:           cd.rarity,
+      zone:             'anglers_competition_island',
+      size:             cd.sizeRow.size,
+      sizeMult:         cd.sizeRow.mult,
+      isTrophy:         !!cd.sizeRow.trophy,
+      sizeQ:            cd.sizeQ,
+      weightMg:         cd.weightMg,
+      weightG:          Math.round(cd.weightMg / 1000 * 100) / 100,
+      scoreRank:        cd.scoreRank.toString(),
+      playerScore:      Number(cd.scoreRank / 3_000_000n),
+      caughtAt:         Date.now(),
+      compId:           tRow.comp_id,
+      value:            cd.value,
+      w1legendary:      cd.w1legendary,
+      aciMaxDisplaySize: cd.aciMaxDisplaySize,
+    };
+    const resultJson = JSON.stringify(catchObj);
+    // Resolve display name
+    let displayName = 'Anonymous Angler';
+    try {
+      const nr = (await client.query(
+        `SELECT save_json::jsonb->>'playerName' AS name FROM pa_save_data WHERE uid=$1`, [uid]
+      )).rows[0];
+      if (nr?.name) displayName = nr.name;
+    } catch { /* ignore */ }
+    // Check existing best score
+    const existing = (await client.query(
+      `SELECT score_rank FROM aci_results WHERE comp_id=$1 AND uid=$2`, [tRow.comp_id, uid]
+    )).rows[0];
+    const existingScore = existing ? BigInt(existing.score_rank) : 0n;
+    const isNewBest = !existing || cd.scoreRank > existingScore;
+    if (!existing) {
+      await client.query(
+        `INSERT INTO aci_results (comp_id,uid,display_name,score_rank,fish_id,result_json,recorded_at)
+         VALUES ($1,$2,$3,$4,$5,$6,now())`,
+        [tRow.comp_id, uid, displayName, cd.scoreRank.toString(), cd.fishId, resultJson]
+      );
+    } else if (isNewBest) {
+      await client.query(
+        `UPDATE aci_results SET score_rank=$1,fish_id=$2,result_json=$3,display_name=$4,recorded_at=now()
+         WHERE comp_id=$5 AND uid=$6`,
+        [cd.scoreRank.toString(), cd.fishId, resultJson, displayName, tRow.comp_id, uid]
+      );
+    }
+    await client.query(
+      `UPDATE aci_cast_tokens SET used=true,result_json=$1 WHERE token=$2`, [resultJson, token]
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true, catch: catchObj, isNewBest, cached: false });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('ACI cast/complete error:', err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /pa/aci/leaderboard?compId=...
+app.get('/pa/aci/leaderboard', verifyPAToken, async (req, res) => {
+  const uid    = res.locals.paUid as string;
+  const compId = (req.query.compId as string) || '';
+  if (!compId) return res.status(400).json({ ok: false, error: 'missing_comp_id' });
+  const [lb, participantCount] = await Promise.all([
+    getAciLeaderboard(compId, uid),
+    getAciParticipantCount(compId),
+  ]);
+  res.json({ ok: true, rows: lb.rows, selfRow: lb.selfRow, participantCount });
+});
+
+// POST /pa/aci/score/submit  — submit a locally-cast personal-best score
+app.post('/pa/aci/score/submit', verifyPAToken, async (req, res) => {
+  const uid    = res.locals.paUid as string;
+  const { compId, scoreRank, fishId, sizeQ, maxDisplaySize, weightMg } = req.body as {
+    compId?: string; scoreRank?: string; fishId?: unknown; sizeQ?: unknown; maxDisplaySize?: unknown; weightMg?: unknown;
+  };
+  if (!compId || !scoreRank) return res.status(400).json({ ok: false, error: 'missing_fields' });
+  // Validate scoreRank is a non-negative integer string (BigInt-safe)
+  if (!/^\d{1,30}$/.test(scoreRank)) return res.status(400).json({ ok: false, error: 'invalid_score' });
+
+  // Fish/size/weight are optional (older clients may omit them) and only describe the catch behind this
+  // score — never used for ranking. Bad/out-of-range values are silently dropped rather than rejected,
+  // so a malformed value never blocks the score itself from being recorded.
+  const safeFishId = (typeof fishId === 'string' && _aciValidFishIds.has(fishId)) ? fishId : '';
+  const safeSizeQ  = (typeof sizeQ === 'number' && Number.isInteger(sizeQ) && sizeQ >= 1 && sizeQ <= 3000) ? sizeQ : 0;
+  const safeMaxDisplaySize = (typeof maxDisplaySize === 'number' && Number.isInteger(maxDisplaySize) && maxDisplaySize > 0 && maxDisplaySize <= 100_000) ? maxDisplaySize : 3000;
+  const safeWeightMg = (typeof weightMg === 'number' && Number.isFinite(weightMg) && weightMg >= 0 && weightMg <= 100_000_000) ? Math.round(weightMg) : 0;
+  const resultJson = JSON.stringify({ sizeQ: safeSizeQ, maxDisplaySize: safeMaxDisplaySize, weightMg: safeWeightMg });
+
+  const dbPool = getPool();
+  if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+
+  // Verify comp exists and hasn't ended
+  const comp = await dbPool.query(
+    `SELECT comp_id, ends_at FROM aci_competitions WHERE comp_id=$1`, [compId]
+  );
+  if (!comp.rows[0]) return res.status(404).json({ ok: false, error: 'comp_not_found' });
+  if (new Date(comp.rows[0].ends_at) <= new Date()) return res.status(400).json({ ok: false, error: 'competition_expired' });
+
+  const submitted = BigInt(scoreRank);
+  const existing  = (await dbPool.query(
+    `SELECT score_rank::text AS score_rank, display_name FROM aci_results WHERE comp_id=$1 AND uid=$2`, [compId, uid]
+  )).rows[0];
+  const existingScore = existing ? BigInt(existing.score_rank) : 0n;
+
+  if (!existing) {
+    // Best-effort display name from saved game state
+    let displayName = 'Anonymous Angler';
+    try {
+      const save = await loadPASave(uid);
+      if (save) {
+        const parsed = JSON.parse(save.saveJson) as Record<string, unknown>;
+        if (typeof parsed.displayName === 'string' && parsed.displayName) {
+          displayName = parsed.displayName;
+        }
+      }
+    } catch {}
+    await dbPool.query(
+      `INSERT INTO aci_results (comp_id,uid,display_name,score_rank,fish_id,result_json,recorded_at)
+       VALUES ($1,$2,$3,$4,$5,$6,now())`,
+      [compId, uid, displayName, submitted.toString(), safeFishId, resultJson]
+    );
+  } else if (submitted > existingScore) {
+    // The catch behind the new personal best replaces the previously recorded fish/size/weight too.
+    await dbPool.query(
+      `UPDATE aci_results SET score_rank=$1,fish_id=$2,result_json=$3,recorded_at=now()
+       WHERE comp_id=$4 AND uid=$5`,
+      [submitted.toString(), safeFishId, resultJson, compId, uid]
+    );
+  }
+
+  const bestScore = submitted > existingScore ? submitted : existingScore;
+  return res.json({ ok: true, bestScore: bestScore.toString() });
+});
+
+// ACI end-of-competition rewards. Diamonds stay fixed; Auto Income Tokens (1 h of income each) are the
+// progression-scaling part of the reward. Keep in sync with the Rewards tab in aci_competition.js.
+const ACI_REWARDS = {
+  top1:        { diamonds: 50, tokens: 8 },
+  top3:        { diamonds: 25, tokens: 5 },
+  top5:        { diamonds: 10, tokens: 3 },
+  participant: { diamonds: 0,  tokens: 2 },   // requires >= ACI_PARTICIPATION_MIN_CASTS casts
+} as const;
+const ACI_PARTICIPATION_MIN_CASTS = 25;
+
+// POST /pa/aci/casts/report  { compId, casts }
+// Casts are rolled on the client, so the server never sees them one by one. The client reports its running
+// total per competition; it is what the "at least 25 casts" participation reward is checked against.
+// Plausibility: at most 1 cast per second since the competition started; only for a running competition.
+app.post('/pa/aci/casts/report', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { compId, casts } = (req.body || {}) as { compId?: unknown; casts?: unknown };
+  if (typeof compId !== 'string' || !compId || compId.length > 80) return res.status(400).json({ ok: false, error: 'missing_comp_id' });
+  if (typeof casts !== 'number' || !Number.isInteger(casts) || casts < 0 || casts > 1_000_000) {
+    return res.status(400).json({ ok: false, error: 'invalid_casts' });
+  }
+  const dbPool = getPool();
+  if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const comp = (await dbPool.query(`SELECT starts_at, ends_at FROM aci_competitions WHERE comp_id = $1`, [compId])).rows[0];
+  if (!comp) return res.status(404).json({ ok: false, error: 'comp_not_found' });
+  const now = Date.now();
+  if (new Date(comp.ends_at).getTime() <= now) return res.status(400).json({ ok: false, error: 'competition_expired' });
+  const maxPlausible = Math.max(0, Math.floor((now - new Date(comp.starts_at).getTime()) / 1000));
+  const stored = await reportAciCasts(compId, uid, Math.min(casts, maxPlausible));
+  if (stored === null) return res.status(500).json({ ok: false, error: 'server_error' });
+  return res.json({ ok: true, casts: stored });
+});
+
+// GET /pa/aci/reward/pending  — unclaimed reward from most recent finished comp
+app.get('/pa/aci/reward/pending', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const dbPool = getPool();
+  if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const activeComp = await getActiveAciCompetition();
+  const params: any[] = [uid];
+  let excludeClause = '';
+  if (activeComp) { params.push(activeComp.comp_id); excludeClause = `AND c.comp_id != $${params.length}`; }
+  const row = (await dbPool.query(
+    `SELECT c.comp_id, c.name_index
+     FROM aci_competitions c
+     JOIN aci_results r ON r.comp_id = c.comp_id AND r.uid = $1
+     LEFT JOIN aci_reward_claims cl ON cl.comp_id = c.comp_id AND cl.uid = $1
+     WHERE c.ends_at <= now() AND cl.comp_id IS NULL ${excludeClause}
+     ORDER BY c.ends_at DESC LIMIT 1`,
+    params
+  )).rows[0];
+  if (!row) return res.json({ ok: true, pending: null });
+  const [rank, total] = await Promise.all([
+    getAciPlayerRank(row.comp_id, uid),
+    getAciParticipantCount(row.comp_id),
+  ]);
+  let bracket = 'participant'; let diamonds: number = ACI_REWARDS.participant.diamonds; let tokens: number = ACI_REWARDS.participant.tokens;
+  if (rank !== null && total > 0) {
+    const pct = rank / total * 100;
+    if      (pct <= 1) { bracket = 'top1'; diamonds = ACI_REWARDS.top1.diamonds; tokens = ACI_REWARDS.top1.tokens; }
+    else if (pct <= 3) { bracket = 'top3'; diamonds = ACI_REWARDS.top3.diamonds; tokens = ACI_REWARDS.top3.tokens; }
+    else if (pct <= 5) { bracket = 'top5'; diamonds = ACI_REWARDS.top5.diamonds; tokens = ACI_REWARDS.top5.tokens; }
+  }
+  if (bracket === 'participant') {
+    if ((await getAciCastCount(row.comp_id, uid)) < ACI_PARTICIPATION_MIN_CASTS) return res.json({ ok: true, pending: null });
+  }
+  res.json({ ok: true, pending: { compId: row.comp_id, nameIndex: row.name_index, rank, totalParticipants: total, bracket, diamonds, tokens } });
+});
+
+// POST /pa/aci/reward/claim  { compId }
+app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { compId } = req.body;
+  if (!compId) return res.status(400).json({ ok: false, error: 'missing_comp_id' });
+  // Comp must be over
+  const activeComp = await getActiveAciCompetition();
+  if (activeComp && activeComp.comp_id === compId) {
+    return res.json({ ok: false, error: 'competition_still_active' });
+  }
+  // Player must have participated
+  const result = await getAciResult(compId, uid);
+  if (!result) return res.json({ ok: false, error: 'no_participation' });
+  // Idempotent
+  if (await hasAciRewardClaim(compId, uid)) {
+    return res.json({ ok: false, error: 'already_claimed' });
+  }
+  const [rank, total] = await Promise.all([
+    getAciPlayerRank(compId, uid),
+    getAciParticipantCount(compId),
+  ]);
+  let bracket = 'participant';
+  let diamonds: number = ACI_REWARDS.participant.diamonds;
+  let tokens: number   = ACI_REWARDS.participant.tokens;
+  if (rank !== null && total > 0) {
+    const pct = rank / total * 100;
+    if      (pct <= 1) { bracket = 'top1'; diamonds = ACI_REWARDS.top1.diamonds; tokens = ACI_REWARDS.top1.tokens; }
+    else if (pct <= 3) { bracket = 'top3'; diamonds = ACI_REWARDS.top3.diamonds; tokens = ACI_REWARDS.top3.tokens; }
+    else if (pct <= 5) { bracket = 'top5'; diamonds = ACI_REWARDS.top5.diamonds; tokens = ACI_REWARDS.top5.tokens; }
+  }
+  if (bracket === 'participant') {
+    if ((await getAciCastCount(compId, uid)) < ACI_PARTICIPATION_MIN_CASTS) tokens = 0;
+  }
+  await recordAciRewardClaim(compId, uid, bracket, diamonds, tokens);
+  // Trophy room: permanent record of this placement, independent of the reward-claim payout above.
+  if (bracket !== 'participant' && rank !== null) {
+    const nameIndex = await getAciCompetitionNameIndex(compId);
+    let fishSizeQ = 0, fishMaxDisplaySize = 3000, fishWeightMg = 0;
+    try {
+      const rj = JSON.parse(result.result_json || '{}') as { sizeQ?: number; maxDisplaySize?: number; weightMg?: number };
+      if (typeof rj.sizeQ === 'number') fishSizeQ = rj.sizeQ;
+      if (typeof rj.maxDisplaySize === 'number' && rj.maxDisplaySize > 0) fishMaxDisplaySize = rj.maxDisplaySize;
+      if (typeof rj.weightMg === 'number') fishWeightMg = rj.weightMg;
+    } catch {}
+    await recordAciTrophy(uid, compId, nameIndex, bracket, rank, total, result.fish_id || '', fishSizeQ, fishMaxDisplaySize, fishWeightMg, String(result.score_rank ?? '0'));
+  }
+  if (diamonds > 0 || tokens > 0) {
+    const existing = await peekPACorrections(uid);
+    const prev = (existing?.corrections || {}) as Record<string, any>;
+    const merged: Record<string, any> = { ...prev };
+    if (diamonds > 0) merged._aciRewardDiamonds = (typeof prev._aciRewardDiamonds === 'number' ? prev._aciRewardDiamonds : 0) + diamonds;
+    if (tokens   > 0) merged._aciRewardTokens   = (typeof prev._aciRewardTokens   === 'number' ? prev._aciRewardTokens   : 0) + tokens;
+    await setPACorrections(uid, merged);
+  }
+  res.json({ ok: true, bracket, rank, totalParticipants: total });
+});
+
+// GET /pa/aci/trophies — the player's permanent Trophy Room (top1/top3/top5 placements ever claimed)
+app.get('/pa/aci/trophies', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const dbPool = getPool();
+  if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  const trophies = await getAciTrophies(uid);
+  res.json({ ok: true, trophies });
+});
+
+// ── ACI: Message in a Bottle ──────────────────────────────────────────────────
+// A bottle drops (1 in 5000 ACI casts) on the client. Opening it asks the server for a single-use gift
+// code worth ACI_BOTTLE_REWARD. The code can be redeemed by the opener or given to anyone; once it is
+// redeemed it is deleted from the server (see /pa/redeem).
+
+const ACI_BOTTLE_REWARD = { diamonds: 25, autoIncomePackages: 5, treasureMapFragments: 25 } as const;
+const ACI_BOTTLE_DAILY_CAP = 5;   // max bottles a player can open per rolling 24 h
+const _BOTTLE_CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O/1/I — easy to read out and type
+const ACI_BOTTLE_CODE_RE   = /^BTL[A-HJ-NP-Z2-9]{9}$/;              // 12 chars, letters+digits only (the client strips everything else)
+const { randomInt: _bottleRandomInt } = require('crypto') as { randomInt: (min: number, max: number) => number };
+
+function _genBottleCode(): string {
+  let code = 'BTL';
+  for (let i = 0; i < 9; i++) code += _BOTTLE_CODE_CHARSET[_bottleRandomInt(0, _BOTTLE_CODE_CHARSET.length)];
+  return code;
+}
+
+// POST /pa/aci/bottle/open  { bottleId }  → { ok, code, reward }
+app.post('/pa/aci/bottle/open', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { bottleId } = (req.body || {}) as { bottleId?: unknown };
+  if (typeof bottleId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(bottleId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_bottle' });
+  }
+  // Bottles only exist on the island — it must have been unlocked
+  if (!(await getAciGoalComplete())) return res.json({ ok: false, error: 'aci_locked' });
+
+  const result = await openAciBottle(uid, bottleId, _genBottleCode(), ACI_BOTTLE_DAILY_CAP);
+  if (result.status === 'ok') {
+    console.log(`[ACI bottle] ${uid} opened bottle ${bottleId}`);
+    return res.json({ ok: true, code: result.code, reward: ACI_BOTTLE_REWARD });
+  }
+  if (result.status === 'error') return res.status(500).json({ ok: false, error: 'server_error' });
+  return res.json({ ok: false, error: result.status });   // cap_reached | already_redeemed | not_owner
+});
+
+// ── EI Catch-Rate Leaderboard ─────────────────────────────────────────────────
+
+// POST /pa/ei/leaderboard/submit  { eventId, catchRate }
+app.post('/pa/ei/leaderboard/submit', verifyPAToken, express.json(), async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { eventId, catchRate, displayName: clientName } = req.body;
+  if (!eventId || typeof catchRate !== 'number' || catchRate <= 0) {
+    return res.status(400).json({ ok: false, error: 'invalid_request' });
+  }
+  let displayName = (typeof clientName === 'string' && clientName.trim()) ? clientName.trim() : '';
+  if (!displayName) {
+    try {
+      const paRow = await loadPASave(uid);
+      if (paRow?.saveJson) {
+        const s = JSON.parse(paRow.saveJson);
+        displayName = s.playerName || s.username || s.anglerName || '';
+      }
+    } catch {}
+    if (!displayName) displayName = 'Angler';
+  }
+  await upsertEiLbScore(uid, eventId, displayName, catchRate);
+  res.json({ ok: true });
+});
+
+// GET /pa/ei/leaderboard?eventId=...
+app.get('/pa/ei/leaderboard', verifyPAToken, async (req, res) => {
+  const uid     = res.locals.paUid as string;
+  const eventId = (req.query.eventId as string) || '';
+  if (!eventId) return res.status(400).json({ ok: false, error: 'missing_event_id' });
+
+  const rows = await getEiLeaderboard(eventId);
+  const total = rows.length;
+
+  // Top 50 with rank
+  const top50 = rows.slice(0, 50).map((r, i) => ({
+    rank:        i + 1,
+    displayName: r.display_name,
+    catchRate:   r.catch_rate,
+  }));
+
+  // Own rank
+  const ownIdx = rows.findIndex(r => r.uid === uid);
+  let own: { rank: number; catchRate: number; pctile: number; displayName: string; claimed: boolean } | null = null;
+  if (ownIdx >= 0) {
+    const rank    = ownIdx + 1;
+    const pctile  = total > 0 ? ((rank - 1) / total) * 100 : 100;
+    const claimed = await hasEiLbClaim(uid, eventId);
+    own = { rank, catchRate: rows[ownIdx].catch_rate, pctile, displayName: rows[ownIdx].display_name, claimed };
+  }
+
+  res.json({ ok: true, top50, own, total });
+});
+
+// GET /admin/pa/save/:uid  — read raw save fields for a player
+app.get('/admin/pa/save/:uid', requireAdmin, async (req, res) => {
+  const uid = req.params.uid;
+  const paRow = await loadPASave(uid);
+  if (!paRow?.saveJson) return res.status(404).json({ ok: false, error: 'not_found' });
+  const save = JSON.parse(paRow.saveJson);
+  res.json({
+    ok: true,
+    uid,
+    updatedAt: paRow.updatedAt ?? null,
+    bestPrestigePearls: save.stats?.bestPrestigePearls ?? null,
+    blackPearls: save.blackPearls ?? null,
+    prestigeCount: save.prestigeCount ?? null,
+    lifePearlsEarned: save.stats?.lifePearlsEarned ?? null,
+  });
+});
+
+// DELETE /admin/pa/ei/leaderboard/entries  { uids?: string[], displayNames?: string[] }  — remove specific players' scores
+app.delete('/admin/pa/ei/leaderboard/entries', requireAdmin, express.json(), async (req, res) => {
+  const { uids, displayNames } = req.body;
+  let deleted = 0;
+  if (Array.isArray(uids) && uids.length) deleted += await deleteEiLbEntries(uids);
+  if (Array.isArray(displayNames) && displayNames.length) deleted += await deleteEiLbEntriesByName(displayNames);
+  if (!deleted && !uids?.length && !displayNames?.length) return res.status(400).json({ ok: false, error: 'uids or displayNames required' });
+  res.json({ ok: true, deleted });
+});
+
+// POST /pa/ei/leaderboard/claim  { eventId }
+app.post('/pa/ei/leaderboard/claim', verifyPAToken, express.json(), async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { eventId } = req.body;
+  if (!eventId) return res.status(400).json({ ok: false, error: 'invalid_request' });
+
+  if (await hasEiLbClaim(uid, eventId)) {
+    return res.json({ ok: false, error: 'already_claimed' });
+  }
+
+  const rows   = await getEiLeaderboard(eventId);
+  const total  = rows.length;
+  const ownIdx = rows.findIndex(r => r.uid === uid);
+  if (ownIdx < 0) return res.json({ ok: false, error: 'no_score' });
+
+  const pctile = total > 0 ? (ownIdx / total) * 100 : 100;
+  let tokens = 0;
+  if (pctile <= 1)  tokens = 10;
+  else if (pctile <= 5)  tokens = 5;
+  else if (pctile <= 10) tokens = 3;
+  else if (pctile <= 25) tokens = 1;
+
+  if (tokens === 0) return res.json({ ok: false, error: 'not_qualified' });
+
+  // Record claim first (idempotence)
+  await recordEiLbClaim(uid, eventId, tokens);
+
+  // Apply tokens to player save
+  try {
+    const paRow = await loadPASave(uid);
+    if (paRow?.saveJson) {
+      const save = JSON.parse(paRow.saveJson);
+      save.autoIncomePackages = (save.autoIncomePackages || 0) + tokens;
+      await savePASave(uid, JSON.stringify(save));
+    }
+  } catch {}
+
+  res.json({ ok: true, tokens, pctile });
 });
 
 // POST /pa/community/claim  { eventId, milestonePct }
@@ -2499,8 +3358,11 @@ app.post('/pa/community/claim', verifyPAToken, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'invalid_request' });
   }
 
-  const ev = await _ceGetActiveCfg();
-  if (!ev || ev.eventId !== eventId) return res.json({ ok: false, error: 'event_not_active' });
+  const ev = await _ceGetEventCfgById(eventId);
+  if (!ev) return res.json({ ok: false, error: 'event_not_found' });
+
+  // Reject claims before event starts
+  if (ev.startsAt && Number(ev.startsAt) > Date.now()) return res.json({ ok: false, error: 'event_not_started' });
 
   const milestones = ev.milestones as Array<Record<string,unknown>>;
   const ms = milestones.find(m => Number(m.pct) === milestonePct);
@@ -2536,6 +3398,8 @@ app.post('/pa/community/claim', verifyPAToken, async (req, res) => {
     const bb = ms.bonusBobber as Record<string,unknown>;
     if (playerPct >= Number(bb.minPlayerPct)) {
       reward.bonusBobber = bb.id;
+      // Also record sentinel 101 so claim-bobber endpoint won't double-grant
+      await recordCEMilestoneClaim(uid, eventId, 101);
     }
   }
 
@@ -2554,8 +3418,10 @@ app.post('/pa/community/claim-bobber', verifyPAToken, async (req, res) => {
   const { eventId } = req.body;
   if (!eventId) return res.status(400).json({ ok: false, error: 'invalid_request' });
 
-  const ev = await _ceGetActiveCfg();
-  if (!ev || ev.eventId !== eventId) return res.json({ ok: false, error: 'event_not_active' });
+  const ev = await _ceGetEventCfgById(eventId);
+  if (!ev) return res.json({ ok: false, error: 'event_not_found' });
+
+  if (ev.startsAt && Number(ev.startsAt) > Date.now()) return res.json({ ok: false, error: 'event_not_started' });
 
   const ms100 = (ev.milestones as Array<Record<string,unknown>>).find(m => Number(m.pct) === 100 && m.bonusBobber);
   if (!ms100) return res.json({ ok: false, error: 'no_bobber_milestone' });
@@ -2586,6 +3452,111 @@ app.post('/pa/community/claim-bobber', verifyPAToken, async (req, res) => {
   });
 });
 
+// ─── CE LB two-phase grant ────────────────────────────────────────────────────
+
+const CE_LB_TIERS_DEFAULT = [
+  { key: 'top1',  maxPct:  1, reward_pct: 50, diamonds: 50, autoTokens: 5 },
+  { key: 'top3',  maxPct:  3, reward_pct: 30, diamonds: 30, autoTokens: 3 },
+  { key: 'top10', maxPct: 10, reward_pct: 15, diamonds: 20, autoTokens: 2 },
+  { key: 'top25', maxPct: 25, reward_pct: 10, diamonds: 10, autoTokens: 1 },
+];
+
+function _ceTierForPercentile(evCfg: Record<string,unknown>, percentile: number) {
+  const tiers = Array.isArray(evCfg.lbTiers)
+    ? (evCfg.lbTiers as typeof CE_LB_TIERS_DEFAULT)
+    : CE_LB_TIERS_DEFAULT;
+  return tiers.find(t => percentile <= t.maxPct) ?? null;
+}
+
+function _ceGrantResponse(grant: any) {
+  return {
+    grantId:   grant.grant_id,
+    eventId:   grant.event_id,
+    reward:    grant.reward_json,
+    rank:      grant.rank_num,
+    total:     grant.total_num,
+  };
+}
+
+// GET /pa/community/lb-pending
+// Returns all unacknowledged LB grants for the player from ended archived events.
+// No eventId required — covers all eligible events within the claim window.
+app.get('/pa/community/lb-pending', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+
+  // First: return any already-created unacked grants (covers lost-response retries)
+  const existingGrants = await getCEUnackedGrants(uid, CE_POST_EVENT_GRACE_MS);
+
+  // Second: scan archived events for events where the player qualifies but has no grant yet
+  const archivedEvents = await getCEArchivedEventsInWindow(CE_POST_EVENT_GRACE_MS);
+  const coveredEventIds = new Set(existingGrants.map(g => g.event_id));
+
+  for (const ev of archivedEvents) {
+    const eventId  = ev.eventId as string;
+    const endsAtMs = Number(ev.endsAt);
+    if (!eventId || !endsAtMs || Date.now() < endsAtMs) continue; // not ended yet
+    if (coveredEventIds.has(eventId)) continue; // already have a grant
+
+    const perc = await getCEPlayerPercentile(uid, eventId);
+    if (!perc) continue;
+
+    const tier = _ceTierForPercentile(ev, perc.percentile);
+    if (!tier) continue;
+
+    const reward = {
+      type: 'lb', tierKey: tier.key,
+      reward_pct: tier.reward_pct, diamonds: tier.diamonds, autoTokens: tier.autoTokens,
+    };
+    const grant = await createOrGetCELbGrant(uid, eventId, tier.key, reward, perc.rank, perc.total);
+    existingGrants.push(grant);
+  }
+
+  res.json({ ok: true, grants: existingGrants.map(_ceGrantResponse) });
+});
+
+// POST /pa/community/lb-claim  { eventId }
+// Idempotent: creates a grant on first call, returns the same grant on retry.
+// Never returns already_claimed — a retry always gets the grant back.
+app.post('/pa/community/lb-claim', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { eventId } = req.body;
+  if (!eventId) return res.status(400).json({ ok: false, error: 'invalid_request' });
+
+  const evCfg = await _ceGetEventCfgById(eventId);
+  if (!evCfg) return res.json({ ok: false, error: 'event_not_found' });
+  const endsAtMs = Number(evCfg.endsAt);
+  if (!endsAtMs || Date.now() < endsAtMs) return res.json({ ok: false, error: 'event_not_ended' });
+
+  // Idempotent: return existing grant if any
+  const existing = await getCELbGrant(uid, eventId);
+  if (existing && existing.grant_id) {
+    return res.json({ ok: true, grant: _ceGrantResponse(existing) });
+  }
+
+  const perc = await getCEPlayerPercentile(uid, eventId);
+  if (!perc) return res.json({ ok: false, error: 'no_contribution' });
+
+  const tier = _ceTierForPercentile(evCfg, perc.percentile);
+  if (!tier) return res.json({ ok: false, error: 'not_in_top_25' });
+
+  const reward = {
+    type: 'lb', tierKey: tier.key,
+    reward_pct: tier.reward_pct, diamonds: tier.diamonds, autoTokens: tier.autoTokens,
+  };
+  const grant = await createOrGetCELbGrant(uid, eventId, tier.key, reward, perc.rank, perc.total);
+  res.json({ ok: true, grant: _ceGrantResponse(grant) });
+});
+
+// POST /pa/community/lb-ack  { grantId }
+// Client calls after applying reward to save and confirming the grant is delivered.
+app.post('/pa/community/lb-ack', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { grantId } = req.body;
+  if (!grantId) return res.status(400).json({ ok: false, error: 'missing_grant_id' });
+  await ackCELbGrant(uid, grantId);
+  res.json({ ok: true });
+});
+
 // ─── Patient Angler Redeem Codes ──────────────────────────────────────────────
 // Codes are ONLY here on the server — never sent to the client.
 // Add new codes here any time without a new app build.
@@ -2601,6 +3572,8 @@ const PA_REDEEM_CODES: Record<string, {
   bobberCosmetics?: string[];
   treasureMaps?: number;
   treasureMapFragments?: number;
+  krakenTest?: string;
+  multiUse?: boolean;
   patchArrayAppend?: Record<string, string[]>;
   // Legacy fields — kept for backward compatibility with existing codes
   rewardType?: 'coins' | 'diamonds' | 'autoIncome' | 'blackPearls' | 'save_restore';
@@ -2637,6 +3610,9 @@ const PA_REDEEM_CODES: Record<string, {
   'LOSTISLES':       { treasureMapFragments: 20, desc: '20 Treasure Map Fragments — go explore the Lost Isles!' },
   'GEM50Y4KW2':      { diamonds: 50, maxUses: 1, targetUid: '70bYhYFIXebyQvGWmYcQleEKuim2', desc: '50 Diamonds gift!' },
   'GEM48CP9RX':      { diamonds: 48, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: '48 Diamonds gift!' },
+  'ANGLERS50':       { diamonds: 25, autoIncomePackages: 1, desc: '25 Diamonds + 1 Automation Income Token — thanks for being part of the community!' },
+  'FESTIVAL21':      { diamonds: 25, blackPearls: 5, autoIncomePackages: 2, expires: '2026-09-23T23:59:59Z', desc: '25 Diamonds + 2 Auto Income Tokens + 5 Black Pearls — community event is coming!' },
+  'KRAKENFIGHT':     { krakenTest: 'fight', multiUse: true, desc: 'Kraken test fight ready — test mode, no rewards.' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -2649,6 +3625,21 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
 
   const code  = rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   const entry = PA_REDEEM_CODES[code];
+
+  // Message-in-a-Bottle gift codes live in the database, not in PA_REDEEM_CODES.
+  // Single use: redeemAciBottleCode() deletes the row, so the code is gone from the server after this.
+  if (!entry && ACI_BOTTLE_CODE_RE.test(code)) {
+    if (!getDbStatus().available) return res.json({ ok: false, error: 'server_error' });
+    const outcome = await redeemAciBottleCode(code);
+    if (outcome === 'error')   return res.json({ ok: false, error: 'server_error' });
+    if (outcome === 'invalid') return res.json({ ok: false, error: 'invalid_code' });
+    console.log(`[ACI bottle] code ${code} redeemed by ${uid}`);
+    return res.json({
+      ok: true,
+      desc: 'Message in a Bottle — 25 Diamonds + 5 Auto Income Tokens + 25 Treasure Map Fragments!',
+      reward: { ...ACI_BOTTLE_REWARD },
+    });
+  }
 
   if (!entry)
     return res.json({ ok: false, error: 'invalid_code' });
@@ -2667,9 +3658,11 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (used >= entry.maxUses) return res.json({ ok: false, error: 'invalid_code' });
   }
 
-  const result = await checkAndRecordPARedeem(uid, code);
-  if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
-  if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
+  if (!entry.multiUse) {
+    const result = await checkAndRecordPARedeem(uid, code);
+    if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
+    if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
+  }
 
   if (entry.rewardType === 'save_restore') {
     // patchArrayAppend: read cloud save, append new items to specified arrays, return only those arrays as patch
@@ -2728,9 +3721,161 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.bobberCosmetics        != null) reward.bobberCosmetics        = entry.bobberCosmetics;
     if (entry.treasureMaps           != null) reward.treasureMaps           = entry.treasureMaps;
     if (entry.treasureMapFragments   != null) reward.treasureMapFragments   = entry.treasureMapFragments;
+    if (entry.krakenTest             != null) reward.krakenTest             = entry.krakenTest;
   }
 
   res.json({ ok: true, desc: entry.desc, reward });
+});
+
+// ─── Patient Angler Referral System ──────────────────────────────────────────
+
+const _REFERRAL_CHARSET   = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const _REFERRAL_REWARD    = 25;
+const _REFERRAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const _REFERRAL_MAX_INVITES = 20;
+
+function _genReferralCode(): string {
+  let code = '';
+  for (let i = 0; i < 6; i++)
+    code += _REFERRAL_CHARSET[Math.floor(Math.random() * _REFERRAL_CHARSET.length)];
+  return code;
+}
+
+async function _ensureReferralCode(uid: string): Promise<string | null> {
+  const existing = await query(`SELECT code FROM pa_referral_codes WHERE uid = $1`, [uid]);
+  if (existing?.[0]?.code) return existing[0].code;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = _genReferralCode();
+    try {
+      await query(`INSERT INTO pa_referral_codes (uid, code) VALUES ($1, $2)`, [uid, code]);
+      return code;
+    } catch (e: any) {
+      if (e?.code === '23505') continue; // unique violation — try another code
+      throw e;
+    }
+  }
+  return null;
+}
+
+// GET /pa/referral — returns the player's referral code and usage stats
+app.get('/pa/referral', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  if (!getDbStatus().available) return res.json({ ok: false, error: 'server_error' });
+
+  const code = await _ensureReferralCode(uid).catch(() => null);
+  if (!code) return res.json({ ok: false, error: 'server_error' });
+
+  const [usedRow, countRow, fbUser] = await Promise.all([
+    query(`SELECT referrer_uid, code AS used_code, used_at FROM pa_referral_uses WHERE uid = $1`, [uid]),
+    query(`SELECT COUNT(*)::INT AS n FROM pa_referral_uses WHERE referrer_uid = $1`, [uid]),
+    _paFirebaseAuth?.getUser(uid).catch(() => null),
+  ]);
+
+  const accountCreatedAt = fbUser?.metadata?.creationTime
+    ? new Date(fbUser.metadata.creationTime).getTime()
+    : null;
+
+  res.json({
+    ok: true,
+    code,
+    usedCode:      usedRow?.[0]?.used_code    || null,
+    referrerUid:   usedRow?.[0]?.referrer_uid || null,
+    usedAt:        usedRow?.[0]?.used_at       || null,
+    referralCount: countRow?.[0]?.n            ?? 0,
+    accountCreatedAt,
+  });
+});
+
+// POST /pa/referral/use — validate and grant referral reward
+app.post('/pa/referral/use', verifyPAToken, express.json(), async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { referralCode: rawCode } = req.body;
+
+  if (!rawCode || typeof rawCode !== 'string')
+    return res.json({ ok: false, error: 'invalid_code' });
+
+  const referralCode = rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (referralCode.length !== 6)
+    return res.json({ ok: false, error: 'invalid_code' });
+
+  if (!getDbStatus().available)
+    return res.json({ ok: false, error: 'server_error' });
+
+  // Find referrer
+  const codeRows = await query(`SELECT uid FROM pa_referral_codes WHERE code = $1`, [referralCode]);
+  if (!codeRows?.length)
+    return res.json({ ok: false, error: 'invalid_code' });
+
+  const referrerUid = codeRows[0].uid as string;
+
+  if (referrerUid === uid)
+    return res.json({ ok: false, error: 'own_code' });
+
+  // Verify account age server-side via Firebase
+  if (!_paFirebaseAuth)
+    return res.json({ ok: false, error: 'server_error' });
+
+  let fbUser: firebaseAdmin.auth.UserRecord;
+  try { fbUser = await _paFirebaseAuth.getUser(uid); }
+  catch { return res.json({ ok: false, error: 'server_error' }); }
+
+  const createdAt   = new Date(fbUser.metadata.creationTime).getTime();
+  const accountAgeMs = Date.now() - createdAt;
+  if (accountAgeMs > _REFERRAL_MAX_AGE_MS)
+    return res.json({ ok: false, error: 'too_old' });
+
+  // Check current player hasn't already used a code
+  const usedRows = await query(`SELECT uid FROM pa_referral_uses WHERE uid = $1`, [uid]);
+  if (usedRows?.length)
+    return res.json({ ok: false, error: 'already_used' });
+
+  // Check referrer hasn't hit invite limit
+  const countRows = await query(`SELECT COUNT(*)::INT AS n FROM pa_referral_uses WHERE referrer_uid = $1`, [referrerUid]);
+  if ((countRows?.[0]?.n ?? 0) >= _REFERRAL_MAX_INVITES)
+    return res.json({ ok: false, error: 'referrer_full' });
+
+  // Atomic insert — ON CONFLICT prevents double-claiming from race conditions
+  const insertResult = await query(
+    `INSERT INTO pa_referral_uses (uid, referrer_uid, code) VALUES ($1, $2, $3)
+     ON CONFLICT (uid) DO NOTHING RETURNING uid`,
+    [uid, referrerUid, referralCode]
+  );
+  if (!insertResult?.length)
+    return res.json({ ok: false, error: 'already_used' });
+
+  // Grant diamonds to the new player (response already carries reward; server save is backup)
+  const _grantNewPlayerDiamonds = async () => {
+    try {
+      const saveRow = await loadPASave(uid);
+      if (saveRow) {
+        const save: Record<string, any> = JSON.parse(saveRow.saveJson);
+        save.diamonds = (save.diamonds || 0) + _REFERRAL_REWARD;
+        await savePASave(uid, JSON.stringify(save));
+      }
+      await addTrustedDiamonds(uid, _REFERRAL_REWARD);
+    } catch (e) {
+      console.error(`[Referral] new-player diamond grant failed for ${uid}:`, e);
+    }
+  };
+
+  // Grant diamonds to the referrer via corrections so their local game receives it
+  // on the next cloud load (local save is authoritative and would otherwise overwrite the server save).
+  const _grantReferrerDiamonds = async () => {
+    try {
+      const existing = await peekPACorrections(referrerUid);
+      const prev = (existing?.corrections || {}) as Record<string, any>;
+      const prevAdd = typeof prev._addDiamonds === 'number' ? prev._addDiamonds : 0;
+      await setPACorrections(referrerUid, { ...prev, _addDiamonds: prevAdd + _REFERRAL_REWARD });
+      await addTrustedDiamonds(referrerUid, _REFERRAL_REWARD);
+    } catch (e) {
+      console.error(`[Referral] referrer diamond grant failed for ${referrerUid}:`, e);
+    }
+  };
+
+  await Promise.all([_grantNewPlayerDiamonds(), _grantReferrerDiamonds()]);
+
+  console.log(`[Referral] ${uid} used code ${referralCode} (referrer: ${referrerUid}) — +${_REFERRAL_REWARD} each`);
+  res.json({ ok: true, reward: _REFERRAL_REWARD, message: `+${_REFERRAL_REWARD} Diamonds! Referral successful.` });
 });
 
 // AdMob app-ads.txt verification
@@ -2779,10 +3924,13 @@ const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'
   permanent_autoseller:  { type: 'non_consumable',              grant: { permanentAutoSell: true } },
   dev_support_package:   { type: 'non_consumable',              grant: { devSupport: true } },
   dev_support_package_2: { type: 'non_consumable',              grant: { devSupport2: true } },
+  dev_support_mini:      { type: 'consumable',                  grant: { devSupportMini: 2 } },
+  dev_support_mini_2:    { type: 'consumable',                  grant: { devSupportMini2: 2 } },
   prestige_pack:         { type: 'consumable',     diamonds: 100, grant: { diamonds: 100 } },
   'ei_event_reward':     { type: 'consumable',                  grant: { eiAllTiersUnlocked: true } },
   time_skip_12:          { type: 'consumable',                  grant: { autoIncomePackages: 12 } },
   time_skip_24:          { type: 'consumable',                  grant: { autoIncomePackages: 24 } },
+  cash_bobber:           { type: 'non_consumable',              grant: { cashBobber: true } },
 };
 
 async function verifyWithGooglePlayPA(productId: string, purchaseToken: string): Promise<boolean> {
@@ -2860,6 +4008,133 @@ app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
   console.log(`[PA-IAP] ✅ ${productId} verified for ${uid}`);
   res.json({ ok: true, grant: product.grant });
 });
+
+// ─── PA Voided Purchases — hourly poll & grant reversal ──────────────────────
+// Polls Google Play Voided Purchases API once per hour and reverses any grants
+// for refunded / charged-back purchases. Starts 48 h back on cold boot so
+// refunds that occurred during downtime are not missed.
+
+let _paVoidedLastCheckMs = Date.now() - 48 * 60 * 60 * 1000;
+
+function _reverseGrant(save: any, grant: any): { modified: boolean; desc: string } {
+  const parts: string[] = [];
+  if (grant.diamonds && typeof grant.diamonds === 'number') {
+    const before = save.diamonds || 0;
+    save.diamonds = Math.max(0, before - grant.diamonds);
+    parts.push(`diamonds ${before}→${save.diamonds}`);
+  }
+  if (grant.devSupport) {
+    save.devSupportOwned = false;
+    parts.push('revoked devSupportOwned');
+  }
+  if (grant.devSupport2) {
+    save.devSupportOwned2 = false;
+    parts.push('revoked devSupportOwned2');
+  }
+  if (grant.devSupportMini) {
+    const before = Math.max(0, Math.floor(Number(save.devSupportMiniCount) || 0));
+    save.devSupportMiniCount = Math.max(0, before - Math.max(0, Math.floor(Number(grant.devSupportMini) || 0)));
+    parts.push(`devSupportMiniCount ${before}→${save.devSupportMiniCount}`);
+  }
+  if (grant.devSupportMini2) {
+    const before = Math.max(0, Math.floor(Number(save.devSupportMini2Count) || 0));
+    save.devSupportMini2Count = Math.max(0, before - Math.max(0, Math.floor(Number(grant.devSupportMini2) || 0)));
+    parts.push(`devSupportMini2Count ${before}→${save.devSupportMini2Count}`);
+  }
+  if (grant.cashBobber) {
+    if (Array.isArray(save.unlockedBobberCosmetics)) {
+      save.unlockedBobberCosmetics = save.unlockedBobberCosmetics.filter((b: string) => b !== 'bc_cash');
+      if (save.equippedBobberCosmetic === 'bc_cash') save.equippedBobberCosmetic = 'bc_basic';
+    }
+    parts.push('revoked bc_cash bobber');
+  }
+  // autoIncomePackages and one-time event items are consumed on grant — not reversible
+  return { modified: parts.length > 0, desc: parts.join(', ') || 'nothing reversible' };
+}
+
+async function pollPAVoidedPurchases(): Promise<void> {
+  const keyJson = process.env.GOOGLE_PLAY_KEY_JSON;
+  if (!keyJson) return;
+  if (!getDbStatus().available) return;
+
+  const startMs = _paVoidedLastCheckMs;
+  const nowMs   = Date.now();
+
+  try {
+    const credentials = JSON.parse(keyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/androidpublisher'],
+    });
+    const publisher = google.androidpublisher({ version: 'v3', auth });
+
+    let pageToken: string | undefined;
+    let totalReversed = 0;
+
+    do {
+      const res = await publisher.purchases.voidedpurchases.list({
+        packageName: PA_PACKAGE_NAME,
+        startTime:   startMs.toString(),
+        maxResults:  1000,
+        ...(pageToken ? { token: pageToken } : {}),
+      } as any);
+
+      const voidedList: any[] = (res.data as any).voidedPurchases || [];
+      pageToken = (res.data as any).tokenPagination?.nextPageToken ?? undefined;
+
+      for (const vp of voidedList) {
+        const token: string | undefined = vp.purchaseToken;
+        if (!token) continue;
+
+        if (await isPAVoidedPurchaseProcessed(token)) continue;
+
+        const receipt = await getPAPurchaseReceiptFull(token);
+        if (!receipt) {
+          // Not a PA purchase or not in our DB — mark processed so we don't revisit
+          await recordPAVoidedPurchase(token, '', '', new Date(Number(vp.voidedTimeMillis)));
+          continue;
+        }
+
+        const { playerId, productId, grantedJson } = receipt;
+        const voidedAt = new Date(Number(vp.voidedTimeMillis));
+
+        let grant: any;
+        try { grant = JSON.parse(grantedJson); } catch { grant = {}; }
+
+        const saveRow = await loadPASave(playerId);
+        if (!saveRow) {
+          console.warn(`[PA-Voided] No save for uid=${playerId}, product=${productId} — marking processed`);
+          await recordPAVoidedPurchase(token, playerId, productId, voidedAt);
+          continue;
+        }
+
+        let save: any;
+        try { save = JSON.parse(saveRow.saveJson); } catch { save = {}; }
+
+        const { modified, desc } = _reverseGrant(save, grant);
+        if (modified) {
+          await savePASave(playerId, JSON.stringify(save));
+          console.log(`[PA-Voided] ✅ Reversed ${productId} for uid=${playerId}: ${desc}`);
+          totalReversed++;
+        } else {
+          console.log(`[PA-Voided] ℹ️  ${productId} for uid=${playerId}: ${desc} — no save change needed`);
+        }
+
+        await recordPAVoidedPurchase(token, playerId, productId, voidedAt);
+      }
+    } while (pageToken);
+
+    _paVoidedLastCheckMs = nowMs;
+    if (totalReversed > 0) console.log(`[PA-Voided] Poll done — ${totalReversed} grant(s) reversed`);
+
+  } catch (err: any) {
+    console.error('[PA-Voided] Poll error:', err?.message || err);
+  }
+}
+
+// Run 30 s after startup (DB needs time to init), then every hour
+setTimeout(() => pollPAVoidedPurchases().catch(e => console.error('[PA-Voided]', e)), 30_000);
+setInterval(() => pollPAVoidedPurchases().catch(e => console.error('[PA-Voided]', e)), 60 * 60 * 1000);
 
 // Admin login / logout (no session required)
 app.get ('/admin/login',  serveAdminLogin);
@@ -3008,6 +4283,25 @@ app.post('/admin/pa/restore-save', paAdminMiddleware, express.json({ limit: '500
   res.json({ ok });
 });
 
+// Admin: set a one-time field correction for a player (applied on next cloud save load, then deleted).
+// Body: { corrections: { fieldName: value, ... } }
+app.post('/admin/pa/corrections/:uid', paAdminMiddleware, express.json(), async (req, res) => {
+  const { uid } = req.params;
+  const { corrections } = req.body;
+  if (!corrections || typeof corrections !== 'object' || Array.isArray(corrections))
+    return res.status(400).json({ ok: false, error: 'corrections must be a non-array object' });
+  const ok = await setPACorrections(uid, corrections);
+  res.json({ ok, uid, corrections });
+});
+
+// Admin: view pending corrections for a player (without consuming them).
+app.get('/admin/pa/corrections/:uid', paAdminMiddleware, async (req, res) => {
+  const { uid } = req.params;
+  const row = await peekPACorrections(uid);
+  if (!row) return res.json({ ok: true, pending: false });
+  res.json({ ok: true, pending: true, corrections: row.corrections, createdAt: row.createdAt });
+});
+
 // Find all saves that contain a specific bobber cosmetic id (for player recovery by unique cosmetic)
 // View last 3 save snapshots for a player (for manual recovery)
 app.get('/admin/pa/save-history/:uid', paAdminMiddleware, async (req, res) => {
@@ -3128,6 +4422,7 @@ app.get('/admin/pa/find-by-token', paAdminMiddleware, async (req, res) => {
   );
   res.json({ rows: rows || [] });
 });
+
 
 app.get('/admin/pa/find-by-bobber', paAdminMiddleware, async (req, res) => {
   const bobberId = (req.query.id as string) || 'bc_worm';

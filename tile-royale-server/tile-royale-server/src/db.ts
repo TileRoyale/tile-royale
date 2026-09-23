@@ -187,12 +187,33 @@ async function createTables(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS pa_save_history_uid_idx ON pa_save_history (uid, saved_at DESC);
 
+    -- Admin corrections: one-time field overrides applied on next cloud save load, then deleted.
+    CREATE TABLE IF NOT EXISTS pa_corrections (
+      uid              TEXT         PRIMARY KEY,
+      corrections_json TEXT         NOT NULL,
+      created_at       TIMESTAMPTZ  DEFAULT now()
+    );
+
     -- Patient Angler redeem code uses: one row per (code, uid) pair
     CREATE TABLE IF NOT EXISTS pa_codes_used (
       code        TEXT         NOT NULL,
       uid         TEXT         NOT NULL,
       redeemed_at TIMESTAMPTZ  DEFAULT now(),
       PRIMARY KEY (code, uid)
+    );
+
+    -- Patient Angler referral codes: one unique 6-char code per player
+    CREATE TABLE IF NOT EXISTS pa_referral_codes (
+      uid   TEXT PRIMARY KEY,
+      code  TEXT UNIQUE NOT NULL
+    );
+
+    -- Patient Angler referral uses: one row per player who claimed a referral reward
+    CREATE TABLE IF NOT EXISTS pa_referral_uses (
+      uid          TEXT PRIMARY KEY,
+      referrer_uid TEXT NOT NULL,
+      code         TEXT NOT NULL,
+      used_at      TIMESTAMPTZ DEFAULT now()
     );
 
     -- Migration: if pa_purchase_receipts was created with wrong column name, drop it so
@@ -221,6 +242,15 @@ async function createTables(): Promise<void> {
       purchased_at   TIMESTAMPTZ  DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS pa_purchase_receipts_player_idx ON pa_purchase_receipts (player_id);
+
+    -- Voided PA purchases: tracks tokens whose grants have been reversed (prevents double-reversal)
+    CREATE TABLE IF NOT EXISTS pa_voided_purchases (
+      purchase_token TEXT        PRIMARY KEY,
+      player_id      TEXT        NOT NULL DEFAULT '',
+      product_id     TEXT        NOT NULL DEFAULT '',
+      voided_at      TIMESTAMPTZ NOT NULL,
+      processed_at   TIMESTAMPTZ DEFAULT now()
+    );
 
     -- Push tokens: one row per FCM token (UNIQUE on token, indexed by player)
     CREATE TABLE IF NOT EXISTS push_tokens (
@@ -518,6 +548,152 @@ async function createTables(): Promise<void> {
       value      JSONB        NOT NULL,
       updated_at TIMESTAMPTZ  DEFAULT now()
     );
+
+    -- Community Event: per-player contributions (one row per player per event)
+    CREATE TABLE IF NOT EXISTS pa_community_contributions (
+      player_id    TEXT         NOT NULL,
+      event_id     TEXT         NOT NULL,
+      contribution BIGINT       NOT NULL DEFAULT 0,
+      display_name TEXT,
+      last_updated TIMESTAMPTZ  DEFAULT now(),
+      PRIMARY KEY (player_id, event_id)
+    );
+
+    -- Community Event: claimed milestone rewards (one row per player+event+milestone)
+    CREATE TABLE IF NOT EXISTS pa_community_claims (
+      player_id    TEXT         NOT NULL,
+      event_id     TEXT         NOT NULL,
+      milestone_pct INT         NOT NULL,
+      claimed_at   TIMESTAMPTZ  DEFAULT now(),
+      PRIMARY KEY (player_id, event_id, milestone_pct)
+    );
+    CREATE TABLE IF NOT EXISTS pa_community_lb_claims (
+      player_id    TEXT         NOT NULL,
+      event_id     TEXT         NOT NULL,
+      tier_key     TEXT,
+      claimed_at   TIMESTAMPTZ  DEFAULT now(),
+      PRIMARY KEY (player_id, event_id)
+    );
+    -- Immutable event config archive — written once at event scheduling, never mutated
+    CREATE TABLE IF NOT EXISTS pa_ce_event_archive (
+      event_id     TEXT         PRIMARY KEY,
+      config_json  JSONB        NOT NULL,
+      archived_at  TIMESTAMPTZ  DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS ei_leaderboard (
+      uid          TEXT         NOT NULL,
+      event_id     TEXT         NOT NULL,
+      display_name TEXT         NOT NULL DEFAULT '',
+      catch_rate   REAL         NOT NULL DEFAULT 0,
+      updated_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      PRIMARY KEY (uid, event_id)
+    );
+    CREATE TABLE IF NOT EXISTS ei_lb_claims (
+      uid        TEXT         NOT NULL,
+      event_id   TEXT         NOT NULL,
+      tokens     INT          NOT NULL DEFAULT 0,
+      claimed_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      PRIMARY KEY (uid, event_id)
+    );
+
+    -- ACI: global CE goal completion (set once when the ACI Community Event hits 100%)
+    CREATE TABLE IF NOT EXISTS aci_goal (
+      event_id  TEXT         PRIMARY KEY,
+      set_at    TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- ACI: 24-hour leaderboard competitions (one active at a time)
+    CREATE TABLE IF NOT EXISTS aci_competitions (
+      comp_id           TEXT         PRIMARY KEY,
+      name_index        INT          NOT NULL,
+      name_pool_version TEXT         NOT NULL DEFAULT 'v0_1_14',
+      starts_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      ends_at           TIMESTAMPTZ  NOT NULL,
+      prev_comp_id      TEXT
+    );
+
+    -- ACI: cast tokens — one active per player enforced by partial unique index below
+    CREATE TABLE IF NOT EXISTS aci_cast_tokens (
+      token         TEXT         PRIMARY KEY,
+      uid           TEXT         NOT NULL,
+      comp_id       TEXT         NOT NULL,
+      used          BOOLEAN      NOT NULL DEFAULT false,
+      bite_ready_at TIMESTAMPTZ,
+      result_json   TEXT,
+      created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
+
+    -- ACI: per-player personal best per competition (UPSERT keeps highest score_rank)
+    CREATE TABLE IF NOT EXISTS aci_results (
+      comp_id      TEXT         NOT NULL,
+      uid          TEXT         NOT NULL,
+      display_name TEXT         NOT NULL DEFAULT 'Anonymous Angler',
+      score_rank   BIGINT       NOT NULL DEFAULT 0,
+      fish_id      TEXT         NOT NULL DEFAULT '',
+      result_json  TEXT         NOT NULL DEFAULT '{}',
+      recorded_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      PRIMARY KEY (comp_id, uid)
+    );
+
+    -- ACI: end-of-competition reward claims (one per player per competition)
+    CREATE TABLE IF NOT EXISTS aci_reward_claims (
+      comp_id    TEXT         NOT NULL,
+      uid        TEXT         NOT NULL,
+      bracket    TEXT         NOT NULL DEFAULT '',
+      diamonds   INT          NOT NULL DEFAULT 0,
+      tokens     INT          NOT NULL DEFAULT 0,
+      claimed_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      PRIMARY KEY (comp_id, uid)
+    );
+
+    -- ACI: permanent trophy room — one row per competition where the player placed top1/top3/top5,
+    -- written when they claim that competition's reward. Not retroactive: only competitions claimed
+    -- after this table existed get a trophy. name_index/fish_id are denormalized copies (not FKs) so a
+    -- trophy still displays correctly even if the source competition row is later purged.
+    CREATE TABLE IF NOT EXISTS aci_trophies (
+      id                     SERIAL       PRIMARY KEY,
+      uid                    TEXT         NOT NULL,
+      comp_id                TEXT         NOT NULL,
+      name_index             INT          NOT NULL DEFAULT 0,
+      bracket                TEXT         NOT NULL,   -- 'top1' | 'top3' | 'top5'
+      rank                   INT          NOT NULL,
+      total_participants     INT          NOT NULL,
+      fish_id                TEXT         NOT NULL DEFAULT '',
+      fish_size_q            INT          NOT NULL DEFAULT 0,   -- 1..3000, scaled by fish_max_display_size for mm
+      fish_max_display_size  INT          NOT NULL DEFAULT 3000,
+      fish_weight_mg         BIGINT       NOT NULL DEFAULT 0,
+      score                  TEXT         NOT NULL DEFAULT '0', -- scoreRank (BigInt-safe string) — the value the rank was decided by
+      awarded_at             TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      UNIQUE (uid, comp_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_aci_trophies_uid ON aci_trophies(uid, awarded_at DESC);
+
+    -- ACI: per-player cast total per competition, reported by the client (casts are rolled locally, so the
+    -- server never sees them individually). Used for the "at least 25 casts" participation reward.
+    CREATE TABLE IF NOT EXISTS aci_cast_counts (
+      comp_id     TEXT         NOT NULL,
+      uid         TEXT         NOT NULL,
+      casts       INT          NOT NULL DEFAULT 0,
+      updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      PRIMARY KEY (comp_id, uid)
+    );
+
+    -- ACI: "Message in a Bottle" — one row per bottle a player opened (bottle_id is generated by the client
+    -- when the bottle is found; the primary key makes an open idempotent and non-repeatable)
+    CREATE TABLE IF NOT EXISTS aci_bottles (
+      bottle_id  TEXT         PRIMARY KEY,
+      uid        TEXT         NOT NULL,
+      code       TEXT         NOT NULL,
+      opened_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
+
+    -- ACI: single-use gift codes created by opening a bottle. The row is DELETED when the code is redeemed.
+    CREATE TABLE IF NOT EXISTS pa_bottle_codes (
+      code        TEXT         PRIMARY KEY,
+      bottle_id   TEXT         NOT NULL,
+      created_by  TEXT         NOT NULL,
+      created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -557,6 +733,20 @@ async function createTables(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_dc_swap_records           ON dc_swap_records(player_id, swap_date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_level_up_claims           ON level_up_claims(player_id, level);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_level_claims         ON solo_level_claims(player_id, level_num);
+    CREATE        INDEX IF NOT EXISTS idx_ce_contributions_event    ON pa_community_contributions(event_id, contribution DESC);
+    CREATE        INDEX IF NOT EXISTS idx_ei_leaderboard_event      ON ei_leaderboard(event_id, catch_rate DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_aci_cast_tokens_uid_active ON aci_cast_tokens(uid) WHERE used = FALSE;
+    CREATE        INDEX IF NOT EXISTS idx_aci_cast_tokens_uid        ON aci_cast_tokens(uid, created_at DESC);
+    CREATE        INDEX IF NOT EXISTS idx_aci_results_comp_score     ON aci_results(comp_id, score_rank DESC);
+    CREATE        INDEX IF NOT EXISTS idx_aci_bottles_uid_opened     ON aci_bottles(uid, opened_at DESC);
+
+    -- CE LB grant columns (two-phase delivery: calculate once, ack after client saves)
+    ALTER TABLE pa_community_lb_claims ADD COLUMN IF NOT EXISTS grant_id    TEXT;
+    ALTER TABLE pa_community_lb_claims ADD COLUMN IF NOT EXISTS reward_json JSONB;
+    ALTER TABLE pa_community_lb_claims ADD COLUMN IF NOT EXISTS rank_num    INT;
+    ALTER TABLE pa_community_lb_claims ADD COLUMN IF NOT EXISTS total_num   INT;
+    ALTER TABLE pa_community_lb_claims ADD COLUMN IF NOT EXISTS ack_at      TIMESTAMPTZ;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ce_lb_claims_grant ON pa_community_lb_claims(grant_id) WHERE grant_id IS NOT NULL;
   `);
   console.log("[DB] Tables ready");
 }
@@ -1635,6 +1825,43 @@ export async function loadPASave(uid: string): Promise<{ saveJson: string; updat
   return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
 }
 
+// Returns pending corrections for a uid WITHOUT deleting them (for admin preview).
+export async function peekPACorrections(uid: string): Promise<{ corrections: Record<string, any>; createdAt: string } | null> {
+  const rows = await query(
+    `SELECT corrections_json, created_at FROM pa_corrections WHERE uid = $1`,
+    [uid]
+  );
+  if (!rows?.length) return null;
+  try { return { corrections: JSON.parse(rows[0].corrections_json), createdAt: rows[0].created_at }; } catch { return null; }
+}
+
+// Returns pending corrections for a uid and deletes them (one-shot delivery).
+export async function popPACorrections(uid: string): Promise<Record<string, any> | null> {
+  const rows = await query(
+    `DELETE FROM pa_corrections WHERE uid = $1 RETURNING corrections_json`,
+    [uid]
+  );
+  if (!rows?.length) return null;
+  try { return JSON.parse(rows[0].corrections_json); } catch { return null; }
+}
+
+// Upserts an admin correction for a uid (overwrites any existing pending correction).
+export async function setPACorrections(uid: string, corrections: Record<string, any>): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  try {
+    await query(
+      `INSERT INTO pa_corrections (uid, corrections_json, created_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (uid) DO UPDATE SET corrections_json = EXCLUDED.corrections_json, created_at = now()`,
+      [uid, JSON.stringify(corrections)]
+    );
+    return true;
+  } catch (err) {
+    console.error('[DB] setPACorrections error:', err);
+    return false;
+  }
+}
+
 export async function exportAllPASaves(): Promise<Array<{ uid: string; save: any; updatedAt: string }> | null> {
   const rows = await query(`SELECT uid, save_json, updated_at FROM pa_save_data ORDER BY updated_at DESC`);
   if (!rows) return null;
@@ -2102,6 +2329,46 @@ export async function getPAVerifiedProductIds(uid: string): Promise<Set<string>>
     [uid]
   );
   return new Set((rows || []).map((r: any) => r.product_id as string));
+}
+
+// Returns the full receipt row for a purchase token (player_id, product_id, granted_json).
+export async function getPAPurchaseReceiptFull(
+  purchaseToken: string
+): Promise<{ playerId: string; productId: string; grantedJson: string } | null> {
+  const rows = await query(
+    `SELECT player_id, product_id, granted_json FROM pa_purchase_receipts WHERE purchase_token = $1`,
+    [purchaseToken]
+  );
+  if (!rows?.length) return null;
+  return { playerId: rows[0].player_id, productId: rows[0].product_id, grantedJson: rows[0].granted_json };
+}
+
+// Returns true if this voided purchase token has already been processed (reversed).
+export async function isPAVoidedPurchaseProcessed(purchaseToken: string): Promise<boolean> {
+  const rows = await query(
+    `SELECT 1 FROM pa_voided_purchases WHERE purchase_token = $1`,
+    [purchaseToken]
+  );
+  return !!(rows && rows.length > 0);
+}
+
+// Records a voided purchase as processed (idempotent via ON CONFLICT DO NOTHING).
+export async function recordPAVoidedPurchase(
+  purchaseToken: string,
+  playerId: string,
+  productId: string,
+  voidedAt: Date
+): Promise<void> {
+  if (!pool || !dbAvailable) return;
+  try {
+    await pool.query(
+      `INSERT INTO pa_voided_purchases (purchase_token, player_id, product_id, voided_at)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (purchase_token) DO NOTHING`,
+      [purchaseToken, playerId, productId, voidedAt]
+    );
+  } catch (err) {
+    console.error('[DB] recordPAVoidedPurchase error:', err);
+  }
 }
 
 // Returns all processed purchase tokens for a player (used by restore to skip already-granted items).
@@ -2811,4 +3078,610 @@ export async function setPARemoteConfig(config: Record<string, unknown>): Promis
      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()`,
     [JSON.stringify(config)]
   );
+}
+
+// ─── Community Event ─────────────────────────────────────────────────────────
+
+export async function getCEActivePlayerCount(days = 7): Promise<number> {
+  if (!pool) return 0;
+  const r = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM pa_player_progress WHERE last_seen > now() - ($1 || ' days')::interval`,
+    [days]
+  );
+  return Number(r.rows[0]?.cnt || 0);
+}
+
+export async function getCEContribution(playerId: string, eventId: string): Promise<number> {
+  if (!pool) return 0;
+  const r = await pool.query(
+    `SELECT contribution FROM pa_community_contributions WHERE player_id=$1 AND event_id=$2`,
+    [playerId, eventId]
+  );
+  return Number(r.rows[0]?.contribution || 0);
+}
+
+export async function upsertCEContribution(playerId: string, eventId: string, amount: number, displayName?: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO pa_community_contributions (player_id, event_id, contribution, display_name, last_updated)
+     VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (player_id, event_id)
+     DO UPDATE SET contribution = pa_community_contributions.contribution + $3,
+                   display_name = COALESCE($4, pa_community_contributions.display_name),
+                   last_updated = now()`,
+    [playerId, eventId, amount, displayName || null]
+  );
+}
+
+export async function getCECommunityTotal(eventId: string): Promise<number> {
+  if (!pool) return 0;
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(contribution), 0) AS total FROM pa_community_contributions WHERE event_id=$1`,
+    [eventId]
+  );
+  return Number(r.rows[0]?.total || 0);
+}
+
+export async function getCELeaderboard(eventId: string, limit = 100): Promise<{ player_id: string; display_name: string | null; contribution: number }[]> {
+  if (!pool) return [];
+  const r = await pool.query(
+    `SELECT player_id, display_name, contribution
+     FROM pa_community_contributions
+     WHERE event_id=$1
+     ORDER BY contribution DESC
+     LIMIT $2`,
+    [eventId, limit]
+  );
+  return r.rows.map(row => ({ player_id: row.player_id, display_name: row.display_name, contribution: Number(row.contribution) }));
+}
+
+export async function getCEClaimedMilestones(playerId: string, eventId: string): Promise<number[]> {
+  if (!pool) return [];
+  const r = await pool.query(
+    `SELECT milestone_pct FROM pa_community_claims WHERE player_id=$1 AND event_id=$2`,
+    [playerId, eventId]
+  );
+  return r.rows.map(row => Number(row.milestone_pct));
+}
+
+export async function hasCEMilestoneClaim(playerId: string, eventId: string, milestonePct: number): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query(
+    `SELECT 1 FROM pa_community_claims WHERE player_id=$1 AND event_id=$2 AND milestone_pct=$3`,
+    [playerId, eventId, milestonePct]
+  );
+  return (r.rows.length > 0);
+}
+
+export async function recordCEMilestoneClaim(playerId: string, eventId: string, milestonePct: number): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO pa_community_claims (player_id, event_id, milestone_pct) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+    [playerId, eventId, milestonePct]
+  );
+}
+
+// ─── CE Leaderboard rewards (two-phase grant) ────────────────────────────────
+
+export interface CELbGrant {
+  grant_id:    string;
+  player_id:   string;
+  event_id:    string;
+  tier_key:    string;
+  reward_json: Record<string,unknown>;
+  rank_num:    number;
+  total_num:   number;
+  claimed_at:  Date;
+  ack_at:      Date | null;
+}
+
+/** Return the existing grant row for a player+event, or null. */
+export async function getCELbGrant(playerId: string, eventId: string): Promise<CELbGrant | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT * FROM pa_community_lb_claims WHERE player_id=$1 AND event_id=$2`,
+    [playerId, eventId]
+  );
+  return (r.rows[0] ?? null) as CELbGrant | null;
+}
+
+/**
+ * Create a grant row for the first time, or return the existing one.
+ * Idempotent: ON CONFLICT DO NOTHING + re-read ensures exactly one grant per (player, event).
+ */
+export async function createOrGetCELbGrant(
+  playerId: string, eventId: string, tierKey: string,
+  rewardJson: Record<string,unknown>, rankNum: number, totalNum: number
+): Promise<CELbGrant> {
+  if (!pool) throw new Error('DB unavailable');
+  const grantId = require('crypto').randomUUID() as string;
+  await pool.query(
+    `INSERT INTO pa_community_lb_claims
+       (player_id, event_id, tier_key, grant_id, reward_json, rank_num, total_num)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)
+     ON CONFLICT (player_id, event_id) DO NOTHING`,
+    [playerId, eventId, tierKey, grantId, JSON.stringify(rewardJson), rankNum, totalNum]
+  );
+  const r = await pool.query(
+    `SELECT * FROM pa_community_lb_claims WHERE player_id=$1 AND event_id=$2`,
+    [playerId, eventId]
+  );
+  return r.rows[0] as CELbGrant;
+}
+
+/** Mark a grant acknowledged (client has saved the reward). */
+export async function ackCELbGrant(playerId: string, grantId: string): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query(
+    `UPDATE pa_community_lb_claims SET ack_at=now()
+     WHERE player_id=$1 AND grant_id=$2 AND ack_at IS NULL
+     RETURNING grant_id`,
+    [playerId, grantId]
+  );
+  return r.rows.length > 0;
+}
+
+/** All unacknowledged grants for a player within the CE claim grace window. */
+export async function getCEUnackedGrants(playerId: string, graceMs: number): Promise<CELbGrant[]> {
+  if (!pool) return [];
+  const cutoff = new Date(Date.now() - graceMs).toISOString();
+  const r = await pool.query(
+    `SELECT c.* FROM pa_community_lb_claims c
+     WHERE c.player_id=$1
+       AND c.grant_id IS NOT NULL
+       AND c.ack_at IS NULL
+       AND c.claimed_at > $2
+     ORDER BY c.claimed_at ASC`,
+    [playerId, cutoff]
+  );
+  return r.rows as CELbGrant[];
+}
+
+/** Backwards-compat: does a claim row exist (any state). */
+export async function hasCELbClaim(playerId: string, eventId: string): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query(
+    `SELECT 1 FROM pa_community_lb_claims WHERE player_id=$1 AND event_id=$2`,
+    [playerId, eventId]
+  );
+  return r.rows.length > 0;
+}
+
+/** Backwards-compat alias (legacy path without grant). */
+export async function recordCELbClaim(playerId: string, eventId: string, tierKey: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO pa_community_lb_claims (player_id, event_id, tier_key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+    [playerId, eventId, tierKey]
+  );
+}
+
+export async function getCEPlayerPercentile(playerId: string, eventId: string): Promise<{ rank: number; total: number; percentile: number } | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM pa_community_contributions WHERE event_id=$2 AND contribution > 0) AS total,
+       (SELECT COUNT(*)::int FROM pa_community_contributions WHERE event_id=$2 AND contribution > 0
+          AND contribution > COALESCE((SELECT contribution FROM pa_community_contributions WHERE player_id=$1 AND event_id=$2), 0)) AS above
+     FROM pa_community_contributions WHERE player_id=$1 AND event_id=$2`,
+    [playerId, eventId]
+  );
+  if (!r.rows.length) return null;
+  const { total, above } = r.rows[0];
+  if (!total || total === 0) return null;
+  const rank = Number(above) + 1;
+  const percentile = (rank / Number(total)) * 100;
+  return { rank, total: Number(total), percentile };
+}
+
+// ─── CE Event Archive ─────────────────────────────────────────────────────────
+
+/** Store immutable event config once at scheduling time. Idempotent via ON CONFLICT DO NOTHING. */
+export async function archiveCEEvent(eventId: string, config: Record<string,unknown>): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO pa_ce_event_archive (event_id, config_json) VALUES ($1, $2::jsonb) ON CONFLICT DO NOTHING`,
+    [eventId, JSON.stringify(config)]
+  );
+}
+
+/** Return an archived event config by eventId, or null if not found. */
+export async function getCEArchivedEvent(eventId: string): Promise<Record<string,unknown> | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT config_json FROM pa_ce_event_archive WHERE event_id=$1`,
+    [eventId]
+  );
+  if (!r.rows.length) return null;
+  try { return r.rows[0].config_json as Record<string,unknown>; }
+  catch { return null; }
+}
+
+/** All archived events whose endsAt is within the past graceMs milliseconds. */
+export async function getCEArchivedEventsInWindow(graceMs: number): Promise<Record<string,unknown>[]> {
+  if (!pool) return [];
+  const cutoffMs = Date.now() - graceMs;
+  const r = await pool.query(
+    `SELECT config_json FROM pa_ce_event_archive
+     WHERE (config_json->>'endsAt')::bigint > $1
+       AND (config_json->>'endsAt')::bigint <= $2
+     ORDER BY (config_json->>'endsAt')::bigint DESC`,
+    [cutoffMs, Date.now()]
+  );
+  return r.rows.map(row => row.config_json as Record<string,unknown>);
+}
+
+/** Overwrite an archived event config (admin-only repair path). */
+export async function upsertCEArchivedEvent(eventId: string, config: Record<string,unknown>): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO pa_ce_event_archive (event_id, config_json)
+     VALUES ($1, $2::jsonb)
+     ON CONFLICT (event_id) DO UPDATE SET config_json = EXCLUDED.config_json`,
+    [eventId, JSON.stringify(config)]
+  );
+}
+
+// ─── EI Catch-Rate Leaderboard ────────────────────────────────────────────────
+
+export async function upsertEiLbScore(uid: string, eventId: string, displayName: string, catchRate: number): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO ei_leaderboard (uid, event_id, display_name, catch_rate, updated_at)
+     VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (uid, event_id) DO UPDATE
+       SET display_name = EXCLUDED.display_name,
+           catch_rate   = GREATEST(ei_leaderboard.catch_rate, EXCLUDED.catch_rate),
+           updated_at   = now()`,
+    [uid, eventId, displayName, catchRate]
+  );
+}
+
+export async function getEiLeaderboard(eventId: string): Promise<{ uid: string; display_name: string; catch_rate: number }[]> {
+  if (!pool) return [];
+  const r = await pool.query(
+    `SELECT uid, display_name, catch_rate FROM ei_leaderboard WHERE event_id=$1 ORDER BY catch_rate DESC`,
+    [eventId]
+  );
+  return r.rows;
+}
+
+export async function getEiLbScore(uid: string, eventId: string): Promise<number | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT catch_rate FROM ei_leaderboard WHERE uid=$1 AND event_id=$2`,
+    [uid, eventId]
+  );
+  return r.rows[0]?.catch_rate ?? null;
+}
+
+export async function deleteEiLbEntries(uids: string[]): Promise<number> {
+  if (!pool || !uids.length) return 0;
+  const r = await pool.query(`DELETE FROM ei_leaderboard WHERE uid = ANY($1::text[])`, [uids]);
+  return r.rowCount ?? 0;
+}
+
+export async function deleteEiLbEntriesByName(displayNames: string[]): Promise<number> {
+  if (!pool || !displayNames.length) return 0;
+  const r = await pool.query(`DELETE FROM ei_leaderboard WHERE display_name = ANY($1::text[])`, [displayNames]);
+  return r.rowCount ?? 0;
+}
+
+export async function hasEiLbClaim(uid: string, eventId: string): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query(`SELECT 1 FROM ei_lb_claims WHERE uid=$1 AND event_id=$2`, [uid, eventId]);
+  return r.rows.length > 0;
+}
+
+export async function recordEiLbClaim(uid: string, eventId: string, tokens: number): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO ei_lb_claims (uid, event_id, tokens) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+    [uid, eventId, tokens]
+  );
+}
+
+// ─── Pool Export (for ACI transactions) ──────────────────────────────────────
+export function getPool(): Pool | null { return pool; }
+
+// ─── ACI ──────────────────────────────────────────────────────────────────────
+
+export async function getAciGoalComplete(): Promise<string | null> {
+  if (!pool) return null;
+  const r = await pool.query(`SELECT event_id FROM aci_goal LIMIT 1`);
+  return r.rows[0]?.event_id ?? null;
+}
+
+export async function setAciGoalComplete(eventId: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO aci_goal (event_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [eventId]
+  );
+}
+
+export async function getActiveAciCompetition(): Promise<any | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT * FROM aci_competitions WHERE ends_at > now() ORDER BY starts_at DESC LIMIT 1`
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function createAciCompetition(
+  compId: string, nameIndex: number, prevCompId: string | null
+): Promise<any> {
+  if (!pool) throw new Error('DB unavailable');
+  const r = await pool.query(
+    `INSERT INTO aci_competitions (comp_id, name_index, starts_at, ends_at, prev_comp_id)
+     VALUES ($1, $2, now(), now() + INTERVAL '24 hours', $3)
+     RETURNING *`,
+    [compId, nameIndex, prevCompId]
+  );
+  return r.rows[0];
+}
+
+export async function getAciResult(compId: string, uid: string): Promise<any | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT * FROM aci_results WHERE comp_id=$1 AND uid=$2`,
+    [compId, uid]
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function getAciLeaderboard(
+  compId: string, uid: string
+): Promise<{ rows: any[]; selfRow: any | null }> {
+  if (!pool) return { rows: [], selfRow: null };
+
+  const top = await pool.query(
+    `SELECT display_name, score_rank::text AS score_rank,
+            ROW_NUMBER() OVER (ORDER BY score_rank::bigint DESC) AS rank,
+            (uid = $2) AS is_self
+     FROM aci_results WHERE comp_id = $1
+     ORDER BY score_rank::bigint DESC LIMIT 100`,
+    [compId, uid || '']
+  );
+
+  const rows = top.rows.map(r => ({
+    rank:         Number(r.rank),
+    display_name: r.display_name,
+    score_rank:   r.score_rank,
+    is_self:      r.is_self,
+  }));
+
+  const selfInTop = rows.some(r => r.is_self);
+  let selfRow: any | null = null;
+
+  if (!selfInTop && uid) {
+    const self = await pool.query(
+      `SELECT display_name, score_rank::text AS score_rank,
+              (SELECT COUNT(*) + 1 FROM aci_results r2
+               WHERE r2.comp_id = $1 AND r2.score_rank::bigint > r.score_rank::bigint) AS rank
+       FROM aci_results r WHERE comp_id = $1 AND uid = $2`,
+      [compId, uid]
+    );
+    if (self.rows[0]) {
+      selfRow = {
+        rank:         Number(self.rows[0].rank),
+        display_name: self.rows[0].display_name,
+        score_rank:   self.rows[0].score_rank,
+        is_self:      true,
+      };
+    }
+  }
+
+  return { rows, selfRow };
+}
+
+export async function getAciParticipantCount(compId: string): Promise<number> {
+  if (!pool) return 0;
+  const r = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM aci_results WHERE comp_id=$1 AND score_rank > 0`,
+    [compId]
+  );
+  return Number(r.rows[0]?.cnt ?? 0);
+}
+
+export async function hasAciRewardClaim(compId: string, uid: string): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query(
+    `SELECT 1 FROM aci_reward_claims WHERE comp_id=$1 AND uid=$2`,
+    [compId, uid]
+  );
+  return r.rows.length > 0;
+}
+
+export async function recordAciRewardClaim(
+  compId: string, uid: string, bracket: string, diamonds: number, tokens: number
+): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO aci_reward_claims (comp_id, uid, bracket, diamonds, tokens)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+    [compId, uid, bracket, diamonds, tokens]
+  );
+}
+
+export async function getAciPlayerRank(compId: string, uid: string): Promise<number | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT (SELECT COUNT(*) + 1 FROM aci_results r2
+             WHERE r2.comp_id = $1 AND r2.score_rank > r.score_rank) AS rank
+     FROM aci_results r WHERE comp_id = $1 AND uid = $2`,
+    [compId, uid]
+  );
+  if (!r.rows[0]) return null;
+  return Number(r.rows[0].rank);
+}
+
+export async function getAciCompetitionNameIndex(compId: string): Promise<number> {
+  if (!pool) return 0;
+  const r = await pool.query(`SELECT name_index FROM aci_competitions WHERE comp_id = $1`, [compId]);
+  return Number(r.rows[0]?.name_index ?? 0);
+}
+
+export type AciTrophyRow = {
+  compId: string;
+  nameIndex: number;
+  bracket: string;
+  rank: number;
+  totalParticipants: number;
+  fishId: string;
+  fishSizeQ: number;
+  fishMaxDisplaySize: number;
+  fishWeightMg: number;
+  score: string;
+  awardedAt: string;
+};
+
+// Idempotent: ON CONFLICT DO NOTHING means a retried/duplicate claim never creates a second trophy
+// for the same competition (the (uid, comp_id) unique constraint enforces that at the DB level too).
+export async function recordAciTrophy(
+  uid: string, compId: string, nameIndex: number, bracket: string,
+  rank: number, totalParticipants: number, fishId: string,
+  fishSizeQ: number, fishMaxDisplaySize: number, fishWeightMg: number, score: string
+): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO aci_trophies
+       (uid, comp_id, name_index, bracket, rank, total_participants, fish_id, fish_size_q, fish_max_display_size, fish_weight_mg, score)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (uid, comp_id) DO NOTHING`,
+    [uid, compId, nameIndex, bracket, rank, totalParticipants, fishId, fishSizeQ, fishMaxDisplaySize, fishWeightMg, score]
+  );
+}
+
+export async function getAciTrophies(uid: string): Promise<AciTrophyRow[]> {
+  if (!pool) return [];
+  const r = await pool.query(
+    `SELECT comp_id, name_index, bracket, rank, total_participants, fish_id,
+            fish_size_q, fish_max_display_size, fish_weight_mg, score, awarded_at
+     FROM aci_trophies WHERE uid = $1 ORDER BY awarded_at DESC`,
+    [uid]
+  );
+  return r.rows.map(row => ({
+    compId: row.comp_id,
+    nameIndex: row.name_index,
+    bracket: row.bracket,
+    rank: row.rank,
+    totalParticipants: row.total_participants,
+    fishId: row.fish_id,
+    fishSizeQ: row.fish_size_q,
+    fishMaxDisplaySize: row.fish_max_display_size,
+    fishWeightMg: Number(row.fish_weight_mg),
+    score: row.score,
+    awardedAt: new Date(row.awarded_at).toISOString(),
+  }));
+}
+
+// ─── ACI: Message in a Bottle ─────────────────────────────────────────────────
+
+export type AciBottleOpenResult =
+  | { status: 'ok'; code: string }
+  | { status: 'cap_reached' | 'already_redeemed' | 'not_owner' | 'error' };
+
+/**
+ * Opens a bottle: creates a single-use gift code for it.
+ *  - Idempotent: the same player re-sending the same bottleId gets the SAME code back as long as it has
+ *    not been redeemed yet (protects against a lost response). A code that was already redeemed is gone.
+ *  - A bottleId that was opened by a different player is rejected.
+ *  - At most `dailyCap` bottles can be opened per player per rolling 24 h (the client rolls the 1-in-5000
+ *    drop locally, so this is the server-side limit against forged opens).
+ * The per-player advisory lock serialises parallel requests so the cap cannot be raced.
+ */
+export async function openAciBottle(
+  uid: string, bottleId: string, newCode: string, dailyCap: number
+): Promise<AciBottleOpenResult> {
+  if (!pool || !dbAvailable) return { status: 'error' };
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['aci_bottle:' + uid]);
+
+    const existing = (await client.query(
+      `SELECT uid, code FROM aci_bottles WHERE bottle_id = $1`, [bottleId]
+    )).rows[0];
+    if (existing) {
+      if (existing.uid !== uid) { await client.query('ROLLBACK'); return { status: 'not_owner' }; }
+      const stillThere = (await client.query(
+        `SELECT 1 FROM pa_bottle_codes WHERE code = $1`, [existing.code]
+      )).rows[0];
+      await client.query('ROLLBACK');
+      return stillThere ? { status: 'ok', code: existing.code } : { status: 'already_redeemed' };
+    }
+
+    const cnt = (await client.query(
+      `SELECT COUNT(*)::INT AS n FROM aci_bottles
+       WHERE uid = $1 AND opened_at > now() - INTERVAL '24 hours'`, [uid]
+    )).rows[0]?.n ?? 0;
+    if (cnt >= dailyCap) { await client.query('ROLLBACK'); return { status: 'cap_reached' }; }
+
+    await client.query(
+      `INSERT INTO aci_bottles (bottle_id, uid, code) VALUES ($1, $2, $3)`, [bottleId, uid, newCode]
+    );
+    await client.query(
+      `INSERT INTO pa_bottle_codes (code, bottle_id, created_by) VALUES ($1, $2, $3)`, [newCode, bottleId, uid]
+    );
+    await client.query('COMMIT');
+    return { status: 'ok', code: newCode };
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    console.error('[DB] openAciBottle error:', err);
+    return { status: 'error' };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Redeems a bottle gift code. The row is deleted in the same statement that claims it,
+ * so a code can only ever be used once and no longer exists on the server afterwards.
+ */
+export async function redeemAciBottleCode(code: string): Promise<'ok' | 'invalid' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  try {
+    const r = await pool.query(`DELETE FROM pa_bottle_codes WHERE code = $1 RETURNING code`, [code]);
+    return (r.rowCount ?? 0) > 0 ? 'ok' : 'invalid';
+  } catch (err) {
+    console.error('[DB] redeemAciBottleCode error:', err);
+    return 'error';
+  }
+}
+
+// ─── ACI: cast counts (participation reward) ──────────────────────────────────
+
+/**
+ * Stores the client-reported cast total for a competition. The value only ever grows (GREATEST), so a late
+ * or duplicated report can never lower it. Returns the stored total.
+ */
+export async function reportAciCasts(compId: string, uid: string, casts: number): Promise<number | null> {
+  if (!pool || !dbAvailable) return null;
+  try {
+    const r = await pool.query(
+      `INSERT INTO aci_cast_counts (comp_id, uid, casts) VALUES ($1, $2, $3)
+       ON CONFLICT (comp_id, uid)
+       DO UPDATE SET casts = GREATEST(aci_cast_counts.casts, EXCLUDED.casts), updated_at = now()
+       RETURNING casts`,
+      [compId, uid, casts]
+    );
+    return Number(r.rows[0]?.casts ?? 0);
+  } catch (err) {
+    console.error('[DB] reportAciCasts error:', err);
+    return null;
+  }
+}
+
+/** Casts a player made in a competition: the larger of the reported total and the legacy cast-token count. */
+export async function getAciCastCount(compId: string, uid: string): Promise<number> {
+  if (!pool) return 0;
+  const r = await pool.query(
+    `SELECT GREATEST(
+        COALESCE((SELECT casts FROM aci_cast_counts WHERE comp_id = $1 AND uid = $2), 0),
+        (SELECT COUNT(*)::INT FROM aci_cast_tokens
+          WHERE comp_id = $1 AND uid = $2 AND used = true AND result_json IS NOT NULL)
+     )::INT AS n`,
+    [compId, uid]
+  );
+  return Number(r.rows[0]?.n ?? 0);
 }
