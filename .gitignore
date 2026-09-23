@@ -21,6 +21,11 @@ build/
 tile-royale-server/tile-royale-server/build/
 dist/
 
+# Ad-hoc/local dev scripts and snapshots — contain secrets or are dev-time-only, never track
+tile-royale-server/tile-royale-server/query_iap.js
+tile-royale-server/tile-royale-server/recover_player.mjs
+tile-royale-server/tile-royale-server/src/aci_client_snapshot.json
+
 # Env files
 .env
 .env.local
