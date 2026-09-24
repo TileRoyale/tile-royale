@@ -3936,11 +3936,12 @@ const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'
   cash_bobber:           { type: 'non_consumable',              grant: { cashBobber: true } },
 };
 
-async function verifyWithGooglePlayPA(productId: string, purchaseToken: string): Promise<boolean> {
+// Returns quantity=1 on any failure path — callers must check `valid` before using anything else.
+async function verifyWithGooglePlayPA(productId: string, purchaseToken: string): Promise<{ valid: boolean; quantity: number }> {
   const keyJson = process.env.GOOGLE_PLAY_KEY_JSON;
   if (!keyJson) {
     console.error('[PA-IAP] Rejected — GOOGLE_PLAY_KEY_JSON not configured.');
-    return false;
+    return { valid: false, quantity: 1 };
   }
   try {
     const credentials = JSON.parse(keyJson);
@@ -3957,12 +3958,17 @@ async function verifyWithGooglePlayPA(productId: string, purchaseToken: string):
     const state = res.data.purchaseState;
     if (state !== 0) {
       console.warn(`[PA-IAP] Google Play rejected token — purchaseState=${state}`);
-      return false;
+      return { valid: false, quantity: 1 };
     }
-    return true;
+    // Multi-quantity one-time products: Google's ProductPurchase resource carries `quantity` for
+    // eligible consumables (Play Console per-product setting controls whether the purchase sheet
+    // offers a quantity stepper at all). Server-verified — this is the only value ever trusted for
+    // scaling a grant; the native plugin's own reported quantity is informational only.
+    const quantity = Math.max(1, Math.floor(Number((res.data as any).quantity) || 1));
+    return { valid: true, quantity };
   } catch (err: any) {
     console.error('[PA-IAP] Google Play API error:', err?.message || err);
-    return false;
+    return { valid: false, quantity: 1 };
   }
 }
 
@@ -3993,23 +3999,40 @@ app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
     }
   }
 
-  // Verify with Google Play Developer API
-  const valid = await verifyWithGooglePlayPA(productId, purchaseToken);
+  // Verify with Google Play Developer API — quantity comes back server-verified from Google, never
+  // from the client, so a tampered client can't claim a larger quantity than was actually paid for.
+  const { valid, quantity } = await verifyWithGooglePlayPA(productId, purchaseToken);
   if (!valid) return res.json({ ok: false, error: 'google_play_rejected' });
 
-  const grantedJson = JSON.stringify(product.grant);
+  // Scale numeric grant fields by the verified quantity. Only consumables can ever have quantity > 1
+  // (Play Billing does not support multi-quantity for non-consumables), so this is a no-op (×1) for
+  // every non-consumable product regardless — safe to apply unconditionally.
+  const grant: Record<string, any> = {};
+  for (const [k, v] of Object.entries(product.grant)) {
+    grant[k] = (typeof v === 'number') ? v * quantity : v;
+  }
+  const grantedJson = JSON.stringify(grant);
 
   // Record in DB — UNIQUE on purchase_token is the double-delivery guard
   if (getDbStatus().available) {
     const result = await recordPAPurchaseReceipt(uid, productId, purchaseToken, String(orderId), grantedJson);
     if (result === 'error') return res.json({ ok: false, error: 'db_error' });
     if (result === 'already_processed') {
-      return res.json({ ok: true, grant: product.grant, already_processed: true });
+      // Race: another request already recorded this token between our getPAPurchaseReceipt check
+      // above and this insert. Return what was ACTUALLY stored (may have been recorded by that other
+      // request), not our locally-recomputed grant, so a same-token double-call can never return two
+      // different amounts.
+      const stored = await getPAPurchaseReceipt(purchaseToken);
+      try {
+        return res.json({ ok: true, grant: stored ? JSON.parse(stored) : grant, already_processed: true });
+      } catch {
+        return res.json({ ok: true, grant, already_processed: true });
+      }
     }
   }
 
-  console.log(`[PA-IAP] ✅ ${productId} verified for ${uid}`);
-  res.json({ ok: true, grant: product.grant });
+  console.log(`[PA-IAP] ✅ ${productId} verified for ${uid}${quantity > 1 ? ` ×${quantity}` : ''}`);
+  res.json({ ok: true, grant });
 });
 
 // ─── PA Voided Purchases — hourly poll & grant reversal ──────────────────────
