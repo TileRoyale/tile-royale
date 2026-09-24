@@ -3572,6 +3572,7 @@ const PA_REDEEM_CODES: Record<string, {
   bobberCosmetics?: string[];
   treasureMaps?: number;
   treasureMapFragments?: number;
+  messageBottles?: number;
   krakenTest?: string;
   multiUse?: boolean;
   patchArrayAppend?: Record<string, string[]>;
@@ -3722,6 +3723,7 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.bobberCosmetics        != null) reward.bobberCosmetics        = entry.bobberCosmetics;
     if (entry.treasureMaps           != null) reward.treasureMaps           = entry.treasureMaps;
     if (entry.treasureMapFragments   != null) reward.treasureMapFragments   = entry.treasureMapFragments;
+    if (entry.messageBottles         != null) reward.messageBottles         = entry.messageBottles;
     if (entry.krakenTest             != null) reward.krakenTest             = entry.krakenTest;
   }
 
