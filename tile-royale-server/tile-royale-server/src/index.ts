@@ -3613,6 +3613,7 @@ const PA_REDEEM_CODES: Record<string, {
   'ANGLERS50':       { diamonds: 25, autoIncomePackages: 1, desc: '25 Diamonds + 1 Automation Income Token — thanks for being part of the community!' },
   'FESTIVAL21':      { diamonds: 25, blackPearls: 5, autoIncomePackages: 2, expires: '2026-09-23T23:59:59Z', desc: '25 Diamonds + 2 Auto Income Tokens + 5 Black Pearls — community event is coming!' },
   'KRAKENFIGHT':     { krakenTest: 'fight', multiUse: true, desc: 'Kraken test fight ready — test mode, no rewards.' },
+  'CELEBRATE':       { diamonds: 100, autoIncomePackages: 4, expires: '2026-10-01T23:59:59Z', desc: 'Celebration gift! 🎉 100 Diamonds + 4 Auto Income Tokens!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
