@@ -22,6 +22,13 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
+import { readFileSync } from "fs";
+import path from "path";
+import {
+  Environment as AppleEnvironment,
+  JWSTransactionDecodedPayload,
+  SignedDataVerifier,
+} from "@apple/app-store-server-library";
 
 // Server-side mirror of the solo level gem rewards (levels with no reward = 0).
 // Rewards only exist at every 10th level; pattern: 50 at most, 200 at x50, 400 at x100, 600 at Lv1000.
@@ -3916,6 +3923,27 @@ app.post('/pa/analytics/progress', express.json({ limit: '64kb' }), handleAnalyt
 // ── Patient Angler IAP ────────────────────────────────────────────────────────
 
 const PA_PACKAGE_NAME = "com.henlygames.patientangler";
+const PA_APPLE_ID = 6815526962;
+
+let _paAppleProductionVerifier: SignedDataVerifier | null = null;
+let _paAppleSandboxVerifier: SignedDataVerifier | null = null;
+
+try {
+  const certDir = path.join(process.cwd(), 'apple-root-certificates');
+  const roots = [
+    readFileSync(path.join(certDir, 'AppleRootCA-G2.cer')),
+    readFileSync(path.join(certDir, 'AppleRootCA-G3.cer')),
+  ];
+  _paAppleProductionVerifier = new SignedDataVerifier(
+    roots, true, AppleEnvironment.PRODUCTION, PA_PACKAGE_NAME, PA_APPLE_ID
+  );
+  _paAppleSandboxVerifier = new SignedDataVerifier(
+    roots, true, AppleEnvironment.SANDBOX, PA_PACKAGE_NAME
+  );
+  console.log('[PA-IAP] Apple StoreKit JWS verification ready');
+} catch (error: any) {
+  console.error('[PA-IAP] Apple StoreKit JWS verification unavailable:', error?.message || error);
+}
 
 // Server-authoritative PA product catalog — must match iap.js DIAMOND_PACK_MAP exactly.
 const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'; diamonds?: number; grant: Record<string, any> }> = {
@@ -3972,24 +4000,80 @@ async function verifyWithGooglePlayPA(productId: string, purchaseToken: string):
   }
 }
 
-// POST /pa/iap/verify  { productId, purchaseToken, orderId? }
-// Verifies purchase with Google Play, records token (idempotent), returns grant payload.
+async function verifyWithApplePA(
+  productId: string,
+  signedTransaction: string
+): Promise<{ valid: boolean; quantity: number; transactionId?: string; originalTransactionId?: string; environment?: string }> {
+  if (!_paAppleProductionVerifier || !_paAppleSandboxVerifier) {
+    console.error('[PA-IAP] Apple purchase rejected — JWS verifiers are unavailable.');
+    return { valid: false, quantity: 1 };
+  }
+
+  let decoded: JWSTransactionDecodedPayload | null = null;
+  for (const verifier of [_paAppleProductionVerifier, _paAppleSandboxVerifier]) {
+    try {
+      decoded = await verifier.verifyAndDecodeTransaction(signedTransaction);
+      break;
+    } catch {
+      // A production transaction fails the sandbox environment check and vice versa.
+    }
+  }
+
+  if (!decoded || !decoded.transactionId || decoded.productId !== productId || decoded.revocationDate) {
+    console.warn('[PA-IAP] Apple rejected transaction JWS or product/revocation check failed.');
+    return { valid: false, quantity: 1 };
+  }
+
+  return {
+    valid: true,
+    quantity: Math.max(1, Math.floor(Number(decoded.quantity) || 1)),
+    transactionId: decoded.transactionId,
+    originalTransactionId: decoded.originalTransactionId || decoded.transactionId,
+    environment: String(decoded.environment || ''),
+  };
+}
+
+// POST /pa/iap/verify  { store, productId, purchaseToken, orderId?, signedTransaction? }
+// Verifies with Google Play or Apple StoreKit, records the store receipt idempotently,
+// and returns the server-authoritative grant payload.
 // Client applies the grant only after receiving { ok: true }.
 // uid is taken from the verified Firebase token — never trusted from body.
 app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
   const uid = res.locals.paUid as string;
-  const { productId, purchaseToken, orderId = '' } = req.body;
+  const { productId, purchaseToken, orderId = '', signedTransaction = '' } = req.body;
+  const store = req.body.store === 'apple' ? 'apple' : 'google';
 
   if (!productId || typeof productId !== 'string')
     return res.json({ ok: false, error: 'invalid_product' });
-  if (!purchaseToken || typeof purchaseToken !== 'string' || purchaseToken.length < 10)
-    return res.json({ ok: false, error: 'invalid_token' });
 
   const product = PA_PRODUCT_CATALOG[productId];
   if (!product) return res.json({ ok: false, error: 'unknown_product' });
 
-  // Idempotent: return the original grant on duplicate token
-  const existing = await getPAPurchaseReceipt(purchaseToken);
+  let receiptKey = '';
+  let verifiedOrderId = String(orderId || '');
+  let quantity = 1;
+
+  if (store === 'apple') {
+    if (typeof signedTransaction !== 'string' || signedTransaction.length < 100)
+      return res.json({ ok: false, error: 'invalid_signed_transaction' });
+
+    const apple = await verifyWithApplePA(productId, signedTransaction);
+    if (!apple.valid || !apple.transactionId)
+      return res.json({ ok: false, error: 'apple_store_rejected' });
+    if (purchaseToken && String(purchaseToken) !== apple.transactionId)
+      return res.json({ ok: false, error: 'apple_transaction_mismatch' });
+
+    receiptKey = `apple:${apple.transactionId}`;
+    verifiedOrderId = apple.originalTransactionId || apple.transactionId;
+    quantity = apple.quantity;
+  } else {
+    if (!purchaseToken || typeof purchaseToken !== 'string' || purchaseToken.length < 10)
+      return res.json({ ok: false, error: 'invalid_token' });
+    receiptKey = purchaseToken;
+  }
+
+  // Idempotent across retries, app restarts, and concurrent requests.
+  const existing = await getPAPurchaseReceipt(receiptKey);
   if (existing !== null) {
     try {
       const grant = JSON.parse(existing);
@@ -3999,10 +4083,12 @@ app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
     }
   }
 
-  // Verify with Google Play Developer API — quantity comes back server-verified from Google, never
-  // from the client, so a tampered client can't claim a larger quantity than was actually paid for.
-  const { valid, quantity } = await verifyWithGooglePlayPA(productId, purchaseToken);
-  if (!valid) return res.json({ ok: false, error: 'google_play_rejected' });
+  if (store === 'google') {
+    // Quantity comes from Google, never from the client.
+    const googlePurchase = await verifyWithGooglePlayPA(productId, purchaseToken);
+    if (!googlePurchase.valid) return res.json({ ok: false, error: 'google_play_rejected' });
+    quantity = googlePurchase.quantity;
+  }
 
   // Scale numeric grant fields by the verified quantity. Only consumables can ever have quantity > 1
   // (Play Billing does not support multi-quantity for non-consumables), so this is a no-op (×1) for
@@ -4015,14 +4101,14 @@ app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
 
   // Record in DB — UNIQUE on purchase_token is the double-delivery guard
   if (getDbStatus().available) {
-    const result = await recordPAPurchaseReceipt(uid, productId, purchaseToken, String(orderId), grantedJson);
+    const result = await recordPAPurchaseReceipt(uid, productId, receiptKey, verifiedOrderId, grantedJson);
     if (result === 'error') return res.json({ ok: false, error: 'db_error' });
     if (result === 'already_processed') {
       // Race: another request already recorded this token between our getPAPurchaseReceipt check
       // above and this insert. Return what was ACTUALLY stored (may have been recorded by that other
       // request), not our locally-recomputed grant, so a same-token double-call can never return two
       // different amounts.
-      const stored = await getPAPurchaseReceipt(purchaseToken);
+      const stored = await getPAPurchaseReceipt(receiptKey);
       try {
         return res.json({ ok: true, grant: stored ? JSON.parse(stored) : grant, already_processed: true });
       } catch {
@@ -4031,7 +4117,7 @@ app.post("/pa/iap/verify", verifyPAToken, express.json(), async (req, res) => {
     }
   }
 
-  console.log(`[PA-IAP] ✅ ${productId} verified for ${uid}${quantity > 1 ? ` ×${quantity}` : ''}`);
+  console.log(`[PA-IAP] ✅ ${store} ${productId} verified for ${uid}${quantity > 1 ? ` ×${quantity}` : ''}`);
   res.json({ ok: true, grant });
 });
 
