@@ -2343,7 +2343,7 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.7.64";
+const PA_LATEST_VERSION     = "v1.0.7.66";
 // Set to null when there is no active announcement.
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
