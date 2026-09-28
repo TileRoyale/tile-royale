@@ -2348,7 +2348,30 @@ const PA_LATEST_VERSION     = "v1.0.7.66";
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
 // texts: localized announcement body keyed by locale code; 'en' is the required fallback.
-const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = null; // Build 508: no player-facing banner (internal-fix-only release)
+const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+  track: 'production',
+  minBuild: 513,
+  texts: {
+    "en": "Balance: Reinforced Net, River Net, Skilled Fisher, and Veteran Fisher prices rebalanced",
+    "et": "Tasakaal: Tugevdatud võrgu, Jõevõrgu, Oskusliku kalamehe ja Veteran Fisher hindu on ümber tasakaalustatud",
+    "de": "Balance: Preise für Verstärktes Netz, Flussnetz, Erfahrener Fischer und Veteran Fisher wurden neu ausbalanciert",
+    "el": "Ισορροπία: Οι τιμές για Ενισχυμένο δίχτυ, River Net, Επιδέξιος Ψαράς και Βετεράνος Fisher αναπροσαρμόστηκαν",
+    "es": "Equilibrio: Se reequilibraron los precios de Red reforzada, Red fluvial, Pescador experto y Pescador veterano",
+    "fr": "Équilibrage : les prix de Filet renforcé, Filet de rivière, Pêcheur qualifié et Pêcheur vétéran ont été rééquilibrés",
+    "id": "Keseimbangan: Harga Jaring yang Diperkuat, Jaring Sungai, Nelayan yang terampil, dan Nelayan veteran telah diseimbangkan ulang",
+    "it": "Bilanciamento: i prezzi di Rete rinforzata, Rete fluviale, Pescatore esperto e Pescatore veterano sono stati riequilibrati",
+    "ja": "バランス調整：強化ネット、リバーネット、熟練の漁師、ベテランのフィッシャーの価格を調整しました",
+    "ko": "밸런스: 강화된 그물, 리버 넷, 숙련된 낚시꾼, 베테랑 낚시꾼의 가격이 조정되었습니다",
+    "nl": "Balans: prijzen van Versterkte Net, Rivier Net, Bekwame visser en Veteraan Visser aangepast",
+    "pl": "Balans: ceny Wzmocniona siatka, Sieć rzeczna, Wykwalifikowany Fisher i Doświadczony Fisher zostały zrównoważone",
+    "pt-BR": "Balanceamento: preços de Rede Reforçada, Rede fluvial, Pescador habilidoso e Pescador Veterano foram reequilibrados",
+    "th": "ปรับสมดุล: ปรับราคาของเสริมตาข่าย, ริเวอร์เน็ต, ชาวประมงที่มีทักษะ และฟิชเชอร์รุ่นเก๋าใหม่แล้ว",
+    "tr": "Denge: Güçlendirilmiş Ağ, Nehir Ağı, Yetenekli Balıkçı ve Kıdemli Balıkçı fiyatları yeniden dengelendi",
+    "vi": "Cân bằng: Giá của Lưới gia cố, Sông Lưới, Ngư dân lành nghề và Cựu ngư dân đã được cân bằng lại",
+    "zh-CN": "平衡性：加固网、河网、熟练的渔夫和老渔夫的价格已重新平衡",
+    "zh-TW": "平衡性：加固網、河網、熟練的漁夫和老漁夫的價格已重新平衡",
+  }
+};
 app.get("/pa/version", (_req, res) => {
   const payload: Record<string, unknown> = { minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION };
   if (PA_ANNOUNCEMENT) payload.announcement = PA_ANNOUNCEMENT;
