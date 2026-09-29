@@ -6,7 +6,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig, getPAPurchaseReceiptFull, isPAVoidedPurchaseProcessed, recordPAVoidedPurchase,
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, deletePAAccountData, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig, getPAPurchaseReceiptFull, isPAVoidedPurchaseProcessed, recordPAVoidedPurchase,
   getCEActivePlayerCount, getCEContribution, upsertCEContribution, getCECommunityTotal, getCELeaderboard,
   getCEClaimedMilestones, hasCEMilestoneClaim, recordCEMilestoneClaim,
   hasCELbClaim, recordCELbClaim, getCEPlayerPercentile,
@@ -2333,6 +2333,30 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
   const corrections = await popPACorrections(uid); // one-shot admin override; null if none pending
   if (!data) return res.json({ ok: true, save: null, ...(corrections ? { corrections } : {}) });
   res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt, ...(corrections ? { corrections } : {}) });
+});
+
+// In-app account deletion. The authenticated token is the sole source of the UID;
+// neither URL nor request body can select a different account. Database data is
+// deleted first and Firebase Auth second, allowing a safe authenticated retry if a
+// transient database error occurs.
+app.delete('/pa/account', verifyPAToken, async (_req, res) => {
+  const uid = res.locals.paUid as string;
+  const dataDeleted = await deletePAAccountData(uid);
+  if (!dataDeleted) return res.status(503).json({ ok: false, error: 'delete_data_failed' });
+
+  try {
+    await _paFirebaseAuth!.deleteUser(uid);
+    for (const [key, cached] of _gcredCache.entries()) {
+      if (cached.uid === uid) _gcredCache.delete(key);
+    }
+    return res.json({ ok: true });
+  } catch (err: any) {
+    // deleteUser is idempotent from the product's perspective: if a retry reaches
+    // an already-deleted Firebase user, all account data is already gone.
+    if (err?.code === 'auth/user-not-found') return res.json({ ok: true });
+    console.error('[PA] Firebase account deletion failed:', err?.code || err?.message);
+    return res.status(503).json({ ok: false, error: 'delete_auth_failed' });
+  }
 });
 
 // Bump PA_MIN_CLIENT_VERSION when a forced update is required
