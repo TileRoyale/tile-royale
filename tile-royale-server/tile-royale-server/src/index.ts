@@ -3217,10 +3217,11 @@ app.get('/pa/aci/trophies', verifyPAToken, async (req, res) => {
   res.json({ ok: true, trophies });
 });
 
-// ── ACI: Message in a Bottle ──────────────────────────────────────────────────
-// A bottle drops (1 in 5000 ACI casts) on the client. Opening it asks the server for a single-use gift
-// code worth ACI_BOTTLE_REWARD. The code can be redeemed by the opener or given to anyone; once it is
-// redeemed it is deleted from the server (see /pa/redeem).
+// ── Message in a Bottle ────────────────────────────────────────────────────────
+// A bottle drops (1 in 5000 ACI casts) on the client, or is granted through other sources (e.g. admin
+// corrections, future non-ACI drop paths). Opening it asks the server for a single-use gift code worth
+// ACI_BOTTLE_REWARD. The code can be redeemed by the opener or given to anyone; once it is redeemed it
+// is deleted from the server (see /pa/redeem).
 
 const ACI_BOTTLE_REWARD = { diamonds: 25, autoIncomePackages: 5, treasureMapFragments: 25 } as const;
 const ACI_BOTTLE_DAILY_CAP = 5;   // max bottles a player can open per rolling 24 h
@@ -3241,9 +3242,8 @@ app.post('/pa/aci/bottle/open', verifyPAToken, async (req, res) => {
   if (typeof bottleId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(bottleId)) {
     return res.status(400).json({ ok: false, error: 'invalid_bottle' });
   }
-  // Bottles only exist on the island — it must have been unlocked
-  if (!(await getAciGoalComplete())) return res.json({ ok: false, error: 'aci_locked' });
-
+  // Bottles are no longer exclusively an ACI drop (can be granted through other sources too),
+  // so opening one must not depend on the global ACI unlock state — see getAciGoalComplete().
   const result = await openAciBottle(uid, bottleId, _genBottleCode(), ACI_BOTTLE_DAILY_CAP);
   if (result.status === 'ok') {
     console.log(`[ACI bottle] ${uid} opened bottle ${bottleId}`);
