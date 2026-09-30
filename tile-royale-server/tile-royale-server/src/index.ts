@@ -18,7 +18,7 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   getPool, getAciGoalComplete, setAciGoalComplete, getActiveAciCompetition, createAciCompetition,
   getAciResult, getAciLeaderboard, getAciParticipantCount,
   hasAciRewardClaim, recordAciRewardClaim, getAciPlayerRank,
-  openAciBottle, redeemAciBottleCode, reportAciCasts, getAciCastCount,
+  openAciBottle, redeemAciBottleCode, recordBottleFind, reportAciCasts, getAciCastCount,
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
@@ -3296,6 +3296,22 @@ async function _isAciSourcedCompId(compId: unknown): Promise<boolean> {
   return !!row;
 }
 
+// POST /pa/aci/bottle/found  { bottleId, compId? }  → { ok }
+// Fire-and-forget: the client calls this the moment a bottle is granted (aciGrantBottle(), both ACI
+// and ordinary manual-fishing sources), purely so the server has an independent finder-uid record
+// from before any open/redeem action. Never blocks or gates gameplay — a failure here just means
+// that one bottle's finder isn't tracked, nothing the player notices.
+app.post('/pa/aci/bottle/found', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { bottleId, compId } = (req.body || {}) as { bottleId?: unknown; compId?: unknown };
+  if (typeof bottleId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(bottleId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_bottle' });
+  }
+  const safeCompId = typeof compId === 'string' && compId ? compId : null;
+  await recordBottleFind(bottleId, uid, safeCompId);
+  res.json({ ok: true });
+});
+
 // POST /pa/aci/bottle/open  { bottleId, compId? }  → { ok, code, reward }
 app.post('/pa/aci/bottle/open', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
@@ -3720,7 +3736,7 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   // Single use: redeemAciBottleCode() deletes the row, so the code is gone from the server after this.
   if (!entry && ACI_BOTTLE_CODE_RE.test(code)) {
     if (!getDbStatus().available) return res.json({ ok: false, error: 'server_error' });
-    const outcome = await redeemAciBottleCode(code);
+    const outcome = await redeemAciBottleCode(code, uid);
     if (outcome.status === 'error')   return res.json({ ok: false, error: 'server_error' });
     if (outcome.status === 'invalid') return res.json({ ok: false, error: 'invalid_code' });
     console.log(`[ACI bottle] code ${code} redeemed by ${uid}`);

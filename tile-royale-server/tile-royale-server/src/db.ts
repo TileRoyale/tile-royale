@@ -694,6 +694,17 @@ async function createTables(): Promise<void> {
       created_by  TEXT         NOT NULL,
       created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
+
+    -- Message in a Bottle: who originally FOUND each bottle (recorded the moment it drops, both
+    -- ACI and ordinary manual fishing) — separate from aci_bottles.uid (whoever requested the open)
+    -- and from redeemed_by_uid (whoever actually used the resulting code, possibly a gifted player).
+    -- Lets a later feature compare finder vs. redeemer to see whether codes get given away.
+    CREATE TABLE IF NOT EXISTS pa_bottle_finds (
+      bottle_id  TEXT         PRIMARY KEY,
+      uid        TEXT         NOT NULL,
+      comp_id    TEXT,
+      found_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -751,6 +762,11 @@ async function createTables(): Promise<void> {
     -- Bottle reward is now randomized per-open (was a fixed constant) — persist the exact rolled
     -- amounts alongside the code so redemption grants the SAME numbers the player was shown.
     ALTER TABLE pa_bottle_codes ADD COLUMN IF NOT EXISTS reward_json JSONB;
+
+    -- Whoever actually redeemed the bottle's gift code (may differ from pa_bottle_finds.uid if the
+    -- code was given to another player) — set once, when the single-use code is consumed.
+    ALTER TABLE aci_bottles ADD COLUMN IF NOT EXISTS redeemed_by_uid TEXT;
+    CREATE INDEX IF NOT EXISTS idx_bottle_finds_uid ON pa_bottle_finds(uid, found_at DESC);
   `);
   console.log("[DB] Tables ready");
 }
@@ -3703,20 +3719,48 @@ export async function openAciBottle(
  * Redeems a bottle gift code. The row is deleted in the same statement that claims it,
  * so a code can only ever be used once and no longer exists on the server afterwards. Returns
  * the exact reward that was rolled when the bottle was opened (not re-rolled here).
+ * Also records redeemerUid on the bottle's permanent aci_bottles row (redeemed_by_uid) — compare
+ * against pa_bottle_finds.uid later to see whether the code was given to another player.
  */
-export async function redeemAciBottleCode(code: string): Promise<
+export async function redeemAciBottleCode(code: string, redeemerUid: string): Promise<
   { status: 'ok'; reward: AciBottleReward } | { status: 'invalid' } | { status: 'error' }
 > {
   if (!pool || !dbAvailable) return { status: 'error' };
   try {
     const r = await pool.query(
-      `DELETE FROM pa_bottle_codes WHERE code = $1 RETURNING reward_json`, [code]
+      `DELETE FROM pa_bottle_codes WHERE code = $1 RETURNING bottle_id, reward_json`, [code]
     );
     if ((r.rowCount ?? 0) === 0) return { status: 'invalid' };
-    return { status: 'ok', reward: r.rows[0].reward_json as AciBottleReward };
+    const { bottle_id, reward_json } = r.rows[0];
+    if (bottle_id) {
+      await pool.query(
+        `UPDATE aci_bottles SET redeemed_by_uid = $1 WHERE bottle_id = $2`, [redeemerUid, bottle_id]
+      ).catch(err => console.error('[DB] redeemAciBottleCode redeemed_by_uid update failed:', err));
+    }
+    return { status: 'ok', reward: reward_json as AciBottleReward };
   } catch (err) {
     console.error('[DB] redeemAciBottleCode error:', err);
     return { status: 'error' };
+  }
+}
+
+/**
+ * Records who originally found a bottle (called the moment it drops, both ACI and ordinary manual
+ * fishing) — idempotent, since the client may retry. compId mirrors bottle.compId on the client
+ * (null for ordinary finds, a real competition id or 'admin_grant' for ACI-sourced ones).
+ */
+export async function recordBottleFind(bottleId: string, uid: string, compId: string | null): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  try {
+    await pool.query(
+      `INSERT INTO pa_bottle_finds (bottle_id, uid, comp_id) VALUES ($1, $2, $3)
+       ON CONFLICT (bottle_id) DO NOTHING`,
+      [bottleId, uid, compId]
+    );
+    return true;
+  } catch (err) {
+    console.error('[DB] recordBottleFind error:', err);
+    return false;
   }
 }
 
