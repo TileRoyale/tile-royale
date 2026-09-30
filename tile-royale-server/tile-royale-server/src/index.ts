@@ -3242,12 +3242,21 @@ app.get('/pa/aci/trophies', verifyPAToken, async (req, res) => {
 });
 
 // ── Message in a Bottle ────────────────────────────────────────────────────────
-// A bottle drops (1 in 5000 ACI casts) on the client, or is granted through other sources (e.g. admin
-// corrections, future non-ACI drop paths). Opening it asks the server for a single-use gift code worth
-// ACI_BOTTLE_REWARD. The code can be redeemed by the opener or given to anyone; once it is redeemed it
-// is deleted from the server (see /pa/redeem).
+// A bottle drops on the client from manual fishing (1 in 5000 ACI casts, 1 in 10000 everywhere else
+// manual — Open Seas / Cavern / Forgotten Isle / Kraken Vault), or is granted through other sources
+// (e.g. admin corrections). Opening it asks the server for a single-use gift code worth a randomly
+// rolled reward (see _rollBottleReward() / ACI_BOTTLE_REWARD_RANGES below — rolled once at open time
+// and persisted, so a later redeem always grants exactly what the player was shown). The code can be
+// redeemed by the opener or given to anyone; once it is redeemed it is deleted from the server (see
+// /pa/redeem).
 
-const ACI_BOTTLE_REWARD = { diamonds: 25, autoIncomePackages: 5, treasureMapFragments: 25 } as const;
+// Reward is randomized per-open (smaller than the original fixed 25/5/25 now that bottles also
+// drop from ordinary manual fishing, not just the rarer ACI-only 1-in-5000 cast roll).
+const ACI_BOTTLE_REWARD_RANGES = {
+  diamonds:             { min: 3, max: 10 },
+  autoIncomePackages:   { min: 1, max: 3 },
+  treasureMapFragments: { min: 5, max: 10 },
+} as const;
 const ACI_BOTTLE_DAILY_CAP = 5;   // max bottles a player can open per rolling 24 h
 const _BOTTLE_CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O/1/I — easy to read out and type
 const ACI_BOTTLE_CODE_RE   = /^BTL[A-HJ-NP-Z2-9]{9}$/;              // 12 chars, letters+digits only (the client strips everything else)
@@ -3259,6 +3268,16 @@ function _genBottleCode(): string {
   return code;
 }
 
+// randomInt(min, max) is exclusive of max, so +1 to make the configured range inclusive on both ends.
+function _rollBottleReward() {
+  const r = ACI_BOTTLE_REWARD_RANGES;
+  return {
+    diamonds:             _bottleRandomInt(r.diamonds.min,             r.diamonds.max             + 1),
+    autoIncomePackages:   _bottleRandomInt(r.autoIncomePackages.min,   r.autoIncomePackages.max   + 1),
+    treasureMapFragments: _bottleRandomInt(r.treasureMapFragments.min, r.treasureMapFragments.max + 1),
+  };
+}
+
 // POST /pa/aci/bottle/open  { bottleId }  → { ok, code, reward }
 app.post('/pa/aci/bottle/open', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
@@ -3268,10 +3287,13 @@ app.post('/pa/aci/bottle/open', verifyPAToken, async (req, res) => {
   }
   // Bottles are no longer exclusively an ACI drop (can be granted through other sources too),
   // so opening one must not depend on the global ACI unlock state — see getAciGoalComplete().
-  const result = await openAciBottle(uid, bottleId, _genBottleCode(), ACI_BOTTLE_DAILY_CAP);
+  // The reward is rolled here but only actually persisted if this open is the first one for this
+  // bottleId — a re-send of an already-opened-but-not-yet-redeemed bottle gets back the SAME
+  // reward it was shown the first time (openAciBottle handles that), not a fresh roll.
+  const result = await openAciBottle(uid, bottleId, _genBottleCode(), ACI_BOTTLE_DAILY_CAP, _rollBottleReward());
   if (result.status === 'ok') {
     console.log(`[ACI bottle] ${uid} opened bottle ${bottleId}`);
-    return res.json({ ok: true, code: result.code, reward: ACI_BOTTLE_REWARD });
+    return res.json({ ok: true, code: result.code, reward: result.reward });
   }
   if (result.status === 'error') return res.status(500).json({ ok: false, error: 'server_error' });
   return res.json({ ok: false, error: result.status });   // cap_reached | already_redeemed | not_owner
@@ -3680,13 +3702,14 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   if (!entry && ACI_BOTTLE_CODE_RE.test(code)) {
     if (!getDbStatus().available) return res.json({ ok: false, error: 'server_error' });
     const outcome = await redeemAciBottleCode(code);
-    if (outcome === 'error')   return res.json({ ok: false, error: 'server_error' });
-    if (outcome === 'invalid') return res.json({ ok: false, error: 'invalid_code' });
+    if (outcome.status === 'error')   return res.json({ ok: false, error: 'server_error' });
+    if (outcome.status === 'invalid') return res.json({ ok: false, error: 'invalid_code' });
     console.log(`[ACI bottle] code ${code} redeemed by ${uid}`);
+    const rw = outcome.reward;
     return res.json({
       ok: true,
-      desc: 'Message in a Bottle — 25 Diamonds + 5 Auto Income Tokens + 25 Treasure Map Fragments!',
-      reward: { ...ACI_BOTTLE_REWARD },
+      desc: `Message in a Bottle — ${rw.diamonds} Diamonds + ${rw.autoIncomePackages} Auto Income Tokens + ${rw.treasureMapFragments} Treasure Map Fragments!`,
+      reward: rw,
     });
   }
 

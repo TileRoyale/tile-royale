@@ -747,6 +747,10 @@ async function createTables(): Promise<void> {
     ALTER TABLE pa_community_lb_claims ADD COLUMN IF NOT EXISTS total_num   INT;
     ALTER TABLE pa_community_lb_claims ADD COLUMN IF NOT EXISTS ack_at      TIMESTAMPTZ;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_ce_lb_claims_grant ON pa_community_lb_claims(grant_id) WHERE grant_id IS NOT NULL;
+
+    -- Bottle reward is now randomized per-open (was a fixed constant) — persist the exact rolled
+    -- amounts alongside the code so redemption grants the SAME numbers the player was shown.
+    ALTER TABLE pa_bottle_codes ADD COLUMN IF NOT EXISTS reward_json JSONB;
   `);
   console.log("[DB] Tables ready");
 }
@@ -3633,21 +3637,24 @@ export async function getAciTrophies(uid: string): Promise<AciTrophyRow[]> {
 
 // ─── ACI: Message in a Bottle ─────────────────────────────────────────────────
 
+export type AciBottleReward = { diamonds: number; autoIncomePackages: number; treasureMapFragments: number };
+
 export type AciBottleOpenResult =
-  | { status: 'ok'; code: string }
+  | { status: 'ok'; code: string; reward: AciBottleReward }
   | { status: 'cap_reached' | 'already_redeemed' | 'not_owner' | 'error' };
 
 /**
  * Opens a bottle: creates a single-use gift code for it.
- *  - Idempotent: the same player re-sending the same bottleId gets the SAME code back as long as it has
- *    not been redeemed yet (protects against a lost response). A code that was already redeemed is gone.
+ *  - Idempotent: the same player re-sending the same bottleId gets the SAME code (and the SAME
+ *    already-rolled reward) back as long as it has not been redeemed yet (protects against a lost
+ *    response). A code that was already redeemed is gone.
  *  - A bottleId that was opened by a different player is rejected.
- *  - At most `dailyCap` bottles can be opened per player per rolling 24 h (the client rolls the 1-in-5000
- *    drop locally, so this is the server-side limit against forged opens).
+ *  - At most `dailyCap` bottles can be opened per player per rolling 24 h (the client rolls the drop
+ *    locally, so this is the server-side limit against forged opens).
  * The per-player advisory lock serialises parallel requests so the cap cannot be raced.
  */
 export async function openAciBottle(
-  uid: string, bottleId: string, newCode: string, dailyCap: number
+  uid: string, bottleId: string, newCode: string, dailyCap: number, reward: AciBottleReward
 ): Promise<AciBottleOpenResult> {
   if (!pool || !dbAvailable) return { status: 'error' };
   const client = await pool.connect();
@@ -3661,10 +3668,11 @@ export async function openAciBottle(
     if (existing) {
       if (existing.uid !== uid) { await client.query('ROLLBACK'); return { status: 'not_owner' }; }
       const stillThere = (await client.query(
-        `SELECT 1 FROM pa_bottle_codes WHERE code = $1`, [existing.code]
+        `SELECT reward_json FROM pa_bottle_codes WHERE code = $1`, [existing.code]
       )).rows[0];
       await client.query('ROLLBACK');
-      return stillThere ? { status: 'ok', code: existing.code } : { status: 'already_redeemed' };
+      if (!stillThere) return { status: 'already_redeemed' };
+      return { status: 'ok', code: existing.code, reward: (stillThere.reward_json as AciBottleReward) || reward };
     }
 
     const cnt = (await client.query(
@@ -3677,10 +3685,11 @@ export async function openAciBottle(
       `INSERT INTO aci_bottles (bottle_id, uid, code) VALUES ($1, $2, $3)`, [bottleId, uid, newCode]
     );
     await client.query(
-      `INSERT INTO pa_bottle_codes (code, bottle_id, created_by) VALUES ($1, $2, $3)`, [newCode, bottleId, uid]
+      `INSERT INTO pa_bottle_codes (code, bottle_id, created_by, reward_json) VALUES ($1, $2, $3, $4)`,
+      [newCode, bottleId, uid, JSON.stringify(reward)]
     );
     await client.query('COMMIT');
-    return { status: 'ok', code: newCode };
+    return { status: 'ok', code: newCode, reward };
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     console.error('[DB] openAciBottle error:', err);
@@ -3692,16 +3701,22 @@ export async function openAciBottle(
 
 /**
  * Redeems a bottle gift code. The row is deleted in the same statement that claims it,
- * so a code can only ever be used once and no longer exists on the server afterwards.
+ * so a code can only ever be used once and no longer exists on the server afterwards. Returns
+ * the exact reward that was rolled when the bottle was opened (not re-rolled here).
  */
-export async function redeemAciBottleCode(code: string): Promise<'ok' | 'invalid' | 'error'> {
-  if (!pool || !dbAvailable) return 'error';
+export async function redeemAciBottleCode(code: string): Promise<
+  { status: 'ok'; reward: AciBottleReward } | { status: 'invalid' } | { status: 'error' }
+> {
+  if (!pool || !dbAvailable) return { status: 'error' };
   try {
-    const r = await pool.query(`DELETE FROM pa_bottle_codes WHERE code = $1 RETURNING code`, [code]);
-    return (r.rowCount ?? 0) > 0 ? 'ok' : 'invalid';
+    const r = await pool.query(
+      `DELETE FROM pa_bottle_codes WHERE code = $1 RETURNING reward_json`, [code]
+    );
+    if ((r.rowCount ?? 0) === 0) return { status: 'invalid' };
+    return { status: 'ok', reward: r.rows[0].reward_json as AciBottleReward };
   } catch (err) {
     console.error('[DB] redeemAciBottleCode error:', err);
-    return 'error';
+    return { status: 'error' };
   }
 }
 
