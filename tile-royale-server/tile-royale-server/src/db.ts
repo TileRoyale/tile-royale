@@ -1825,6 +1825,62 @@ export async function loadPASave(uid: string): Promise<{ saveJson: string; updat
   return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
 }
 
+// Permanently removes every Patient Angler record that is keyed to a Firebase UID.
+// This intentionally excludes global configuration/event rows, which are not user data.
+// The caller deletes the Firebase Auth user only after this transaction commits so a
+// transient database failure never leaves personal data behind without an identity that
+// can authenticate a retry.
+export async function deletePAAccountData(uid: string): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Rows which reference other per-user rows are deleted first.
+    await client.query(
+      `DELETE FROM pa_bottle_codes
+       WHERE created_by = $1
+          OR bottle_id IN (SELECT bottle_id FROM aci_bottles WHERE uid = $1)`,
+      [uid]
+    );
+    await client.query('DELETE FROM pa_referral_uses WHERE uid = $1 OR referrer_uid = $1', [uid]);
+
+    const deletes = [
+      'DELETE FROM aci_cast_tokens WHERE uid = $1',
+      'DELETE FROM aci_results WHERE uid = $1',
+      'DELETE FROM aci_reward_claims WHERE uid = $1',
+      'DELETE FROM aci_trophies WHERE uid = $1',
+      'DELETE FROM aci_cast_counts WHERE uid = $1',
+      'DELETE FROM aci_bottles WHERE uid = $1',
+      'DELETE FROM ei_lb_claims WHERE uid = $1',
+      'DELETE FROM ei_leaderboard WHERE uid = $1',
+      'DELETE FROM pa_community_lb_claims WHERE player_id = $1',
+      'DELETE FROM pa_community_claims WHERE player_id = $1',
+      'DELETE FROM pa_community_contributions WHERE player_id = $1',
+      'DELETE FROM pa_player_daily_progress WHERE player_id = $1',
+      'DELETE FROM pa_player_milestones WHERE player_id = $1',
+      'DELETE FROM pa_player_progress WHERE player_id = $1',
+      'DELETE FROM pa_voided_purchases WHERE player_id = $1',
+      'DELETE FROM pa_purchase_receipts WHERE player_id = $1',
+      'DELETE FROM pa_codes_used WHERE uid = $1',
+      'DELETE FROM pa_referral_codes WHERE uid = $1',
+      'DELETE FROM pa_corrections WHERE uid = $1',
+      'DELETE FROM pa_save_history WHERE uid = $1',
+      'DELETE FROM pa_save_data WHERE uid = $1',
+    ];
+    for (const sql of deletes) await client.query(sql, [uid]);
+
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[DB] deletePAAccountData error:', err);
+    return false;
+  } finally {
+    client.release();
+  }
+}
+
 // Returns pending corrections for a uid WITHOUT deleting them (for admin preview).
 export async function peekPACorrections(uid: string): Promise<{ corrections: Record<string, any>; createdAt: string } | null> {
   const rows = await query(
