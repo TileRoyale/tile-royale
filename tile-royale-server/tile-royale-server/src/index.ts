@@ -3250,8 +3250,12 @@ app.get('/pa/aci/trophies', verifyPAToken, async (req, res) => {
 // redeemed by the opener or given to anyone; once it is redeemed it is deleted from the server (see
 // /pa/redeem).
 
-// Reward is randomized per-open (smaller than the original fixed 25/5/25 now that bottles also
-// drop from ordinary manual fishing, not just the rarer ACI-only 1-in-5000 cast roll).
+// ACI-sourced bottles (found via an actual ACI cast, or an admin grant tagged as ACI-flavored)
+// keep the original fixed reward. Bottles found any other way (ordinary manual fishing outside
+// ACI) get the smaller randomized reward — that drop is far more frequent (1 in 10000 taps across
+// most zones vs ACI's 1 in 5000 casts, itself gated behind the overfishing penalty), so a fixed
+// 25/5/25 there would inflate the economy well beyond what ACI's own reward was balanced for.
+const ACI_BOTTLE_REWARD_FIXED = { diamonds: 25, autoIncomePackages: 5, treasureMapFragments: 25 } as const;
 const ACI_BOTTLE_REWARD_RANGES = {
   diamonds:             { min: 3, max: 10 },
   autoIncomePackages:   { min: 1, max: 3 },
@@ -3278,19 +3282,34 @@ function _rollBottleReward() {
   };
 }
 
-// POST /pa/aci/bottle/open  { bottleId }  → { ok, code, reward }
+// The client reports which compId (if any) it found/was granted the bottle under. 'admin_grant' is
+// the fixed marker only ever set by the server's own _addAciMessageBottles correction handler; any
+// other non-empty compId must match a real row in aci_competitions to count as ACI-sourced — this
+// stops a bottle found through ordinary manual fishing (compId always null there) from claiming the
+// better fixed reward by simply sending an arbitrary string.
+async function _isAciSourcedCompId(compId: unknown): Promise<boolean> {
+  if (compId === 'admin_grant') return true;
+  if (typeof compId !== 'string' || !compId) return false;
+  const dbPool = getPool();
+  if (!dbPool) return false;
+  const row = (await dbPool.query(`SELECT 1 FROM aci_competitions WHERE comp_id = $1`, [compId])).rows[0];
+  return !!row;
+}
+
+// POST /pa/aci/bottle/open  { bottleId, compId? }  → { ok, code, reward }
 app.post('/pa/aci/bottle/open', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
-  const { bottleId } = (req.body || {}) as { bottleId?: unknown };
+  const { bottleId, compId } = (req.body || {}) as { bottleId?: unknown; compId?: unknown };
   if (typeof bottleId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(bottleId)) {
     return res.status(400).json({ ok: false, error: 'invalid_bottle' });
   }
   // Bottles are no longer exclusively an ACI drop (can be granted through other sources too),
   // so opening one must not depend on the global ACI unlock state — see getAciGoalComplete().
-  // The reward is rolled here but only actually persisted if this open is the first one for this
-  // bottleId — a re-send of an already-opened-but-not-yet-redeemed bottle gets back the SAME
-  // reward it was shown the first time (openAciBottle handles that), not a fresh roll.
-  const result = await openAciBottle(uid, bottleId, _genBottleCode(), ACI_BOTTLE_DAILY_CAP, _rollBottleReward());
+  // The reward is rolled/selected here but only actually persisted if this open is the first one
+  // for this bottleId — a re-send of an already-opened-but-not-yet-redeemed bottle gets back the
+  // SAME reward it was shown the first time (openAciBottle handles that), not a fresh roll.
+  const reward = (await _isAciSourcedCompId(compId)) ? ACI_BOTTLE_REWARD_FIXED : _rollBottleReward();
+  const result = await openAciBottle(uid, bottleId, _genBottleCode(), ACI_BOTTLE_DAILY_CAP, reward);
   if (result.status === 'ok') {
     console.log(`[ACI bottle] ${uid} opened bottle ${bottleId}`);
     return res.json({ ok: true, code: result.code, reward: result.reward });
