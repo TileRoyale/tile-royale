@@ -2426,6 +2426,17 @@ const PA_CONFIG_DEFAULTS: Record<string, unknown> = {
   communityEvent:            null,  // active community event config or null
   // Array of { productId, discountPct, until } — shown as badge in store; null = no sale
   saleConfig:                null,
+  // Anti-autoclicker drop tuning (geode / trophy fish / message-in-a-bottle).
+  // 0 or null for a "DailyMax" field means unlimited (no daily cap enforced).
+  geodeChance:               1/500,    // per-cast drop chance in Maelstrom cavern zones
+  geodeMaxHeld:              1,        // max unopened geodes held at once
+  geodeDailyMax:             0,        // max geodes obtainable per rolling 24h (0 = unlimited)
+  trophyMaxHeld:             10,       // max trophy fish held in G.trophyPile at once
+  trophyDailyMax:            0,        // max trophy fish obtainable (manual catches) per rolling 24h
+  bottleAciChance:           1/5000,   // per-cast MIAB drop chance during ACI
+  bottleManualChance:        1/10000,  // per-tap MIAB drop chance outside ACI
+  bottleMaxHeld:             1,        // max unopened bottles held at once (ACI + manual combined)
+  bottleDailyMax:            0,        // max bottles obtainable per rolling 24h (0 = unlimited)
 };
 
 // Public — clients poll this on every launch

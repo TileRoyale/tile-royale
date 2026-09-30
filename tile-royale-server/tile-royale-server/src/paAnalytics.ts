@@ -1247,6 +1247,36 @@ canvas{width:100%!important;height:120px!important}
         </tbody></table>
       </div>
 
+      <!-- Anti-autoclicker drop limits -->
+      <div class="section-block">
+        <div class="section-title">Anti-Autoclicker Drop Limits <span style="font-size:11px;color:#8b949e;font-weight:400">(daily max fields: 0 = unlimited)</span></div>
+        <table style="width:100%"><tbody>
+          <tr><td style="color:#58a6ff;padding:6px 10px;font-weight:600" colspan="2">Geode</td></tr>
+          <tr><td style="color:#8b949e;width:240px;padding:6px 10px">Drop Chance (per cast, 0-1)</td>
+              <td><input type="number" id="cfg-geodeChance" step="0.0001" min="0" max="1" style="width:100px" placeholder="default: 0.002"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Max Held (unopened)</td>
+              <td><input type="number" id="cfg-geodeMaxHeld" step="1" min="0" style="width:100px" placeholder="default: 1"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Max per 24h</td>
+              <td><input type="number" id="cfg-geodeDailyMax" step="1" min="0" style="width:100px" placeholder="0 = unlimited"></td></tr>
+
+          <tr><td style="color:#58a6ff;padding:10px 10px 6px" colspan="2">Trophy Fish</td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Max Held (in pile)</td>
+              <td><input type="number" id="cfg-trophyMaxHeld" step="1" min="0" style="width:100px" placeholder="default: 10"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Max per 24h (manual catches)</td>
+              <td><input type="number" id="cfg-trophyDailyMax" step="1" min="0" style="width:100px" placeholder="0 = unlimited"></td></tr>
+
+          <tr><td style="color:#58a6ff;padding:10px 10px 6px" colspan="2">Message in a Bottle</td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">ACI Drop Chance (per cast, 0-1)</td>
+              <td><input type="number" id="cfg-bottleAciChance" step="0.0001" min="0" max="1" style="width:100px" placeholder="default: 0.0002"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Manual Drop Chance (per tap, 0-1)</td>
+              <td><input type="number" id="cfg-bottleManualChance" step="0.00001" min="0" max="1" style="width:100px" placeholder="default: 0.0001"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Max Held (unopened)</td>
+              <td><input type="number" id="cfg-bottleMaxHeld" step="1" min="0" style="width:100px" placeholder="default: 1"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Max per 24h (ACI + manual combined)</td>
+              <td><input type="number" id="cfg-bottleDailyMax" step="1" min="0" style="width:100px" placeholder="0 = unlimited"></td></tr>
+        </tbody></table>
+      </div>
+
       <!-- Automation -->
       <div class="section-block">
         <div class="section-title">Automation Costs (blank = use code default)</div>
@@ -1822,6 +1852,15 @@ async function loadConfig() {
     document.getElementById('cfg-motdType').value      = cfg.motdType || 'info';
     document.getElementById('cfg-seagullBase').value   = cfg.seagullBaitBaseCost ?? 10000;
     document.getElementById('cfg-costScale').value     = cfg.costScaleMult ?? 1.22;
+    document.getElementById('cfg-geodeChance').value        = cfg.geodeChance        ?? (1/500);
+    document.getElementById('cfg-geodeMaxHeld').value       = cfg.geodeMaxHeld       ?? 1;
+    document.getElementById('cfg-geodeDailyMax').value      = cfg.geodeDailyMax      ?? 0;
+    document.getElementById('cfg-trophyMaxHeld').value      = cfg.trophyMaxHeld      ?? 10;
+    document.getElementById('cfg-trophyDailyMax').value     = cfg.trophyDailyMax     ?? 0;
+    document.getElementById('cfg-bottleAciChance').value    = cfg.bottleAciChance    ?? (1/5000);
+    document.getElementById('cfg-bottleManualChance').value = cfg.bottleManualChance ?? (1/10000);
+    document.getElementById('cfg-bottleMaxHeld').value      = cfg.bottleMaxHeld      ?? 1;
+    document.getElementById('cfg-bottleDailyMax').value     = cfg.bottleDailyMax     ?? 0;
     // Re-render efficiency tables with loaded overrides
     _cfgAutoRows(cfg.autoCostOverrides);
     _cfgStorageRows(cfg.storageCostOverrides);
@@ -1846,6 +1885,18 @@ async function saveConfig() {
     motdType:                  document.getElementById('cfg-motdType').value,
     seagullBaitBaseCost:       parseInt(document.getElementById('cfg-seagullBase').value) || 10000,
     costScaleMult:             parseFloat(document.getElementById('cfg-costScale').value) || 1.22,
+    // Note: MaxHeld/Chance fields fall back to the sane code default (never 0) when blank or
+    // invalid, since 0 would silently block that drop entirely for every player. Only the
+    // DailyMax fields use 0 as their real, intentional "unlimited" value.
+    geodeChance:               parseFloat(document.getElementById('cfg-geodeChance').value) || (1/500),
+    geodeMaxHeld:              parseInt(document.getElementById('cfg-geodeMaxHeld').value) || 1,
+    geodeDailyMax:             parseInt(document.getElementById('cfg-geodeDailyMax').value) || 0,
+    trophyMaxHeld:             parseInt(document.getElementById('cfg-trophyMaxHeld').value) || 10,
+    trophyDailyMax:            parseInt(document.getElementById('cfg-trophyDailyMax').value) || 0,
+    bottleAciChance:           parseFloat(document.getElementById('cfg-bottleAciChance').value) || (1/5000),
+    bottleManualChance:        parseFloat(document.getElementById('cfg-bottleManualChance').value) || (1/10000),
+    bottleMaxHeld:             parseInt(document.getElementById('cfg-bottleMaxHeld').value) || 1,
+    bottleDailyMax:            parseInt(document.getElementById('cfg-bottleDailyMax').value) || 0,
     autoCostOverrides:         _cfgReadOverrides(CFG_AUTO,    'auto'),
     storageCostOverrides:      _cfgReadOverrides(CFG_STORAGE, 'sto'),
     rodCostOverrides:          _cfgReadOverrides(CFG_RODS,    'rod'),
