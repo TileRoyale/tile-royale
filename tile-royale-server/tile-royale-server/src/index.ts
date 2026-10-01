@@ -2373,9 +2373,30 @@ const PA_LATEST_VERSION     = "v1.0.7.69"; // Build 519 [Production] — live on
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
 // texts: localized announcement body keyed by locale code; 'en' is the required fallback.
-// Build 521 [Production]: no player-facing changes (only the invisible admin-dashboard
-// anti-cheat config extension) — no announcement needed.
-const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = null;
+const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+  track: 'production',
+  minBuild: 523,
+  texts: {
+    "en": "• Improved the auto-clicker penalty system",
+    "et": "• Parandasime autoclicker-vastast karistussüsteemi",
+    "de": "• Verbessertes Strafsystem gegen Auto-Clicker",
+    "el": "• Βελτιωμένο σύστημα ποινών κατά των autoclicker",
+    "es": "• Sistema de penalización contra autoclickers mejorado",
+    "fr": "• Système de pénalité contre les autoclickers amélioré",
+    "id": "• Sistem penalti autoclicker yang ditingkatkan",
+    "it": "• Migliorato il sistema di penalità anti-autoclicker",
+    "ja": "• オートクリッカー対策のペナルティシステムを改善",
+    "ko": "• 오토클리커 페널티 시스템 개선",
+    "nl": "• Verbeterd strafsysteem tegen autoclickers",
+    "pl": "• Ulepszony system kar za używanie autoclickera",
+    "pt-BR": "• Sistema de penalidade contra autoclicker aprimorado",
+    "th": "• ปรับปรุงระบบลงโทษการใช้ออโต้คลิกเกอร์",
+    "tr": "• Otomatik tıklama cezası sistemi iyileştirildi",
+    "vi": "• Cải thiện hệ thống phạt autoclicker",
+    "zh-CN": "• 改进了自动点击器惩罚系统",
+    "zh-TW": "• 改進了自動點擊器懲罰系統",
+  }
+};
 app.get("/pa/version", (_req, res) => {
   const payload: Record<string, unknown> = { minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION };
   if (PA_ANNOUNCEMENT) payload.announcement = PA_ANNOUNCEMENT;
