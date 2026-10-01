@@ -30,6 +30,37 @@ import {
   JWSTransactionDecodedPayload,
   SignedDataVerifier,
 } from "@apple/app-store-server-library";
+// Moved up from its original position further down this file (was right before its first use,
+// around where the old /admin/analytics routes are registered). TypeScript compiles `import` to a
+// `require()` call AT THE SOURCE POSITION it appears (not hoisted to the top, unlike native ES
+// modules) when targeting CommonJS — so a route registered earlier in the file that references
+// one of these named imports (e.g. paAdminMiddleware) would read it before the require() ran,
+// throwing "ReferenceError: Cannot access 'paAnalytics_1' before initialization" at startup and
+// crashing the whole server before it ever starts listening (caused a real production incident:
+// the process never passed Railway's healthcheck and every deploy silently failed to roll out).
+import {
+  adminMiddleware       as paAdminMiddleware,
+  adminBrowserMiddleware as paAdminBrowserMiddleware,
+  serveAdminLogin,
+  handleAdminLogin,
+  handleAdminLogout,
+  handleAnalyticsProgress,
+  handleAdminSummary,
+  handleAdminPlayers,
+  handleAdminPlayerDetail,
+  handleAdminFunnel,
+  handleAdminZones,
+  handleAdminVersions,
+  handleAdminCohorts,
+  handleAdminGrowth,
+  handleAdminGrowthHourly,
+  handleAdminDataQuality,
+  handleAdminAutoclickers,
+  handleAdminExportCsv,
+  handleAdminExportMilestonesCsv,
+  serveAdminDashboard,
+  createAnalyticsTables,
+} from './paAnalytics';
 
 // Server-side mirror of the solo level gem rewards (levels with no reward = 0).
 // Rewards only exist at every 10th level; pattern: 50 at most, 200 at x50, 400 at x100, 600 at Lv1000.
@@ -4046,29 +4077,7 @@ app.get("/app-ads.txt", (_req, res) => {
 });
 
 // ─── Patient Angler Analytics ─────────────────────────────────────────────────
-import {
-  adminMiddleware       as paAdminMiddleware,
-  adminBrowserMiddleware as paAdminBrowserMiddleware,
-  serveAdminLogin,
-  handleAdminLogin,
-  handleAdminLogout,
-  handleAnalyticsProgress,
-  handleAdminSummary,
-  handleAdminPlayers,
-  handleAdminPlayerDetail,
-  handleAdminFunnel,
-  handleAdminZones,
-  handleAdminVersions,
-  handleAdminCohorts,
-  handleAdminGrowth,
-  handleAdminGrowthHourly,
-  handleAdminDataQuality,
-  handleAdminAutoclickers,
-  handleAdminExportCsv,
-  handleAdminExportMilestonesCsv,
-  serveAdminDashboard,
-  createAnalyticsTables,
-} from './paAnalytics';
+// (imports for this section moved to the top of the file — see the comment there)
 
 const _urlForm = express.urlencoded({ extended: false, limit: '4kb' });
 
