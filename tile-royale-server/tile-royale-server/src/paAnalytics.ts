@@ -939,6 +939,34 @@ export async function handleAdminCohorts(_req: Request, res: Response): Promise<
   res.json(rows);
 }
 
+// "Real" players only — total play time > 10 minutes — so one-tap/bounce installs don't
+// inflate either series. New = grouped by created_at; Active = grouped by last_seen (each
+// player counted once, on their most recent seen date — see the dashboard note for why this
+// approximates rather than exactly measures true daily/weekly actives).
+const GROWTH_REAL_PLAYER_MIN_SECONDS = 600;
+const GROWTH_BUCKETS = ['day', 'week', 'month', 'year'];
+
+export async function handleAdminGrowth(req: Request, res: Response): Promise<void> {
+  const bucket = GROWTH_BUCKETS.includes(String(req.query.bucket)) ? String(req.query.bucket) : 'day';
+  const [newPlayers, activePlayers] = await Promise.all([
+    query(`
+      SELECT DATE_TRUNC($1, created_at)::date AS period, COUNT(*) AS count
+      FROM pa_player_progress
+      WHERE total_play_time_seconds > $2
+      GROUP BY period ORDER BY period ASC
+      LIMIT 400
+    `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS]),
+    query(`
+      SELECT DATE_TRUNC($1, last_seen)::date AS period, COUNT(*) AS count
+      FROM pa_player_progress
+      WHERE total_play_time_seconds > $2
+      GROUP BY period ORDER BY period ASC
+      LIMIT 400
+    `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS]),
+  ]);
+  res.json({ bucket, newPlayers: newPlayers || [], activePlayers: activePlayers || [] });
+}
+
 export async function handleAdminDataQuality(_req: Request, res: Response): Promise<void> {
   const rows = await query(`
     SELECT player_id,
@@ -1169,6 +1197,7 @@ canvas{width:100%!important;height:120px!important}
     <div class="tab" onclick="switchTab('zones')">Zones</div>
     <div class="tab" onclick="switchTab('versions')">Versions</div>
     <div class="tab" onclick="switchTab('cohorts')">Cohorts</div>
+    <div class="tab" onclick="switchTab('growth')">Growth</div>
     <div class="tab" onclick="switchTab('quality')">Data Quality</div>
     <div class="tab" onclick="switchTab('autoclickers')">Auto Clickers</div>
     <div class="tab" onclick="switchTab('config')">⚙ Config</div>
@@ -1264,6 +1293,18 @@ canvas{width:100%!important;height:120px!important}
       <thead><tr><th>Cohort Week</th><th>New Players</th><th>D+1</th><th>D+7</th><th>D+30</th><th>Median Complete%</th><th>Prestige%</th><th>Ocean+%</th></tr></thead>
       <tbody id="cohorts-tbody"></tbody>
     </table></div>
+  </div>
+
+  <!-- Growth Tab -->
+  <div class="tab-content" id="tab-growth">
+    <h2>Player Growth <span style="font-size:11px;color:#8b949e;font-weight:400">— "real" players only (total play time &gt; 10 min); New = signup date, Active = last-seen date</span></h2>
+    <div style="margin-bottom:16px;display:flex;gap:6px">
+      <div id="gr-bucket-day"   class="tab active" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('day')">Day</div>
+      <div id="gr-bucket-week"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('week')">Week</div>
+      <div id="gr-bucket-month" class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('month')">Month</div>
+      <div id="gr-bucket-year"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('year')">Year</div>
+    </div>
+    <div id="growth-content">Loading…</div>
   </div>
 
   <!-- Data Quality Tab -->
@@ -1614,6 +1655,51 @@ async function loadCohorts() {
   } catch(e) { console.warn('Cohorts failed', e); }
 }
 
+// Minimal dependency-free SVG bar chart — matches the rest of the dashboard's hand-rolled
+// sparkline style (no charting library). Each bar gets a native <title> tooltip on hover.
+function _svgBarChart(title, data, color) {
+  if (!data.length) return \`<div class="chart-wrap"><div class="section-title">\${H(title)}</div><span style="color:#8b949e">No data</span></div>\`;
+  const w = 900, h = 160, pad = 20;
+  const vals = data.map(d => Number(d.count) || 0);
+  const max = Math.max(...vals, 1);
+  const n = data.length;
+  const slot = (w - pad*2) / n;
+  const barW = Math.max(1, slot - 2);
+  const bars = data.map((d, i) => {
+    const x  = pad + i * slot;
+    const bh = (Number(d.count) || 0) / max * (h - pad*2);
+    const y  = h - pad - bh;
+    return \`<rect x="\${x.toFixed(1)}" y="\${y.toFixed(1)}" width="\${barW.toFixed(1)}" height="\${Math.max(0,bh).toFixed(1)}" fill="\${color}"><title>\${H(d.period)}: \${fmtNum(d.count)}</title></rect>\`;
+  }).join('');
+  return \`<div class="chart-wrap">
+    <div class="section-title">\${H(title)} <span style="color:#8b949e;text-transform:none;font-weight:400;letter-spacing:normal">(peak \${fmtNum(max)})</span></div>
+    <svg viewBox="0 0 \${w} \${h}" width="100%" style="overflow:visible">\${bars}</svg>
+    <div style="display:flex;justify-content:space-between;color:#8b949e;font-size:10px;margin-top:4px">
+      <span>\${H(data[0].period)}</span><span>\${H(data[n-1].period)}</span>
+    </div>
+  </div>\`;
+}
+
+let _growthBucket = 'day';
+function setGrowthBucket(b) {
+  _growthBucket = b;
+  ['day','week','month','year'].forEach(x => document.getElementById('gr-bucket-'+x).classList.toggle('active', x === b));
+  loadGrowth();
+}
+
+async function loadGrowth() {
+  const el = document.getElementById('growth-content');
+  el.innerHTML = 'Loading…';
+  try {
+    const data = await apiGet('growth?bucket=' + _growthBucket);
+    const newChart = _svgBarChart('New Real Players (by signup date)', data.newPlayers || [], '#3fb950');
+    const activeChart = _svgBarChart('Active Real Players (by last-seen date)', data.activePlayers || [], '#1f6feb');
+    el.innerHTML = newChart
+      + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, on their most recent last-seen date — there's no per-day session log, so this approximates true daily/weekly active counts rather than measuring them exactly.</div>\`
+      + activeChart;
+  } catch(e) { el.textContent = 'Load failed'; }
+}
+
 async function loadQuality() {
   try {
     const rows = await apiGet('quality');
@@ -1771,15 +1857,15 @@ async function openDetail(playerId) {
 function closeDetail() { document.getElementById('detail-overlay').classList.remove('open'); }
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => {
-    const tabs = ['players','funnel','zones','versions','cohorts','quality','config'];
-    t.classList.toggle('active', tabs[i] === name);
+  document.querySelectorAll('.tabs > .tab').forEach(t => {
+    t.classList.toggle('active', t.getAttribute('onclick') === \`switchTab('\${name}')\`);
   });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-'+name));
   if (name === 'funnel')   loadFunnel();
   if (name === 'zones')    loadZones();
   if (name === 'versions') loadVersions();
   if (name === 'cohorts')  loadCohorts();
+  if (name === 'growth')   loadGrowth();
   if (name === 'quality')  loadQuality();
   if (name === 'autoclickers') loadAutoclickers();
   if (name === 'config')   loadConfig();
