@@ -1458,6 +1458,28 @@ canvas{width:100%!important;height:120px!important}
         </div>
       </div>
 
+      <!-- One-shot message popup for a single player, via the existing corrections mechanism -->
+      <div class="section-block">
+        <div class="section-title">Send Message to Player</div>
+        <div style="font-size:11px;color:#8b949e;padding:0 10px 10px">
+          Shows a popup to ONE player by uid, the next time their client loads/syncs their cloud save
+          (within a few minutes if they're currently playing, immediately on next app open otherwise).
+          The player must tap OK to dismiss — it never auto-closes. Shown exactly once, then cleared.
+        </div>
+        <table style="width:100%"><tbody>
+          <tr><td style="color:#8b949e;width:240px;padding:6px 10px">Player UID</td>
+              <td><input type="text" id="pmsg-uid" style="width:320px" placeholder="firebase uid"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Title (optional)</td>
+              <td><input type="text" id="pmsg-title" style="width:320px" placeholder="Message"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px;vertical-align:top">Message</td>
+              <td><textarea id="pmsg-body" rows="4" style="width:320px;font-family:inherit" placeholder="Text shown to the player"></textarea></td></tr>
+        </tbody></table>
+        <div id="pmsg-status" style="margin:10px 10px 0;display:none;padding:8px 12px;border-radius:6px;font-size:12px"></div>
+        <div style="padding:10px">
+          <button class="btn-primary" onclick="sendPlayerMessage()" style="padding:8px 18px;font-size:13px">Send</button>
+        </div>
+      </div>
+
       <!-- Automation -->
       <div class="section-block">
         <div class="section-title">Automation Costs (blank = use code default)</div>
@@ -2309,6 +2331,39 @@ async function savePlayerDropOverride() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     _pdoStatus('✓ Saved. Takes effect next time that player signs in / cloud-loads.', true);
   } catch(e) { _pdoStatus('Save failed: ' + e.message, false); }
+}
+
+function _pmsgStatus(msg, ok) {
+  const el = document.getElementById('pmsg-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = ok ? '#1a3a1a' : '#3a1a1a';
+  el.style.color = ok ? '#3fb950' : '#fc8181';
+  el.style.border = \`1px solid \${ok ? '#3fb950' : '#fc8181'}\`;
+}
+
+async function sendPlayerMessage() {
+  const uid  = document.getElementById('pmsg-uid').value.trim();
+  const title = document.getElementById('pmsg-title').value.trim();
+  const body  = document.getElementById('pmsg-body').value.trim();
+  if (!uid) return _pmsgStatus('Enter a player uid first.', false);
+  if (!body) return _pmsgStatus('Enter a message first.', false);
+  try {
+    // Corrections are stored as one JSON blob per uid and fully REPLACED on save (not merged) —
+    // fetch whatever is already pending for this player first so we don't clobber an unrelated
+    // correction (e.g. a diamond grant) that hasn't been consumed yet.
+    const getRes = await fetch('/admin/pa/corrections/' + encodeURIComponent(uid));
+    if (!getRes.ok) throw new Error('HTTP ' + getRes.status + ' (reading existing corrections)');
+    const existing = (await getRes.json()).corrections || {};
+    const corrections = { ...existing, _showMessage: body };
+    if (title) corrections._showMessageTitle = title; else delete corrections._showMessageTitle;
+    const res = await fetch('/admin/pa/corrections/' + encodeURIComponent(uid), {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ corrections })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _pmsgStatus('✓ Sent. Shown to that player next time their client loads/syncs their save.', true);
+  } catch(e) { _pmsgStatus('Send failed: ' + e.message, false); }
 }
 
 function sortBy(col) { _sortDir = _sortCol===col&&_sortDir==='desc'?'asc':'desc'; _sortCol = col; _page=1; loadPlayers(); }
