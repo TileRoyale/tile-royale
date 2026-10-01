@@ -972,27 +972,36 @@ export async function handleAdminGrowth(req: Request, res: Response): Promise<vo
 // up" rather than "how many on a specific calendar hour" (which would be thousands of bars
 // over a multi-month range and unreadable). Pure aggregation over existing created_at/last_seen
 // timestamps — no new tracking, no polling, nothing the client needs to do differently.
-export async function handleAdminGrowthHourly(_req: Request, res: Response): Promise<void> {
+const _DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function handleAdminGrowthHourly(req: Request, res: Response): Promise<void> {
+  // Optional ?date=YYYY-MM-DD (UTC calendar day) — restricts to that single day instead of
+  // summing across the whole player history. Validated against a strict format before use.
+  const dateParam = typeof req.query.date === 'string' && _DATE_RE.test(req.query.date) ? req.query.date : null;
+  const dayFilter = dateParam ? `AND (created_at AT TIME ZONE 'UTC')::date = $2::date` : '';
+  const dayFilterSeen = dateParam ? `AND (last_seen AT TIME ZONE 'UTC')::date = $2::date` : '';
+  const params: any[] = dateParam ? [GROWTH_REAL_PLAYER_MIN_SECONDS, dateParam] : [GROWTH_REAL_PLAYER_MIN_SECONDS];
+
   const [newRows, activeRows] = await Promise.all([
     query(`
       SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC')::int AS hour, COUNT(*) AS count
       FROM pa_player_progress
-      WHERE total_play_time_seconds > $1
+      WHERE total_play_time_seconds > $1 ${dayFilter}
       GROUP BY hour
-    `, [GROWTH_REAL_PLAYER_MIN_SECONDS]),
+    `, params),
     query(`
       SELECT EXTRACT(HOUR FROM last_seen AT TIME ZONE 'UTC')::int AS hour, COUNT(*) AS count
       FROM pa_player_progress
-      WHERE total_play_time_seconds > $1
+      WHERE total_play_time_seconds > $1 ${dayFilterSeen}
       GROUP BY hour
-    `, [GROWTH_REAL_PLAYER_MIN_SECONDS]),
+    `, params),
   ]);
   // Fill all 24 hours (0 for any hour with no rows) so the chart always has a full, stable axis.
   const fill = (rows: any[] | null) => {
     const byHour = new Map((rows || []).map(r => [Number(r.hour), Number(r.count)]));
     return Array.from({ length: 24 }, (_, h) => ({ hour: h, count: byHour.get(h) || 0 }));
   };
-  res.json({ newByHour: fill(newRows), activeByHour: fill(activeRows) });
+  res.json({ date: dateParam, newByHour: fill(newRows), activeByHour: fill(activeRows) });
 }
 
 export async function handleAdminDataQuality(_req: Request, res: Response): Promise<void> {
@@ -1332,6 +1341,11 @@ canvas{width:100%!important;height:120px!important}
       <div id="gr-bucket-month" class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('month')">Month</div>
       <div id="gr-bucket-year"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('year')">Year</div>
       <div id="gr-bucket-hour"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('hour')">Hour of Day (UTC)</div>
+    </div>
+    <div id="gr-day-controls" style="display:none;margin-bottom:16px;gap:6px;align-items:center">
+      <div id="gr-day-alltime" class="tab active" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthHourDate(null)">All-Time</div>
+      <div id="gr-day-today"   class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthHourDate('today')">Today (UTC)</div>
+      <input type="date" id="gr-day-picker" style="background:#161b22;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:6px 10px;font-family:inherit;font-size:13px" onchange="setGrowthHourDate(this.value)">
     </div>
     <div id="growth-content">Loading…</div>
   </div>
@@ -1740,9 +1754,27 @@ function _svgBarChart(title, data, color) {
 }
 
 let _growthBucket = 'day';
+let _growthHourDate = null; // null = all-time aggregate; 'YYYY-MM-DD' = that single UTC day
+
 function setGrowthBucket(b) {
   _growthBucket = b;
   ['day','week','month','year','hour'].forEach(x => document.getElementById('gr-bucket-'+x).classList.toggle('active', x === b));
+  document.getElementById('gr-day-controls').style.display = (b === 'hour') ? 'flex' : 'none';
+  loadGrowth();
+}
+
+function setGrowthHourDate(d) {
+  if (d === 'today') {
+    const now = new Date();
+    d = now.getUTCFullYear() + '-' + String(now.getUTCMonth()+1).padStart(2,'0') + '-' + String(now.getUTCDate()).padStart(2,'0');
+  }
+  _growthHourDate = d || null;
+  document.getElementById('gr-day-picker').value = _growthHourDate || '';
+  document.getElementById('gr-day-alltime').classList.toggle('active', !_growthHourDate);
+  // "Today" only shows active if the picker's value equals today AND it was reached via the Today button
+  // (picker onchange calls this with the raw date string too, which is fine — same visual result either way).
+  const todayStr = (() => { const n=new Date(); return n.getUTCFullYear()+'-'+String(n.getUTCMonth()+1).padStart(2,'0')+'-'+String(n.getUTCDate()).padStart(2,'0'); })();
+  document.getElementById('gr-day-today').classList.toggle('active', _growthHourDate === todayStr);
   loadGrowth();
 }
 
@@ -1751,17 +1783,24 @@ async function loadGrowth() {
   el.innerHTML = 'Loading…';
   try {
     if (_growthBucket === 'hour') {
-      const data = await apiGet('growth-hourly');
+      const qs = _growthHourDate ? ('?date=' + encodeURIComponent(_growthHourDate)) : '';
+      const data = await apiGet('growth-hourly' + qs);
       const hh = (h) => String(h).padStart(2,'0') + ':00';
       const newData    = (data.newByHour    || []).map(d => ({ period: hh(d.hour), count: d.count }));
       const activeData = (data.activeByHour || []).map(d => ({ period: hh(d.hour), count: d.count }));
-      const newChart    = _svgBarChart('New Real Players — by hour of day, all-time (UTC)', newData, '#3fb950');
-      const activeChart = _svgBarChart('Active Real Players — by hour of day, all-time (UTC)', activeData, '#1f6feb');
-      el.innerHTML = \`<div class="chart-wrap" style="background:#1f6feb11;border-color:#1f6feb44;font-size:11px;color:#c9d1d9;margin-bottom:12px">
-        <b>This is not today.</b> Every bar is the SUM of that hour across ~\${fmtNum((data.newByHour||[]).reduce((s,d)=>s+d.count,0))} total signups spanning the whole player history (since launch) — so the 20:00 bar already includes every past day's 20:00, which is why it's filled in even if it isn't 20:00 yet today. This shows the recurring daily rhythm (which hour tends to be busiest), not a live clock of today's activity. Hours are UTC; Estonia is UTC+3 in October (EEST) — add 3h to read it in local time.
-      </div>\`
+      const scopeLabel = _growthHourDate ? _growthHourDate + ' (UTC)' : 'all-time (UTC)';
+      const newChart    = _svgBarChart('New Real Players — by hour, ' + scopeLabel, newData, '#3fb950');
+      const activeChart = _svgBarChart('Active Real Players — by hour, ' + scopeLabel, activeData, '#1f6feb');
+      const banner = _growthHourDate
+        ? \`<div class="chart-wrap" style="background:#1f6feb11;border-color:#1f6feb44;font-size:11px;color:#c9d1d9;margin-bottom:12px">
+            Showing only \${H(_growthHourDate)} (00:00–23:59 UTC). Hours later than right-now-UTC on today's date will correctly show 0 — they genuinely haven't happened yet. Switch to "All-Time" to see the full historical pattern instead.
+          </div>\`
+        : \`<div class="chart-wrap" style="background:#1f6feb11;border-color:#1f6feb44;font-size:11px;color:#c9d1d9;margin-bottom:12px">
+            <b>This is not today.</b> Every bar is the SUM of that hour across ~\${fmtNum((data.newByHour||[]).reduce((s,d)=>s+d.count,0))} total signups spanning the whole player history (since launch) — so the 20:00 bar already includes every past day's 20:00, which is why it's filled in even if it isn't 20:00 yet today. This shows the recurring daily rhythm (which hour tends to be busiest), not a live clock of today's activity. Hours are UTC; Estonia is UTC+3 in October (EEST) — add 3h to read it in local time. Pick a specific date above to see just that one day instead.
+          </div>\`;
+      el.innerHTML = banner
         + newChart
-        + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, at the hour of their most recent last-seen timestamp — skews toward recent play patterns rather than a true historical average.</div>\`
+        + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, at the hour of their most recent last-seen timestamp\${_growthHourDate ? ' that falls on this date' : ''} — \${_growthHourDate ? 'so a player who last played earlier today but is still "last seen" today will show up here.' : 'skews toward recent play patterns rather than a true historical average.'}</div>\`
         + activeChart;
       return;
     }
