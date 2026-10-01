@@ -946,28 +946,33 @@ export async function handleAdminCohorts(_req: Request, res: Response): Promise<
 const GROWTH_REAL_PLAYER_MIN_SECONDS = 600;
 const GROWTH_BUCKETS = ['day', 'week', 'month', 'year'];
 
+// Dashboard is viewed by one person (owner, Estonia) — all Growth charts are bucketed in
+// Estonia local time, not UTC. 'Europe/Tallinn' is an IANA zone, so Postgres applies the
+// correct EEST/EET offset automatically across the DST transition, no manual +2/+3 needed.
+const GROWTH_TZ = 'Europe/Tallinn';
+
 export async function handleAdminGrowth(req: Request, res: Response): Promise<void> {
   const bucket = GROWTH_BUCKETS.includes(String(req.query.bucket)) ? String(req.query.bucket) : 'day';
   const [newPlayers, activePlayers] = await Promise.all([
     query(`
-      SELECT DATE_TRUNC($1, created_at)::date AS period, COUNT(*) AS count
+      SELECT DATE_TRUNC($1, created_at AT TIME ZONE $3)::date AS period, COUNT(*) AS count
       FROM pa_player_progress
       WHERE total_play_time_seconds > $2
       GROUP BY period ORDER BY period ASC
       LIMIT 400
-    `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS]),
+    `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ]),
     query(`
-      SELECT DATE_TRUNC($1, last_seen)::date AS period, COUNT(*) AS count
+      SELECT DATE_TRUNC($1, last_seen AT TIME ZONE $3)::date AS period, COUNT(*) AS count
       FROM pa_player_progress
       WHERE total_play_time_seconds > $2
       GROUP BY period ORDER BY period ASC
       LIMIT 400
-    `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS]),
+    `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ]),
   ]);
   res.json({ bucket, newPlayers: newPlayers || [], activePlayers: activePlayers || [] });
 }
 
-// "Hour of Day" view — a 24-slot histogram (UTC, 0-23) aggregated across the player base's
+// "Hour of Day" view — a 24-slot histogram (Estonia local time, 0-23) aggregated across the player base's
 // whole history, not a continuous timeline. Answers "what time of day do players tend to show
 // up" rather than "how many on a specific calendar hour" (which would be thousands of bars
 // over a multi-month range and unreadable). Pure aggregation over existing created_at/last_seen
@@ -975,22 +980,25 @@ export async function handleAdminGrowth(req: Request, res: Response): Promise<vo
 const _DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function handleAdminGrowthHourly(req: Request, res: Response): Promise<void> {
-  // Optional ?date=YYYY-MM-DD (UTC calendar day) — restricts to that single day instead of
-  // summing across the whole player history. Validated against a strict format before use.
+  // Optional ?date=YYYY-MM-DD (Estonia-local calendar day) — restricts to that single day
+  // instead of summing across the whole player history. Validated against a strict format first.
   const dateParam = typeof req.query.date === 'string' && _DATE_RE.test(req.query.date) ? req.query.date : null;
-  const dayFilter = dateParam ? `AND (created_at AT TIME ZONE 'UTC')::date = $2::date` : '';
-  const dayFilterSeen = dateParam ? `AND (last_seen AT TIME ZONE 'UTC')::date = $2::date` : '';
-  const params: any[] = dateParam ? [GROWTH_REAL_PLAYER_MIN_SECONDS, dateParam] : [GROWTH_REAL_PLAYER_MIN_SECONDS];
+  // $1 = min-seconds, $2 = timezone, $3 = date (only bound/used when dateParam is set)
+  const dayFilter     = dateParam ? `AND (created_at AT TIME ZONE $2)::date = $3::date` : '';
+  const dayFilterSeen = dateParam ? `AND (last_seen  AT TIME ZONE $2)::date = $3::date` : '';
+  const params: any[] = dateParam
+    ? [GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ, dateParam]
+    : [GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ];
 
   const [newRows, activeRows] = await Promise.all([
     query(`
-      SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC')::int AS hour, COUNT(*) AS count
+      SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE $2)::int AS hour, COUNT(*) AS count
       FROM pa_player_progress
       WHERE total_play_time_seconds > $1 ${dayFilter}
       GROUP BY hour
     `, params),
     query(`
-      SELECT EXTRACT(HOUR FROM last_seen AT TIME ZONE 'UTC')::int AS hour, COUNT(*) AS count
+      SELECT EXTRACT(HOUR FROM last_seen AT TIME ZONE $2)::int AS hour, COUNT(*) AS count
       FROM pa_player_progress
       WHERE total_play_time_seconds > $1 ${dayFilterSeen}
       GROUP BY hour
@@ -1340,11 +1348,11 @@ canvas{width:100%!important;height:120px!important}
       <div id="gr-bucket-week"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('week')">Week</div>
       <div id="gr-bucket-month" class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('month')">Month</div>
       <div id="gr-bucket-year"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('year')">Year</div>
-      <div id="gr-bucket-hour"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('hour')">Hour of Day (UTC)</div>
+      <div id="gr-bucket-hour"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('hour')">Hour of Day</div>
     </div>
     <div id="gr-day-controls" style="display:none;margin-bottom:16px;gap:6px;align-items:center">
       <div id="gr-day-alltime" class="tab active" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthHourDate(null)">All-Time</div>
-      <div id="gr-day-today"   class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthHourDate('today')">Today (UTC)</div>
+      <div id="gr-day-today"   class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthHourDate('today')">Today</div>
       <input type="date" id="gr-day-picker" style="background:#161b22;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:6px 10px;font-family:inherit;font-size:13px" onchange="setGrowthHourDate(this.value)">
     </div>
     <div id="growth-content">Loading…</div>
@@ -1754,7 +1762,7 @@ function _svgBarChart(title, data, color) {
 }
 
 let _growthBucket = 'day';
-let _growthHourDate = null; // null = all-time aggregate; 'YYYY-MM-DD' = that single UTC day
+let _growthHourDate = null; // null = all-time aggregate; 'YYYY-MM-DD' = that single Estonia-local day
 
 function setGrowthBucket(b) {
   _growthBucket = b;
@@ -1764,16 +1772,18 @@ function setGrowthBucket(b) {
 }
 
 function setGrowthHourDate(d) {
+  // Uses the BROWSER's own local date (not UTC) — correct as long as this dashboard is opened
+  // from Estonia, same as the server's Europe/Tallinn bucketing. If opened from elsewhere this
+  // "Today" shortcut would pick that browser's local date instead; the date picker still lets
+  // you type the exact date you mean regardless.
   if (d === 'today') {
     const now = new Date();
-    d = now.getUTCFullYear() + '-' + String(now.getUTCMonth()+1).padStart(2,'0') + '-' + String(now.getUTCDate()).padStart(2,'0');
+    d = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
   }
   _growthHourDate = d || null;
   document.getElementById('gr-day-picker').value = _growthHourDate || '';
   document.getElementById('gr-day-alltime').classList.toggle('active', !_growthHourDate);
-  // "Today" only shows active if the picker's value equals today AND it was reached via the Today button
-  // (picker onchange calls this with the raw date string too, which is fine — same visual result either way).
-  const todayStr = (() => { const n=new Date(); return n.getUTCFullYear()+'-'+String(n.getUTCMonth()+1).padStart(2,'0')+'-'+String(n.getUTCDate()).padStart(2,'0'); })();
+  const todayStr = (() => { const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); })();
   document.getElementById('gr-day-today').classList.toggle('active', _growthHourDate === todayStr);
   loadGrowth();
 }
@@ -1788,15 +1798,15 @@ async function loadGrowth() {
       const hh = (h) => String(h).padStart(2,'0') + ':00';
       const newData    = (data.newByHour    || []).map(d => ({ period: hh(d.hour), count: d.count }));
       const activeData = (data.activeByHour || []).map(d => ({ period: hh(d.hour), count: d.count }));
-      const scopeLabel = _growthHourDate ? _growthHourDate + ' (UTC)' : 'all-time (UTC)';
-      const newChart    = _svgBarChart('New Real Players — by hour, ' + scopeLabel, newData, '#3fb950');
-      const activeChart = _svgBarChart('Active Real Players — by hour, ' + scopeLabel, activeData, '#1f6feb');
+      const scopeLabel = _growthHourDate ? _growthHourDate : 'all-time';
+      const newChart    = _svgBarChart('New Real Players — by hour, ' + scopeLabel + ' (Estonia time)', newData, '#3fb950');
+      const activeChart = _svgBarChart('Active Real Players — by hour, ' + scopeLabel + ' (Estonia time)', activeData, '#1f6feb');
       const banner = _growthHourDate
         ? \`<div class="chart-wrap" style="background:#1f6feb11;border-color:#1f6feb44;font-size:11px;color:#c9d1d9;margin-bottom:12px">
-            Showing only \${H(_growthHourDate)} (00:00–23:59 UTC). Hours later than right-now-UTC on today's date will correctly show 0 — they genuinely haven't happened yet. Switch to "All-Time" to see the full historical pattern instead.
+            Showing only \${H(_growthHourDate)} (00:00–23:59, Estonia time). Hours later than right-now on today's date will correctly show 0 — they genuinely haven't happened yet. Switch to "All-Time" to see the full historical pattern instead.
           </div>\`
         : \`<div class="chart-wrap" style="background:#1f6feb11;border-color:#1f6feb44;font-size:11px;color:#c9d1d9;margin-bottom:12px">
-            <b>This is not today.</b> Every bar is the SUM of that hour across ~\${fmtNum((data.newByHour||[]).reduce((s,d)=>s+d.count,0))} total signups spanning the whole player history (since launch) — so the 20:00 bar already includes every past day's 20:00, which is why it's filled in even if it isn't 20:00 yet today. This shows the recurring daily rhythm (which hour tends to be busiest), not a live clock of today's activity. Hours are UTC; Estonia is UTC+3 in October (EEST) — add 3h to read it in local time. Pick a specific date above to see just that one day instead.
+            <b>This is not today.</b> Every bar is the SUM of that hour across ~\${fmtNum((data.newByHour||[]).reduce((s,d)=>s+d.count,0))} total signups spanning the whole player history (since launch) — so the 20:00 bar already includes every past day's 20:00, which is why it's filled in even if it isn't 20:00 yet today. This shows the recurring daily rhythm (which hour tends to be busiest), not a live clock of today's activity. Hours are already in Estonia local time (EEST/EET, DST-aware) — no offset math needed. Pick a specific date above to see just that one day instead.
           </div>\`;
       el.innerHTML = banner
         + newChart
