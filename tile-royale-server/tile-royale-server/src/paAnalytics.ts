@@ -963,6 +963,48 @@ export async function handleAdminDataQuality(_req: Request, res: Response): Prom
   res.json(rows);
 }
 
+// Flags accounts whose lifetime average tap rate — extrapolated to 24 active hours — exceeds
+// 10,000 taps. Uses stats.totalTaps / activePlaytimeMs from each player's save (not a true
+// rolling-24h counter, which the client doesn't currently track) — a stable, noise-resistant
+// proxy that doesn't require a new client build to start working. A confidence floor (>=1h
+// active playtime, >=1000 taps) excludes brand-new/edge-case saves where a tiny denominator
+// would produce a wildly inflated (meaningless) rate.
+const AUTOCLICKER_TAPS_PER_24H_THRESHOLD = 10000;
+const AUTOCLICKER_MIN_ACTIVE_MS = 60 * 60 * 1000; // 1 hour
+const AUTOCLICKER_MIN_TAPS      = 1000;
+
+export async function handleAdminAutoclickers(_req: Request, res: Response): Promise<void> {
+  const rows = await query(`SELECT uid, save_json FROM pa_save_data`);
+  if (!rows) { res.json([]); return; }
+
+  const flagged: Array<{
+    uid: string; playerName: string | null; totalTaps: number; activeHours: number;
+    tapsPerSec: number; impliedTapsPer24h: number;
+  }> = [];
+
+  for (const row of rows) {
+    let save: any;
+    try { save = JSON.parse(row.save_json); } catch { continue; }
+    const totalTaps = Number(save?.stats?.totalTaps) || 0;
+    const activeMs  = Number(save?.activePlaytimeMs) || 0;
+    if (totalTaps < AUTOCLICKER_MIN_TAPS || activeMs < AUTOCLICKER_MIN_ACTIVE_MS) continue;
+    const tapsPerSec        = totalTaps / (activeMs / 1000);
+    const impliedTapsPer24h = tapsPerSec * 86400;
+    if (impliedTapsPer24h <= AUTOCLICKER_TAPS_PER_24H_THRESHOLD) continue;
+    flagged.push({
+      uid: row.uid,
+      playerName: typeof save?.playerName === 'string' ? save.playerName : null,
+      totalTaps,
+      activeHours: activeMs / 3600000,
+      tapsPerSec,
+      impliedTapsPer24h: Math.round(impliedTapsPer24h),
+    });
+  }
+
+  flagged.sort((a, b) => b.impliedTapsPer24h - a.impliedTapsPer24h);
+  res.json(flagged.slice(0, 500));
+}
+
 export async function handleAdminExportCsv(req: Request, res: Response): Promise<void> {
   const zone    = typeof req.query.zone === 'string'    ? req.query.zone    : '';
   const version = typeof req.query.version === 'string' ? req.query.version : '';
@@ -1117,6 +1159,7 @@ canvas{width:100%!important;height:120px!important}
     <div class="tab" onclick="switchTab('versions')">Versions</div>
     <div class="tab" onclick="switchTab('cohorts')">Cohorts</div>
     <div class="tab" onclick="switchTab('quality')">Data Quality</div>
+    <div class="tab" onclick="switchTab('autoclickers')">Auto Clickers</div>
     <div class="tab" onclick="switchTab('config')">⚙ Config</div>
   </div>
 
@@ -1216,6 +1259,12 @@ canvas{width:100%!important;height:120px!important}
   <div class="tab-content" id="tab-quality">
     <h2>Data Quality Warnings</h2>
     <div id="quality-content">Loading…</div>
+  </div>
+
+  <!-- Auto Clickers Tab -->
+  <div class="tab-content" id="tab-autoclickers">
+    <h2>Auto Clickers <span style="font-size:11px;color:#8b949e;font-weight:400">— flagged uids whose lifetime average tap rate, extrapolated to 24 active hours, exceeds 10,000 taps</span></h2>
+    <div id="autoclickers-content">Loading…</div>
   </div>
 
   <div class="tab-content" id="tab-config">
@@ -1565,6 +1614,23 @@ async function loadQuality() {
   } catch(e) { document.getElementById('quality-content').textContent = 'Load failed'; }
 }
 
+async function loadAutoclickers() {
+  try {
+    const rows = await apiGet('autoclickers');
+    if (!rows.length) { document.getElementById('autoclickers-content').innerHTML = '<span style="color:#3fb950">No flagged accounts</span>'; return; }
+    const list = rows.map(r => \`
+      <div style="padding:8px 0;border-bottom:1px solid #30363d;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <span class="warn-badge">\${fmtNum(r.impliedTapsPer24h)}/24h</span>
+        <span style="color:#c9d1d9;min-width:140px">\${H(r.playerName || '(no name)')}</span>
+        <span style="color:#8b949e;font-size:11px;min-width:280px">\${H(r.uid)}</span>
+        <span style="color:#8b949e;font-size:11px">taps=\${fmtNum(r.totalTaps)}</span>
+        <span style="color:#8b949e;font-size:11px">active=\${n1(r.activeHours)}h</span>
+        <span style="color:#8b949e;font-size:11px">rate=\${n1(r.tapsPerSec)}/s</span>
+      </div>\`).join('');
+    document.getElementById('autoclickers-content').innerHTML = \`<div style="margin-bottom:6px">\${fmtNum(rows.length)} flagged accounts</div>\${list}\`;
+  } catch(e) { document.getElementById('autoclickers-content').textContent = 'Load failed'; }
+}
+
 async function openDetail(playerId) {
   document.getElementById('detail-overlay').classList.add('open');
   document.getElementById('detail-title').textContent = 'Player: ' + playerId.slice(0,20) + '…';
@@ -1669,6 +1735,7 @@ function switchTab(name) {
   if (name === 'versions') loadVersions();
   if (name === 'cohorts')  loadCohorts();
   if (name === 'quality')  loadQuality();
+  if (name === 'autoclickers') loadAutoclickers();
   if (name === 'config')   loadConfig();
 }
 

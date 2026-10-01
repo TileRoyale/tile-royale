@@ -4033,6 +4033,7 @@ import {
   handleAdminVersions,
   handleAdminCohorts,
   handleAdminDataQuality,
+  handleAdminAutoclickers,
   handleAdminExportCsv,
   handleAdminExportMilestonesCsv,
   serveAdminDashboard,
@@ -4681,6 +4682,7 @@ app.get('/admin/analytics/api/zones',             paAdminMiddleware, handleAdmin
 app.get('/admin/analytics/api/versions',          paAdminMiddleware, handleAdminVersions);
 app.get('/admin/analytics/api/cohorts',           paAdminMiddleware, handleAdminCohorts);
 app.get('/admin/analytics/api/quality',           paAdminMiddleware, handleAdminDataQuality);
+app.get('/admin/analytics/api/autoclickers',      paAdminMiddleware, handleAdminAutoclickers);
 app.get('/admin/analytics/export.csv',            paAdminMiddleware, handleAdminExportCsv);
 app.get('/admin/analytics/milestones.csv',        paAdminMiddleware, handleAdminExportMilestonesCsv);
 
