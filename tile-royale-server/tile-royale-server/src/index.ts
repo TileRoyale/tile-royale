@@ -2459,7 +2459,10 @@ app.get("/pa/config", async (_req, res) => {
 });
 
 // Admin — update config values (partial update: existing keys not in body are kept)
-app.post("/admin/pa/config", requireAdmin, async (req, res) => {
+// Uses paAdminMiddleware (session-cookie auth, same as every other PA dashboard route) — NOT
+// requireAdmin (x-admin-key header), which this dashboard's own fetch() calls never send. Using
+// requireAdmin here made this button structurally unable to ever succeed from the dashboard UI.
+app.post("/admin/pa/config", paAdminMiddleware, async (req, res) => {
   try {
     const current = await getPARemoteConfig();
     const merged  = { ...current, ...req.body };
@@ -3334,7 +3337,11 @@ app.get('/pa/player-drop-overrides', verifyPAToken, async (req, res) => {
 });
 
 // GET /admin/pa/player-drop-overrides/:uid — read a specific player's override values
-app.get('/admin/pa/player-drop-overrides/:uid', requireAdmin, async (req, res) => {
+// Uses paAdminMiddleware (session-cookie auth, same as every other PA dashboard route) — NOT
+// requireAdmin (x-admin-key header), which this dashboard's own fetch() calls never send. Using
+// requireAdmin here made Load/Save structurally unable to ever succeed from the dashboard UI
+// (reported as "Save failed: HTTP 401").
+app.get('/admin/pa/player-drop-overrides/:uid', paAdminMiddleware, async (req, res) => {
   const uid = req.params.uid;
   const overrides = await getPlayerDropOverrides(uid);
   res.json({ ok: true, uid, overrides });
@@ -3343,7 +3350,7 @@ app.get('/admin/pa/player-drop-overrides/:uid', requireAdmin, async (req, res) =
 // POST /admin/pa/player-drop-overrides/:uid  { geodeCooldownHours?, trophyCooldownHours?, bottleCooldownHours? }
 // Sets (or clears, via 0/null) one player's drop cooldowns. Targets only this uid — every
 // other player is completely unaffected and this is never shown anywhere in the game UI.
-app.post('/admin/pa/player-drop-overrides/:uid', requireAdmin, express.json(), async (req, res) => {
+app.post('/admin/pa/player-drop-overrides/:uid', paAdminMiddleware, express.json(), async (req, res) => {
   const uid = req.params.uid;
   if (!uid) return res.status(400).json({ ok: false, error: 'missing_uid' });
   const body = (req.body || {}) as Record<string, unknown>;
