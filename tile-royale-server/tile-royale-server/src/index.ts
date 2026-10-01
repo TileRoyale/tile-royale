@@ -4054,6 +4054,7 @@ import {
   handleAdminVersions,
   handleAdminCohorts,
   handleAdminGrowth,
+  handleAdminGrowthHourly,
   handleAdminDataQuality,
   handleAdminAutoclickers,
   handleAdminExportCsv,
@@ -4704,6 +4705,7 @@ app.get('/admin/analytics/api/zones',             paAdminMiddleware, handleAdmin
 app.get('/admin/analytics/api/versions',          paAdminMiddleware, handleAdminVersions);
 app.get('/admin/analytics/api/cohorts',           paAdminMiddleware, handleAdminCohorts);
 app.get('/admin/analytics/api/growth',            paAdminMiddleware, handleAdminGrowth);
+app.get('/admin/analytics/api/growth-hourly',     paAdminMiddleware, handleAdminGrowthHourly);
 app.get('/admin/analytics/api/quality',           paAdminMiddleware, handleAdminDataQuality);
 app.get('/admin/analytics/api/autoclickers',      paAdminMiddleware, handleAdminAutoclickers);
 app.get('/admin/analytics/export.csv',            paAdminMiddleware, handleAdminExportCsv);

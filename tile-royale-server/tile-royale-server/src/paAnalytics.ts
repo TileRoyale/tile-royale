@@ -967,6 +967,34 @@ export async function handleAdminGrowth(req: Request, res: Response): Promise<vo
   res.json({ bucket, newPlayers: newPlayers || [], activePlayers: activePlayers || [] });
 }
 
+// "Hour of Day" view — a 24-slot histogram (UTC, 0-23) aggregated across the player base's
+// whole history, not a continuous timeline. Answers "what time of day do players tend to show
+// up" rather than "how many on a specific calendar hour" (which would be thousands of bars
+// over a multi-month range and unreadable). Pure aggregation over existing created_at/last_seen
+// timestamps — no new tracking, no polling, nothing the client needs to do differently.
+export async function handleAdminGrowthHourly(_req: Request, res: Response): Promise<void> {
+  const [newRows, activeRows] = await Promise.all([
+    query(`
+      SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC')::int AS hour, COUNT(*) AS count
+      FROM pa_player_progress
+      WHERE total_play_time_seconds > $1
+      GROUP BY hour
+    `, [GROWTH_REAL_PLAYER_MIN_SECONDS]),
+    query(`
+      SELECT EXTRACT(HOUR FROM last_seen AT TIME ZONE 'UTC')::int AS hour, COUNT(*) AS count
+      FROM pa_player_progress
+      WHERE total_play_time_seconds > $1
+      GROUP BY hour
+    `, [GROWTH_REAL_PLAYER_MIN_SECONDS]),
+  ]);
+  // Fill all 24 hours (0 for any hour with no rows) so the chart always has a full, stable axis.
+  const fill = (rows: any[] | null) => {
+    const byHour = new Map((rows || []).map(r => [Number(r.hour), Number(r.count)]));
+    return Array.from({ length: 24 }, (_, h) => ({ hour: h, count: byHour.get(h) || 0 }));
+  };
+  res.json({ newByHour: fill(newRows), activeByHour: fill(activeRows) });
+}
+
 export async function handleAdminDataQuality(_req: Request, res: Response): Promise<void> {
   const rows = await query(`
     SELECT player_id,
@@ -1303,6 +1331,7 @@ canvas{width:100%!important;height:120px!important}
       <div id="gr-bucket-week"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('week')">Week</div>
       <div id="gr-bucket-month" class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('month')">Month</div>
       <div id="gr-bucket-year"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('year')">Year</div>
+      <div id="gr-bucket-hour"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('hour')">Hour of Day (UTC)</div>
     </div>
     <div id="growth-content">Loading…</div>
   </div>
@@ -1683,7 +1712,7 @@ function _svgBarChart(title, data, color) {
 let _growthBucket = 'day';
 function setGrowthBucket(b) {
   _growthBucket = b;
-  ['day','week','month','year'].forEach(x => document.getElementById('gr-bucket-'+x).classList.toggle('active', x === b));
+  ['day','week','month','year','hour'].forEach(x => document.getElementById('gr-bucket-'+x).classList.toggle('active', x === b));
   loadGrowth();
 }
 
@@ -1691,6 +1720,19 @@ async function loadGrowth() {
   const el = document.getElementById('growth-content');
   el.innerHTML = 'Loading…';
   try {
+    if (_growthBucket === 'hour') {
+      const data = await apiGet('growth-hourly');
+      const hh = (h) => String(h).padStart(2,'0') + ':00';
+      const newData    = (data.newByHour    || []).map(d => ({ period: hh(d.hour), count: d.count }));
+      const activeData = (data.activeByHour || []).map(d => ({ period: hh(d.hour), count: d.count }));
+      const newChart    = _svgBarChart('New Real Players — by hour of day, all-time (UTC)', newData, '#3fb950');
+      const activeChart = _svgBarChart('Active Real Players — by hour of day, all-time (UTC)', activeData, '#1f6feb');
+      el.innerHTML = \`<div style="color:#8b949e;font-size:11px;margin-bottom:12px">Aggregated across every day in the data, not a single day's timeline — shows the recurring daily rhythm (e.g. peak login hour) rather than any one date. Hours are UTC; shift by your local offset to read it in local time.</div>\`
+        + newChart
+        + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, at the hour of their most recent last-seen timestamp — skews toward recent play patterns rather than a true historical average.</div>\`
+        + activeChart;
+      return;
+    }
     const data = await apiGet('growth?bucket=' + _growthBucket);
     const newChart = _svgBarChart('New Real Players (by signup date)', data.newPlayers || [], '#3fb950');
     const activeChart = _svgBarChart('Active Real Players (by last-seen date)', data.activePlayers || [], '#1f6feb');
