@@ -1757,7 +1757,9 @@ async function loadGrowth() {
       const activeData = (data.activeByHour || []).map(d => ({ period: hh(d.hour), count: d.count }));
       const newChart    = _svgBarChart('New Real Players — by hour of day, all-time (UTC)', newData, '#3fb950');
       const activeChart = _svgBarChart('Active Real Players — by hour of day, all-time (UTC)', activeData, '#1f6feb');
-      el.innerHTML = \`<div style="color:#8b949e;font-size:11px;margin-bottom:12px">Aggregated across every day in the data, not a single day's timeline — shows the recurring daily rhythm (e.g. peak login hour) rather than any one date. Hours are UTC; shift by your local offset to read it in local time.</div>\`
+      el.innerHTML = \`<div class="chart-wrap" style="background:#1f6feb11;border-color:#1f6feb44;font-size:11px;color:#c9d1d9;margin-bottom:12px">
+        <b>This is not today.</b> Every bar is the SUM of that hour across ~\${fmtNum((data.newByHour||[]).reduce((s,d)=>s+d.count,0))} total signups spanning the whole player history (since launch) — so the 20:00 bar already includes every past day's 20:00, which is why it's filled in even if it isn't 20:00 yet today. This shows the recurring daily rhythm (which hour tends to be busiest), not a live clock of today's activity. Hours are UTC; Estonia is UTC+3 in October (EEST) — add 3h to read it in local time.
+      </div>\`
         + newChart
         + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, at the hour of their most recent last-seen timestamp — skews toward recent play patterns rather than a true historical average.</div>\`
         + activeChart;
