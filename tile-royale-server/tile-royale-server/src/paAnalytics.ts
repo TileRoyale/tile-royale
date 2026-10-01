@@ -1684,28 +1684,58 @@ async function loadCohorts() {
   } catch(e) { console.warn('Cohorts failed', e); }
 }
 
+// Rounds up to a "nice" axis-friendly number (1/2/5 × 10^n), so Y gridlines read as round
+// numbers (20, 50, 100…) instead of awkward fractions of the raw peak value.
+function _niceCeil(v) {
+  if (v <= 0) return 1;
+  const exp = Math.floor(Math.log10(v));
+  const base = Math.pow(10, exp);
+  const f = v / base;
+  const niceF = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
+  return niceF * base;
+}
+
 // Minimal dependency-free SVG bar chart — matches the rest of the dashboard's hand-rolled
-// sparkline style (no charting library). Each bar gets a native <title> tooltip on hover.
+// sparkline style (no charting library). Labeled X axis (period) and Y axis (count gridlines),
+// plus a native <title> tooltip per bar for the exact value.
 function _svgBarChart(title, data, color) {
   if (!data.length) return \`<div class="chart-wrap"><div class="section-title">\${H(title)}</div><span style="color:#8b949e">No data</span></div>\`;
-  const w = 900, h = 160, pad = 20;
-  const vals = data.map(d => Number(d.count) || 0);
-  const max = Math.max(...vals, 1);
+  const w = 900, h = 220, padL = 46, padR = 10, padT = 10, padB = 30;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
   const n = data.length;
-  const slot = (w - pad*2) / n;
-  const barW = Math.max(1, slot - 2);
-  const bars = data.map((d, i) => {
-    const x  = pad + i * slot;
-    const bh = (Number(d.count) || 0) / max * (h - pad*2);
-    const y  = h - pad - bh;
-    return \`<rect x="\${x.toFixed(1)}" y="\${y.toFixed(1)}" width="\${barW.toFixed(1)}" height="\${Math.max(0,bh).toFixed(1)}" fill="\${color}"><title>\${H(d.period)}: \${fmtNum(d.count)}</title></rect>\`;
+  const vals = data.map(d => Number(d.count) || 0);
+  const rawMax = Math.max(...vals, 1);
+  const axisMax = _niceCeil(rawMax);
+  const slot = plotW / n;
+  const barW = Math.max(1, slot - Math.max(1, slot * 0.15));
+
+  const yTicks = [0, axisMax/4, axisMax/2, axisMax*3/4, axisMax];
+  const grid = yTicks.map(t => {
+    const y = padT + plotH - (t / axisMax * plotH);
+    return \`<line x1="\${padL}" y1="\${y.toFixed(1)}" x2="\${w-padR}" y2="\${y.toFixed(1)}" stroke="#30363d" stroke-width="1"/>
+            <text x="\${padL-6}" y="\${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="#8b949e">\${fmtNum(Math.round(t))}</text>\`;
   }).join('');
+
+  const bars = data.map((d, i) => {
+    const v  = Number(d.count) || 0;
+    const x  = padL + i * slot + (slot - barW) / 2;
+    const bh = v / axisMax * plotH;
+    const y  = padT + plotH - bh;
+    return \`<rect x="\${x.toFixed(1)}" y="\${y.toFixed(1)}" width="\${barW.toFixed(1)}" height="\${Math.max(0,bh).toFixed(1)}" fill="\${color}"><title>\${H(d.period)}: \${fmtNum(v)}</title></rect>\`;
+  }).join('');
+
+  // X-axis labels — cap how many are drawn so they never overlap, regardless of bar count.
+  const maxLabels = 14;
+  const step = Math.max(1, Math.ceil(n / maxLabels));
+  const xLabels = data.map((d, i) => {
+    if (i % step !== 0 && i !== n - 1) return '';
+    const x = padL + i * slot + slot / 2;
+    return \`<text x="\${x.toFixed(1)}" y="\${h-padB+14}" text-anchor="middle" font-size="9" fill="#8b949e">\${H(d.period)}</text>\`;
+  }).join('');
+
   return \`<div class="chart-wrap">
-    <div class="section-title">\${H(title)} <span style="color:#8b949e;text-transform:none;font-weight:400;letter-spacing:normal">(peak \${fmtNum(max)})</span></div>
-    <svg viewBox="0 0 \${w} \${h}" width="100%" style="overflow:visible">\${bars}</svg>
-    <div style="display:flex;justify-content:space-between;color:#8b949e;font-size:10px;margin-top:4px">
-      <span>\${H(data[0].period)}</span><span>\${H(data[n-1].period)}</span>
-    </div>
+    <div class="section-title">\${H(title)} <span style="color:#8b949e;text-transform:none;font-weight:400;letter-spacing:normal">(peak \${fmtNum(rawMax)})</span></div>
+    <svg viewBox="0 0 \${w} \${h}" width="100%" style="overflow:visible">\${grid}\${bars}\${xLabels}</svg>
   </div>\`;
 }
 
@@ -1734,8 +1764,16 @@ async function loadGrowth() {
       return;
     }
     const data = await apiGet('growth?bucket=' + _growthBucket);
-    const newChart = _svgBarChart('New Real Players (by signup date)', data.newPlayers || [], '#3fb950');
-    const activeChart = _svgBarChart('Active Real Players (by last-seen date)', data.activePlayers || [], '#1f6feb');
+    // Server returns full ISO timestamps (DATE_TRUNC output) — trim to a label that fits the
+    // selected bucket so the X axis stays readable (e.g. "2026-07" for Month, not the full ISO string).
+    const fmtPeriod = (iso) => {
+      if (_growthBucket === 'year')  return iso.slice(0, 4);
+      if (_growthBucket === 'month') return iso.slice(0, 7);
+      return iso.slice(0, 10); // day/week — week bars are still labeled by their start date
+    };
+    const relabel = (rows) => (rows || []).map(d => ({ period: fmtPeriod(d.period), count: d.count }));
+    const newChart = _svgBarChart('New Real Players (by signup date)', relabel(data.newPlayers), '#3fb950');
+    const activeChart = _svgBarChart('Active Real Players (by last-seen date)', relabel(data.activePlayers), '#1f6feb');
     el.innerHTML = newChart
       + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, on their most recent last-seen date — there's no per-day session log, so this approximates true daily/weekly active counts rather than measuring them exactly.</div>\`
       + activeChart;
