@@ -19,6 +19,7 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   getAciResult, getAciLeaderboard, getAciParticipantCount,
   hasAciRewardClaim, recordAciRewardClaim, getAciPlayerRank,
   openAciBottle, redeemAciBottleCode, recordBottleFind, reportAciCasts, getAciCastCount,
+  getPlayerDropOverrides, setPlayerDropOverrides,
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
 import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
@@ -3300,6 +3301,41 @@ app.post('/pa/aci/bottle/found', verifyPAToken, async (req, res) => {
   const safeCompId = typeof compId === 'string' && compId ? compId : null;
   await recordBottleFind(bottleId, uid, safeCompId);
   res.json({ ok: true });
+});
+
+// GET /pa/player-drop-overrides — the signed-in player's OWN anti-cheat drop cooldown
+// overrides (empty object for the overwhelming majority with none set). Client fetches this
+// once per sign-in/launch and silently applies it — never surfaced in any UI.
+app.get('/pa/player-drop-overrides', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const overrides = await getPlayerDropOverrides(uid);
+  res.json({ ok: true, overrides });
+});
+
+// GET /admin/pa/player-drop-overrides/:uid — read a specific player's override values
+app.get('/admin/pa/player-drop-overrides/:uid', requireAdmin, async (req, res) => {
+  const uid = req.params.uid;
+  const overrides = await getPlayerDropOverrides(uid);
+  res.json({ ok: true, uid, overrides });
+});
+
+// POST /admin/pa/player-drop-overrides/:uid  { geodeCooldownHours?, trophyCooldownHours?, bottleCooldownHours? }
+// Sets (or clears, via 0/null) one player's drop cooldowns. Targets only this uid — every
+// other player is completely unaffected and this is never shown anywhere in the game UI.
+app.post('/admin/pa/player-drop-overrides/:uid', requireAdmin, express.json(), async (req, res) => {
+  const uid = req.params.uid;
+  if (!uid) return res.status(400).json({ ok: false, error: 'missing_uid' });
+  const body = (req.body || {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === 'number' && isFinite(v) && v > 0) ? v : undefined;
+  const overrides = {
+    geodeCooldownHours:  num(body.geodeCooldownHours),
+    trophyCooldownHours: num(body.trophyCooldownHours),
+    bottleCooldownHours: num(body.bottleCooldownHours),
+  };
+  const ok = await setPlayerDropOverrides(uid, overrides);
+  if (!ok) return res.status(500).json({ ok: false, error: 'db_error' });
+  const saved = await getPlayerDropOverrides(uid);
+  res.json({ ok: true, uid, overrides: saved });
 });
 
 // POST /pa/aci/bottle/open  { bottleId, compId? }  → { ok, code, reward }

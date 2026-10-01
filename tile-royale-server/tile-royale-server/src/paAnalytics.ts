@@ -1277,6 +1277,31 @@ canvas{width:100%!important;height:120px!important}
         </tbody></table>
       </div>
 
+      <!-- Per-player drop cooldown override (targets one flagged account, invisible to the player) -->
+      <div class="section-block">
+        <div class="section-title">Player-Specific Drop Cooldown Override</div>
+        <div style="font-size:11px;color:#8b949e;padding:0 10px 10px">
+          Targets ONE player by uid — nobody else is affected. When set, that player must wait the given
+          number of hours since their last drop of that item before the next one can roll at all (on top
+          of the normal rules above). Leave a field blank/0 to clear that override. Never shown to the player.
+        </div>
+        <table style="width:100%"><tbody>
+          <tr><td style="color:#8b949e;width:240px;padding:6px 10px">Player UID</td>
+              <td colspan="2"><input type="text" id="pdo-uid" style="width:320px" placeholder="firebase uid"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Geode cooldown (hours)</td>
+              <td><input type="number" id="pdo-geode" step="0.5" min="0" style="width:100px" placeholder="0 = no override"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Trophy Fish cooldown (hours)</td>
+              <td><input type="number" id="pdo-trophy" step="0.5" min="0" style="width:100px" placeholder="0 = no override"></td></tr>
+          <tr><td style="color:#8b949e;padding:6px 10px">Message-in-a-Bottle cooldown (hours)</td>
+              <td><input type="number" id="pdo-bottle" step="0.5" min="0" style="width:100px" placeholder="0 = no override"></td></tr>
+        </tbody></table>
+        <div id="pdo-status" style="margin:10px 10px 0;display:none;padding:8px 12px;border-radius:6px;font-size:12px"></div>
+        <div style="padding:10px">
+          <button onclick="loadPlayerDropOverride()" style="padding:8px 18px;font-size:13px">Load</button>
+          <button class="btn-primary" onclick="savePlayerDropOverride()" style="margin-left:8px;padding:8px 18px;font-size:13px">Save</button>
+        </div>
+      </div>
+
       <!-- Automation -->
       <div class="section-block">
         <div class="section-title">Automation Costs (blank = use code default)</div>
@@ -1911,6 +1936,49 @@ async function saveConfig() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     _cfgStatus('✓ Config saved! Players will see new prices on next app launch.', true);
   } catch(e) { _cfgStatus('Save failed: ' + e.message, false); }
+}
+
+function _pdoStatus(msg, ok) {
+  const el = document.getElementById('pdo-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = ok ? '#1a3a1a' : '#3a1a1a';
+  el.style.color = ok ? '#3fb950' : '#fc8181';
+  el.style.border = \`1px solid \${ok ? '#3fb950' : '#fc8181'}\`;
+}
+
+async function loadPlayerDropOverride() {
+  const uid = document.getElementById('pdo-uid').value.trim();
+  if (!uid) return _pdoStatus('Enter a player uid first.', false);
+  try {
+    const res = await fetch('/admin/pa/player-drop-overrides/' + encodeURIComponent(uid));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const ov = data.overrides || {};
+    document.getElementById('pdo-geode').value  = ov.geodeCooldownHours  || '';
+    document.getElementById('pdo-trophy').value = ov.trophyCooldownHours || '';
+    document.getElementById('pdo-bottle').value = ov.bottleCooldownHours || '';
+    const hasAny = ov.geodeCooldownHours || ov.trophyCooldownHours || ov.bottleCooldownHours;
+    _pdoStatus(hasAny ? 'Loaded — this player has an active override.' : 'Loaded — no override set for this player.', true);
+  } catch(e) { _pdoStatus('Load failed: ' + e.message, false); }
+}
+
+async function savePlayerDropOverride() {
+  const uid = document.getElementById('pdo-uid').value.trim();
+  if (!uid) return _pdoStatus('Enter a player uid first.', false);
+  const body = {
+    geodeCooldownHours:  parseFloat(document.getElementById('pdo-geode').value)  || 0,
+    trophyCooldownHours: parseFloat(document.getElementById('pdo-trophy').value) || 0,
+    bottleCooldownHours: parseFloat(document.getElementById('pdo-bottle').value) || 0,
+  };
+  try {
+    const res = await fetch('/admin/pa/player-drop-overrides/' + encodeURIComponent(uid), {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _pdoStatus('✓ Saved. Takes effect next time that player signs in / cloud-loads.', true);
+  } catch(e) { _pdoStatus('Save failed: ' + e.message, false); }
 }
 
 function sortBy(col) { _sortDir = _sortCol===col&&_sortDir==='desc'?'asc':'desc'; _sortCol = col; _page=1; loadPlayers(); }

@@ -705,6 +705,19 @@ async function createTables(): Promise<void> {
       comp_id    TEXT,
       found_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
+
+    -- Per-player anti-cheat drop cooldown overrides (admin-set, targets a single flagged
+    -- account without affecting anyone else). Each *_cooldown_hours column, when set and > 0,
+    -- means that uid must wait that many hours since their last drop of that item before the
+    -- next one can roll at all — on top of (not instead of) the normal global rules. NULL/0/no
+    -- row = no override, completely normal behavior (the default for every player).
+    CREATE TABLE IF NOT EXISTS pa_player_drop_overrides (
+      uid                    TEXT         PRIMARY KEY,
+      geode_cooldown_hours   REAL,
+      trophy_cooldown_hours  REAL,
+      bottle_cooldown_hours  REAL,
+      updated_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -3760,6 +3773,62 @@ export async function recordBottleFind(bottleId: string, uid: string, compId: st
     return true;
   } catch (err) {
     console.error('[DB] recordBottleFind error:', err);
+    return false;
+  }
+}
+
+// ─── Per-player anti-cheat drop cooldown overrides ────────────────────────────
+
+export type PlayerDropOverrides = {
+  geodeCooldownHours?: number;
+  trophyCooldownHours?: number;
+  bottleCooldownHours?: number;
+};
+
+// Returns {} (never null) when no row exists or the DB is unavailable — callers can always
+// treat an empty object as "no override, normal behavior" without a separate null check.
+export async function getPlayerDropOverrides(uid: string): Promise<PlayerDropOverrides> {
+  if (!pool || !dbAvailable) return {};
+  try {
+    const { rows } = await pool.query(
+      `SELECT geode_cooldown_hours, trophy_cooldown_hours, bottle_cooldown_hours
+       FROM pa_player_drop_overrides WHERE uid = $1`,
+      [uid]
+    );
+    if (!rows.length) return {};
+    const r = rows[0];
+    const out: PlayerDropOverrides = {};
+    if (r.geode_cooldown_hours  != null && Number(r.geode_cooldown_hours)  > 0) out.geodeCooldownHours  = Number(r.geode_cooldown_hours);
+    if (r.trophy_cooldown_hours != null && Number(r.trophy_cooldown_hours) > 0) out.trophyCooldownHours = Number(r.trophy_cooldown_hours);
+    if (r.bottle_cooldown_hours != null && Number(r.bottle_cooldown_hours) > 0) out.bottleCooldownHours = Number(r.bottle_cooldown_hours);
+    return out;
+  } catch (err) {
+    console.error('[DB] getPlayerDropOverrides error:', err);
+    return {};
+  }
+}
+
+// Upserts a player's override row. Passing 0/null/undefined for a field clears that one
+// field's override (stored as NULL) without touching the others.
+export async function setPlayerDropOverrides(uid: string, overrides: PlayerDropOverrides): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  const g = (overrides.geodeCooldownHours  && overrides.geodeCooldownHours  > 0) ? overrides.geodeCooldownHours  : null;
+  const t = (overrides.trophyCooldownHours && overrides.trophyCooldownHours > 0) ? overrides.trophyCooldownHours : null;
+  const b = (overrides.bottleCooldownHours && overrides.bottleCooldownHours > 0) ? overrides.bottleCooldownHours : null;
+  try {
+    await pool.query(
+      `INSERT INTO pa_player_drop_overrides (uid, geode_cooldown_hours, trophy_cooldown_hours, bottle_cooldown_hours, updated_at)
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT (uid) DO UPDATE SET
+         geode_cooldown_hours  = $2,
+         trophy_cooldown_hours = $3,
+         bottle_cooldown_hours = $4,
+         updated_at            = now()`,
+      [uid, g, t, b]
+    );
+    return true;
+  } catch (err) {
+    console.error('[DB] setPlayerDropOverrides error:', err);
     return false;
   }
 }
