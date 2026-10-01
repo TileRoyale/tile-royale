@@ -2374,27 +2374,11 @@ const PA_LATEST_VERSION     = "v1.0.7.72"; // Build 523 [Production] — live on
 // minBuild: first versionCode that should show the popup.
 // texts: localized announcement body keyed by locale code; 'en' is the required fallback.
 const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
-  track: 'production',
-  minBuild: 523,
+  track: 'internal',
+  minBuild: 526,
   texts: {
-    "en": "• Improved the auto-clicker penalty system",
-    "et": "• Parandasime autoclicker-vastast karistussüsteemi",
-    "de": "• Verbessertes Strafsystem gegen Auto-Clicker",
-    "el": "• Βελτιωμένο σύστημα ποινών κατά των autoclicker",
-    "es": "• Sistema de penalización contra autoclickers mejorado",
-    "fr": "• Système de pénalité contre les autoclickers amélioré",
-    "id": "• Sistem penalti autoclicker yang ditingkatkan",
-    "it": "• Migliorato il sistema di penalità anti-autoclicker",
-    "ja": "• オートクリッカー対策のペナルティシステムを改善",
-    "ko": "• 오토클리커 페널티 시스템 개선",
-    "nl": "• Verbeterd strafsysteem tegen autoclickers",
-    "pl": "• Ulepszony system kar za używanie autoclickera",
-    "pt-BR": "• Sistema de penalidade contra autoclicker aprimorado",
-    "th": "• ปรับปรุงระบบลงโทษการใช้ออโต้คลิกเกอร์",
-    "tr": "• Otomatik tıklama cezası sistemi iyileştirildi",
-    "vi": "• Cải thiện hệ thống phạt autoclicker",
-    "zh-CN": "• 改进了自动点击器惩罚系统",
-    "zh-TW": "• 改進了自動點擊器懲罰系統",
+    "en": "• New: Pets! Adopt a Siamese Cat at the Lake, assign it to a zone, and let it fish for you — level it up with 4 upgrade branches.\n• Mission rewards rebalanced.",
+    "et": "• Uus: Lemmikloomad! Võta Lake juures Siiami kass, määra see tsooni ja lase tal enda eest kalastada — arenda teda 4 upgrade-haru abil.\n• Missioonide tasud tasakaalustatud.",
   }
 };
 app.get("/pa/version", (_req, res) => {
