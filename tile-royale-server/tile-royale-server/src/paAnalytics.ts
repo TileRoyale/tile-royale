@@ -1051,6 +1051,21 @@ const AUTOCLICKER_TAPS_PER_24H_THRESHOLD = 10000;
 const AUTOCLICKER_MIN_ACTIVE_MS = 60 * 60 * 1000; // 1 hour
 const AUTOCLICKER_MIN_TAPS      = 1000;
 
+// Shared with GET /pa/player-drop-overrides (index.ts) — the SAME "today, UTC" check the admin
+// dashboard's Auto Clickers tab uses, reused there to automatically suppress Geode/Trophy
+// Fish/Message-in-a-Bottle (both ACI and manual — they already share one cooldown key) for a
+// flagged account. Re-evaluated fresh on every call (never a stored/persisted flag), so a player
+// is only ever suppressed while their OWN current-day tap count is actually over the threshold —
+// it lifts on its own next UTC day (or sooner, if this stops being called while the old count is
+// stale) and re-applies automatically if they cross the threshold again.
+export function isAutoClickerToday(save: any): boolean {
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const tapsTodayDate = typeof save?.stats?.tapsTodayDate === 'string' ? save.stats.tapsTodayDate : null;
+  if (tapsTodayDate !== todayUtc) return false; // stale or never-tracked (pre-Build 522 client)
+  const tapsToday = Number(save?.stats?.tapsToday) || 0;
+  return tapsToday > AUTOCLICKER_TAPS_PER_24H_THRESHOLD;
+}
+
 export async function handleAdminAutoclickers(req: Request, res: Response): Promise<void> {
   const mode: 'lifetime' | 'today' = req.query.mode === 'today' ? 'today' : 'lifetime';
   const rows = await query(`SELECT uid, save_json FROM pa_save_data`);
@@ -1370,6 +1385,7 @@ canvas{width:100%!important;height:120px!important}
     <div style="margin-bottom:12px;display:flex;gap:6px">
       <div id="ac-mode-lifetime" class="tab active" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setAutoclickerMode('lifetime')">Lifetime Average</div>
       <div id="ac-mode-today" class="tab" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setAutoclickerMode('today')">Last 24h (today, UTC)</div>
+      <div id="ac-mode-suppressed" class="tab" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setAutoclickerMode('suppressed')">Active Drop Suppression</div>
     </div>
     <div id="autoclickers-content">Loading…</div>
   </div>
@@ -1874,25 +1890,54 @@ function setAutoclickerMode(mode) {
   _acMode = mode;
   document.getElementById('ac-mode-lifetime').classList.toggle('active', mode === 'lifetime');
   document.getElementById('ac-mode-today').classList.toggle('active', mode === 'today');
+  document.getElementById('ac-mode-suppressed').classList.toggle('active', mode === 'suppressed');
   loadAutoclickers();
+}
+
+// "suppressed" is not a separate server mode — it reuses the exact same today/UTC flagging data
+// (mode=today) that drives GET /pa/player-drop-overrides' automatic suppression (see index.ts and
+// isAutoClickerToday in this file), since being flagged there IS what makes a uid's Geode/Trophy
+// Fish/Message-in-a-Bottle drops suppressed right now in-game. The countdown is pure client-side
+// arithmetic (always next UTC midnight — tapsToday only ever grows within a day, so once flagged
+// a uid stays flagged for the rest of it, and the suppression lifts the instant tapsTodayDate no
+// longer matches "today").
+function _utcMidnightCountdown() {
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+  const ms = Math.max(0, next.getTime() - now.getTime());
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return \`\${h}h \${m}m\`;
 }
 
 async function loadAutoclickers() {
   const el = document.getElementById('autoclickers-content');
   el.innerHTML = 'Loading…';
   try {
-    const data = await apiGet('autoclickers?mode=' + _acMode);
+    const data = await apiGet('autoclickers?mode=' + (_acMode === 'suppressed' ? 'today' : _acMode));
     const rows = data.flagged || [];
     let html = '';
     if (_acMode === 'today') {
       html += \`<div style="margin-bottom:10px;color:#8b949e;font-size:11px">Counts today's (UTC) taps so far — only populated for players on Build 522+ who have played today. \${fmtNum(data.noDataCount||0)} accounts have no data yet (older build or haven't played today).</div>\`;
     }
+    if (_acMode === 'suppressed') {
+      html += \`<div style="margin-bottom:10px;color:#8b949e;font-size:11px">These uids currently have Geode, Trophy Fish, and Message-in-a-Bottle (both ACI and manual) drops automatically disabled by the anti-cheat suppression — applied live, client-side, every time their own account polls GET /pa/player-drop-overrides. Lifts for everyone at once at the next UTC day rollover (same countdown for all rows below), and reapplies automatically if a uid crosses the threshold again on a later day.</div>\`;
+    }
     if (!rows.length) {
-      html += '<span style="color:#3fb950">No flagged accounts</span>';
+      html += \`<span style="color:#3fb950">\${_acMode === 'suppressed' ? 'No accounts currently suppressed' : 'No flagged accounts'}</span>\`;
       el.innerHTML = html;
       return;
     }
+    const resetIn = _acMode === 'suppressed' ? _utcMidnightCountdown() : null;
     const list = rows.map(r => {
+      if (_acMode === 'suppressed') {
+        return \`
+      <div style="padding:8px 0;border-bottom:1px solid #30363d;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <span class="warn-badge">\${fmtNum(r.tapsToday)} today</span>
+        <span style="color:#c9d1d9;min-width:140px">\${H(r.playerName || '(no name)')}</span>
+        <span style="color:#8b949e;font-size:11px;min-width:280px">\${H(r.uid)}</span>
+        <span style="color:#f85149;font-size:11px">resets in \${resetIn}</span>
+      </div>\`;
+      }
       if (_acMode === 'today') {
         return \`
       <div style="padding:8px 0;border-bottom:1px solid #30363d;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
@@ -1911,7 +1956,7 @@ async function loadAutoclickers() {
         <span style="color:#8b949e;font-size:11px">rate=\${n1(r.tapsPerSec)}/s</span>
       </div>\`;
     }).join('');
-    html += \`<div style="margin-bottom:6px">\${fmtNum(rows.length)} flagged accounts</div>\${list}\`;
+    html += \`<div style="margin-bottom:6px">\${fmtNum(rows.length)} \${_acMode === 'suppressed' ? 'accounts currently suppressed' : 'flagged accounts'}</div>\${list}\`;
     el.innerHTML = html;
   } catch(e) { el.textContent = 'Load failed'; }
 }

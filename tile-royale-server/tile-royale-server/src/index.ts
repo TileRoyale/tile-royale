@@ -60,6 +60,7 @@ import {
   handleAdminExportMilestonesCsv,
   serveAdminDashboard,
   createAnalyticsTables,
+  isAutoClickerToday,
 } from './paAnalytics';
 
 // Server-side mirror of the solo level gem rewards (levels with no reward = 0).
@@ -2406,26 +2407,26 @@ const PA_LATEST_VERSION     = "v1.0.7.72"; // Build 523 [Production] — live on
 // texts: localized announcement body keyed by locale code; 'en' is the required fallback.
 const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
-  minBuild: 523,
+  minBuild: 531,
   texts: {
-    "en": "• Improved the auto-clicker penalty system",
-    "et": "• Parandasime autoclicker-vastast karistussüsteemi",
-    "de": "• Verbessertes Strafsystem gegen Auto-Clicker",
-    "el": "• Βελτιωμένο σύστημα ποινών κατά των autoclicker",
-    "es": "• Sistema de penalización contra autoclickers mejorado",
-    "fr": "• Système de pénalité contre les autoclickers amélioré",
-    "id": "• Sistem penalti autoclicker yang ditingkatkan",
-    "it": "• Migliorato il sistema di penalità anti-autoclicker",
-    "ja": "• オートクリッカー対策のペナルティシステムを改善",
-    "ko": "• 오토클리커 페널티 시스템 개선",
-    "nl": "• Verbeterd strafsysteem tegen autoclickers",
-    "pl": "• Ulepszony system kar za używanie autoclickera",
-    "pt-BR": "• Sistema de penalidade contra autoclicker aprimorado",
-    "th": "• ปรับปรุงระบบลงโทษการใช้ออโต้คลิกเกอร์",
-    "tr": "• Otomatik tıklama cezası sistemi iyileştirildi",
-    "vi": "• Cải thiện hệ thống phạt autoclicker",
-    "zh-CN": "• 改进了自动点击器惩罚系统",
-    "zh-TW": "• 改進了自動點擊器懲罰系統",
+    "en": "• New: Pets\n• New: Missions",
+    "et": "• Uus: Lemmikloomad\n• Uus: Missioonid",
+    "de": "• Neu: Haustiere\n• Neu: Missionen",
+    "el": "• Νέο: Κατοικίδια\n• Νέο: Αποστολές",
+    "es": "• Nuevo: Mascotas\n• Nuevo: Misiones",
+    "fr": "• Nouveau : Animaux de compagnie\n• Nouveau : Missions",
+    "id": "• Baru: Hewan peliharaan\n• Baru: Misi",
+    "it": "• Nuovo: Animali domestici\n• Nuovo: Missioni",
+    "ja": "• 新機能：ペット\n• 新機能：ミッション",
+    "ko": "• 신규: 애완동물\n• 신규: 임무",
+    "nl": "• Nieuw: Huisdieren\n• Nieuw: Missies",
+    "pl": "• Nowość: Zwierzęta\n• Nowość: Misje",
+    "pt-BR": "• Novo: Animais de estimação\n• Novo: Missões",
+    "th": "• ใหม่: สัตว์เลี้ยง\n• ใหม่: ภารกิจ",
+    "tr": "• Yeni: Evcil hayvanlar\n• Yeni: Görevler",
+    "vi": "• Mới: Thú cưng\n• Mới: Nhiệm vụ",
+    "zh-CN": "• 新增：宠物\n• 新增：使命",
+    "zh-TW": "• 新增：寵物\n• 新增：使命",
   }
 };
 app.get("/pa/version", (_req, res) => {
@@ -3359,12 +3360,24 @@ app.post('/pa/aci/bottle/found', verifyPAToken, async (req, res) => {
 });
 
 // GET /pa/player-drop-overrides — the signed-in player's OWN anti-cheat drop cooldown
-// overrides (empty object for the overwhelming majority with none set). Client fetches this
-// once per sign-in/launch and silently applies it — never surfaced in any UI.
+// overrides (empty object for the overwhelming majority with none set), PLUS a live, automatic
+// "autoFlagged" check: if this player's own current-day tap count is over the same threshold the
+// admin dashboard's Auto Clickers tab uses, autoFlagged is true and the client suppresses Geode/
+// Trophy Fish/Message-in-a-Bottle (manual and ACI — they already share one cooldown key) entirely
+// for as long as that stays true. Nothing is written/persisted here — this is recomputed fresh on
+// every fetch from the player's own synced save, so it clears itself the moment their own
+// tapsToday/tapsTodayDate no longer qualifies (next UTC day, or sooner if conditions change) and
+// reapplies automatically if they cross the threshold again. Client fetches this periodically
+// during a session (not just once at launch) so it responds within that cadence either way.
 app.get('/pa/player-drop-overrides', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
   const overrides = await getPlayerDropOverrides(uid);
-  res.json({ ok: true, overrides });
+  let autoFlagged = false;
+  try {
+    const row = await loadPASave(uid);
+    if (row) autoFlagged = isAutoClickerToday(JSON.parse(row.saveJson));
+  } catch { /* malformed/missing save — never flag on a read failure */ }
+  res.json({ ok: true, overrides, autoFlagged });
 });
 
 // GET /admin/pa/player-drop-overrides/:uid — read a specific player's override values
