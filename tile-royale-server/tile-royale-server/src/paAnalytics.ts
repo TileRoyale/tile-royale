@@ -1058,18 +1058,31 @@ const AUTOCLICKER_MIN_TAPS      = 1000;
 // is only ever suppressed while their OWN current-day tap count is actually over the threshold —
 // it lifts on its own next UTC day (or sooner, if this stops being called while the old count is
 // stale) and re-applies automatically if they cross the threshold again.
-export function isAutoClickerToday(save: any): boolean {
+//
+// `thresholdOverride` — an admin-set per-uid threshold (pa_player_drop_overrides.autoclicker_threshold,
+// via getPlayerDropOverrides()) that replaces AUTOCLICKER_TAPS_PER_24H_THRESHOLD for this one
+// account when provided; omit/undefined uses the global default, same as before this param existed.
+export function isAutoClickerToday(save: any, thresholdOverride?: number): boolean {
   const todayUtc = new Date().toISOString().slice(0, 10);
   const tapsTodayDate = typeof save?.stats?.tapsTodayDate === 'string' ? save.stats.tapsTodayDate : null;
   if (tapsTodayDate !== todayUtc) return false; // stale or never-tracked (pre-Build 522 client)
   const tapsToday = Number(save?.stats?.tapsToday) || 0;
-  return tapsToday > AUTOCLICKER_TAPS_PER_24H_THRESHOLD;
+  const threshold = (typeof thresholdOverride === 'number' && thresholdOverride > 0) ? thresholdOverride : AUTOCLICKER_TAPS_PER_24H_THRESHOLD;
+  return tapsToday > threshold;
 }
 
 export async function handleAdminAutoclickers(req: Request, res: Response): Promise<void> {
   const mode: 'lifetime' | 'today' = req.query.mode === 'today' ? 'today' : 'lifetime';
   const rows = await query(`SELECT uid, save_json FROM pa_save_data`);
   if (!rows) { res.json({ mode, flagged: [], noDataCount: 0 }); return; }
+
+  // Per-uid threshold overrides (see pa_player_drop_overrides.autoclicker_threshold /
+  // isAutoClickerToday() in this file) — batched into one query rather than per-row, so the
+  // dashboard's numbers stay consistent with what's actually enforced live for an overridden
+  // account (e.g. a uid watched more closely at a lower threshold shows flagged here too).
+  const overrideRows = await query(`SELECT uid, autoclicker_threshold FROM pa_player_drop_overrides WHERE autoclicker_threshold IS NOT NULL`);
+  const thresholdOverrides = new Map<string, number>();
+  (overrideRows || []).forEach(r => { if (r.autoclicker_threshold != null) thresholdOverrides.set(r.uid, Number(r.autoclicker_threshold)); });
 
   const todayUtc = new Date().toISOString().slice(0, 10);
   const flagged: Array<Record<string, unknown>> = [];
@@ -1079,23 +1092,24 @@ export async function handleAdminAutoclickers(req: Request, res: Response): Prom
     let save: any;
     try { save = JSON.parse(row.save_json); } catch { continue; }
     const playerName = typeof save?.playerName === 'string' ? save.playerName : null;
+    const threshold = thresholdOverrides.get(row.uid) || AUTOCLICKER_TAPS_PER_24H_THRESHOLD;
 
     if (mode === 'today') {
       const tapsTodayDate = typeof save?.stats?.tapsTodayDate === 'string' ? save.stats.tapsTodayDate : null;
       if (tapsTodayDate !== todayUtc) { noDataCount++; continue; } // stale or never-tracked (pre-Build 522 client)
       const tapsToday = Number(save?.stats?.tapsToday) || 0;
-      if (tapsToday <= AUTOCLICKER_TAPS_PER_24H_THRESHOLD) continue;
-      flagged.push({ uid: row.uid, playerName, tapsToday, metric: tapsToday });
+      if (tapsToday <= threshold) continue;
+      flagged.push({ uid: row.uid, playerName, tapsToday, metric: tapsToday, threshold });
     } else {
       const totalTaps = Number(save?.stats?.totalTaps) || 0;
       const activeMs  = Number(save?.activePlaytimeMs) || 0;
       if (totalTaps < AUTOCLICKER_MIN_TAPS || activeMs < AUTOCLICKER_MIN_ACTIVE_MS) continue;
       const tapsPerSec        = totalTaps / (activeMs / 1000);
       const impliedTapsPer24h = Math.round(tapsPerSec * 86400);
-      if (impliedTapsPer24h <= AUTOCLICKER_TAPS_PER_24H_THRESHOLD) continue;
+      if (impliedTapsPer24h <= threshold) continue;
       flagged.push({
         uid: row.uid, playerName, totalTaps, activeHours: activeMs / 3600000,
-        tapsPerSec, impliedTapsPer24h, metric: impliedTapsPer24h,
+        tapsPerSec, impliedTapsPer24h, metric: impliedTapsPer24h, threshold,
       });
     }
   }

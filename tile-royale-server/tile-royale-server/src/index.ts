@@ -3375,7 +3375,7 @@ app.get('/pa/player-drop-overrides', verifyPAToken, async (req, res) => {
   let autoFlagged = false;
   try {
     const row = await loadPASave(uid);
-    if (row) autoFlagged = isAutoClickerToday(JSON.parse(row.saveJson));
+    if (row) autoFlagged = isAutoClickerToday(JSON.parse(row.saveJson), overrides.autoclickerThreshold);
   } catch { /* malformed/missing save — never flag on a read failure */ }
   res.json({ ok: true, overrides, autoFlagged });
 });
@@ -3391,18 +3391,25 @@ app.get('/admin/pa/player-drop-overrides/:uid', paAdminMiddleware, async (req, r
   res.json({ ok: true, uid, overrides });
 });
 
-// POST /admin/pa/player-drop-overrides/:uid  { geodeCooldownHours?, trophyCooldownHours?, bottleCooldownHours? }
-// Sets (or clears, via 0/null) one player's drop cooldowns. Targets only this uid — every
-// other player is completely unaffected and this is never shown anywhere in the game UI.
+// POST /admin/pa/player-drop-overrides/:uid  { geodeCooldownHours?, trophyCooldownHours?, bottleCooldownHours?, autoclickerThreshold? }
+// Sets (or clears, via 0/null) one player's drop cooldowns and/or their per-player auto-clicker
+// tap threshold (replaces the global AUTOCLICKER_TAPS_PER_24H_THRESHOLD=10000 for this uid only —
+// set LOWER to watch them more closely, higher to relax a known-legitimate fast clicker). Targets
+// only this uid — every other player is completely unaffected and this is never shown anywhere
+// in the game UI. Any field omitted from the request body is CLEARED (not left as-is) — this
+// endpoint always sets the full override row from what's given, so a caller that wants to change
+// only one field without disturbing the others must pass the existing values for the rest too
+// (fetch via GET /admin/pa/player-drop-overrides/:uid first).
 app.post('/admin/pa/player-drop-overrides/:uid', paAdminMiddleware, express.json(), async (req, res) => {
   const uid = req.params.uid;
   if (!uid) return res.status(400).json({ ok: false, error: 'missing_uid' });
   const body = (req.body || {}) as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === 'number' && isFinite(v) && v > 0) ? v : undefined;
   const overrides = {
-    geodeCooldownHours:  num(body.geodeCooldownHours),
-    trophyCooldownHours: num(body.trophyCooldownHours),
-    bottleCooldownHours: num(body.bottleCooldownHours),
+    geodeCooldownHours:   num(body.geodeCooldownHours),
+    trophyCooldownHours:  num(body.trophyCooldownHours),
+    bottleCooldownHours:  num(body.bottleCooldownHours),
+    autoclickerThreshold: num(body.autoclickerThreshold),
   };
   const ok = await setPlayerDropOverrides(uid, overrides);
   if (!ok) return res.status(500).json({ ok: false, error: 'db_error' });

@@ -718,6 +718,11 @@ async function createTables(): Promise<void> {
       bottle_cooldown_hours  REAL,
       updated_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
+    -- autoclicker_threshold: per-player override of AUTOCLICKER_TAPS_PER_24H_THRESHOLD (10000
+    -- by default). NULL = no override, uses the global default. Set LOWER than the default to
+    -- watch one specific account more closely (re-flags it sooner); set higher to relax it for a
+    -- known-legitimate fast clicker. See isAutoClickerToday() in paAnalytics.ts.
+    ALTER TABLE pa_player_drop_overrides ADD COLUMN IF NOT EXISTS autoclicker_threshold INTEGER;
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -3783,6 +3788,7 @@ export type PlayerDropOverrides = {
   geodeCooldownHours?: number;
   trophyCooldownHours?: number;
   bottleCooldownHours?: number;
+  autoclickerThreshold?: number;
 };
 
 // Returns {} (never null) when no row exists or the DB is unavailable — callers can always
@@ -3791,7 +3797,7 @@ export async function getPlayerDropOverrides(uid: string): Promise<PlayerDropOve
   if (!pool || !dbAvailable) return {};
   try {
     const { rows } = await pool.query(
-      `SELECT geode_cooldown_hours, trophy_cooldown_hours, bottle_cooldown_hours
+      `SELECT geode_cooldown_hours, trophy_cooldown_hours, bottle_cooldown_hours, autoclicker_threshold
        FROM pa_player_drop_overrides WHERE uid = $1`,
       [uid]
     );
@@ -3801,6 +3807,7 @@ export async function getPlayerDropOverrides(uid: string): Promise<PlayerDropOve
     if (r.geode_cooldown_hours  != null && Number(r.geode_cooldown_hours)  > 0) out.geodeCooldownHours  = Number(r.geode_cooldown_hours);
     if (r.trophy_cooldown_hours != null && Number(r.trophy_cooldown_hours) > 0) out.trophyCooldownHours = Number(r.trophy_cooldown_hours);
     if (r.bottle_cooldown_hours != null && Number(r.bottle_cooldown_hours) > 0) out.bottleCooldownHours = Number(r.bottle_cooldown_hours);
+    if (r.autoclicker_threshold != null && Number(r.autoclicker_threshold) > 0) out.autoclickerThreshold = Number(r.autoclicker_threshold);
     return out;
   } catch (err) {
     console.error('[DB] getPlayerDropOverrides error:', err);
@@ -3815,16 +3822,18 @@ export async function setPlayerDropOverrides(uid: string, overrides: PlayerDropO
   const g = (overrides.geodeCooldownHours  && overrides.geodeCooldownHours  > 0) ? overrides.geodeCooldownHours  : null;
   const t = (overrides.trophyCooldownHours && overrides.trophyCooldownHours > 0) ? overrides.trophyCooldownHours : null;
   const b = (overrides.bottleCooldownHours && overrides.bottleCooldownHours > 0) ? overrides.bottleCooldownHours : null;
+  const a = (overrides.autoclickerThreshold && overrides.autoclickerThreshold > 0) ? overrides.autoclickerThreshold : null;
   try {
     await pool.query(
-      `INSERT INTO pa_player_drop_overrides (uid, geode_cooldown_hours, trophy_cooldown_hours, bottle_cooldown_hours, updated_at)
-       VALUES ($1, $2, $3, $4, now())
+      `INSERT INTO pa_player_drop_overrides (uid, geode_cooldown_hours, trophy_cooldown_hours, bottle_cooldown_hours, autoclicker_threshold, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now())
        ON CONFLICT (uid) DO UPDATE SET
          geode_cooldown_hours  = $2,
          trophy_cooldown_hours = $3,
          bottle_cooldown_hours = $4,
+         autoclicker_threshold = $5,
          updated_at            = now()`,
-      [uid, g, t, b]
+      [uid, g, t, b, a]
     );
     return true;
   } catch (err) {
