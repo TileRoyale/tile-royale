@@ -24,11 +24,10 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
 import * as firebaseAdmin from "firebase-admin";
 import { readFileSync } from "fs";
 import path from "path";
-import {
-  Environment as AppleEnvironment,
-  JWSTransactionDecodedPayload,
-  SignedDataVerifier,
-} from "@apple/app-store-server-library";
+// Environment/SignedDataVerifier are lazy-loaded (see _appleVerifierLib() near their first use,
+// around the PA IAP section) — only the TYPE is imported statically here, which TypeScript erases
+// completely at compile time (no runtime require(), unlike a value import).
+import type { JWSTransactionDecodedPayload, SignedDataVerifier } from "@apple/app-store-server-library";
 // Moved up from its original position further down this file (was right before its first use,
 // around where the old /admin/analytics routes are registered). TypeScript compiles `import` to a
 // `require()` call AT THE SOURCE POSITION it appears (not hoisted to the top, unlike native ES
@@ -4123,24 +4122,36 @@ app.post('/pa/analytics/progress', express.json({ limit: '64kb' }), handleAnalyt
 const PA_PACKAGE_NAME = "com.henlygames.patientangler";
 const PA_APPLE_ID = 6815526962;
 
+// @apple/app-store-server-library is lazy-loaded the same way googleapis is above (see that
+// comment for the full rationale) — only used for iOS purchase verification, so there's no reason
+// to hold it (and construct both verifiers, including reading the root certificate files off
+// disk) in memory for the server's entire lifetime when most requests never touch it. Loaded once
+// on first actual use and cached; identical certs/environments/error handling to before, only the
+// load timing changed.
 let _paAppleProductionVerifier: SignedDataVerifier | null = null;
 let _paAppleSandboxVerifier: SignedDataVerifier | null = null;
+let _paAppleVerifiersReady = false;
 
-try {
-  const certDir = path.join(process.cwd(), 'apple-root-certificates');
-  const roots = [
-    readFileSync(path.join(certDir, 'AppleRootCA-G2.cer')),
-    readFileSync(path.join(certDir, 'AppleRootCA-G3.cer')),
-  ];
-  _paAppleProductionVerifier = new SignedDataVerifier(
-    roots, true, AppleEnvironment.PRODUCTION, PA_PACKAGE_NAME, PA_APPLE_ID
-  );
-  _paAppleSandboxVerifier = new SignedDataVerifier(
-    roots, true, AppleEnvironment.SANDBOX, PA_PACKAGE_NAME
-  );
-  console.log('[PA-IAP] Apple StoreKit JWS verification ready');
-} catch (error: any) {
-  console.error('[PA-IAP] Apple StoreKit JWS verification unavailable:', error?.message || error);
+async function _ensureAppleVerifiers(): Promise<void> {
+  if (_paAppleVerifiersReady) return;
+  _paAppleVerifiersReady = true;
+  try {
+    const { Environment: AppleEnvironment, SignedDataVerifier: SignedDataVerifierCtor } = await import('@apple/app-store-server-library');
+    const certDir = path.join(process.cwd(), 'apple-root-certificates');
+    const roots = [
+      readFileSync(path.join(certDir, 'AppleRootCA-G2.cer')),
+      readFileSync(path.join(certDir, 'AppleRootCA-G3.cer')),
+    ];
+    _paAppleProductionVerifier = new SignedDataVerifierCtor(
+      roots, true, AppleEnvironment.PRODUCTION, PA_PACKAGE_NAME, PA_APPLE_ID
+    );
+    _paAppleSandboxVerifier = new SignedDataVerifierCtor(
+      roots, true, AppleEnvironment.SANDBOX, PA_PACKAGE_NAME
+    );
+    console.log('[PA-IAP] Apple StoreKit JWS verification ready');
+  } catch (error: any) {
+    console.error('[PA-IAP] Apple StoreKit JWS verification unavailable:', error?.message || error);
+  }
 }
 
 // Server-authoritative PA product catalog — must match iap.js DIAMOND_PACK_MAP exactly.
@@ -4203,6 +4214,7 @@ async function verifyWithApplePA(
   productId: string,
   signedTransaction: string
 ): Promise<{ valid: boolean; quantity: number; transactionId?: string; originalTransactionId?: string; environment?: string }> {
+  await _ensureAppleVerifiers();
   if (!_paAppleProductionVerifier || !_paAppleSandboxVerifier) {
     console.error('[PA-IAP] Apple purchase rejected — JWS verifiers are unavailable.');
     return { valid: false, quantity: 1 };
