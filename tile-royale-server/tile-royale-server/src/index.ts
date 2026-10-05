@@ -21,7 +21,6 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   openAciBottle, redeemAciBottleCode, recordBottleFind, reportAciCasts, getAciCastCount,
   getPlayerDropOverrides, setPlayerDropOverrides,
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
-import { google } from "googleapis";
 import * as firebaseAdmin from "firebase-admin";
 import { readFileSync } from "fs";
 import path from "path";
@@ -1867,6 +1866,20 @@ app.get("/practice/leaderboard", async (_req, res) => {
 
 // ─── IAP Purchase Verification ───────────────────────────────────────────────
 
+// googleapis is a large dependency (bundles client libraries for dozens of Google APIs) that used
+// to be imported statically at the top of this file, holding it fully loaded in memory for the
+// server's entire lifetime — even though it's only used by the three Google Play functions below
+// (verifyWithGooglePlay, verifyWithGooglePlayPA, pollPAVoidedPurchases). Loaded once, on first
+// actual use, and cached (import() of an already-loaded module resolves from Node's module cache,
+// not re-parsed) — identical credentials/scopes/API calls to before, only the load TIMING changed
+// (on first real purchase/poll instead of unconditionally at boot). Reduces the server's resident
+// memory footprint, which Railway bills continuously regardless of whether a request ever uses it.
+let _googleapisModule: typeof import('googleapis') | null = null;
+async function _googleapis() {
+  if (!_googleapisModule) _googleapisModule = await import('googleapis');
+  return _googleapisModule.google;
+}
+
 const PACKAGE_NAME = "com.tileroyale.game";
 
 // Server-authoritative product catalog — must match client shop.js exactly.
@@ -1909,6 +1922,7 @@ async function verifyWithGooglePlay(productId: string, purchaseToken: string): P
   }
   try {
     const credentials = JSON.parse(keyJson);
+    const google = await _googleapis();
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/androidpublisher'],
@@ -4157,6 +4171,7 @@ async function verifyWithGooglePlayPA(productId: string, purchaseToken: string):
   }
   try {
     const credentials = JSON.parse(keyJson);
+    const google = await _googleapis();
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/androidpublisher'],
@@ -4358,6 +4373,7 @@ async function pollPAVoidedPurchases(): Promise<void> {
 
   try {
     const credentials = JSON.parse(keyJson);
+    const google = await _googleapis();
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/androidpublisher'],
