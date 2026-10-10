@@ -169,6 +169,20 @@ if (!process.env.GOOGLE_PLAY_KEY_JSON) {
   console.error('[IAP]    Set GOOGLE_PLAY_KEY_JSON in Railway environment variables before going live.');
 }
 
+// Safety net (added 2026-10-10 after a ~1-day production outage): any single unhandled error
+// anywhere in the process — a stray throw in a request handler, an unawaited rejected promise,
+// a background event like the Postgres pool's own 'error' — otherwise crashes the ENTIRE server
+// for every player, not just the one request that triggered it. Log and keep running instead.
+// This is a last-resort net, not a substitute for fixing root causes (see db.ts's pool.on("error")
+// for the actual root cause of the 2026-10-09 outage) — a process that keeps hobbling along after
+// swallowing a truly corrupting error is still better than one that's simply dead for a day.
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL-GUARD] Uncaught exception (process kept alive):", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL-GUARD] Unhandled promise rejection (process kept alive):", reason);
+});
+
 const port   = Number(process.env.PORT   || 3000);
 const region = process.env.REGION || "EU";   // EU | NA | ASIA
 const app    = express();

@@ -37,6 +37,19 @@ export async function initDb(): Promise<void> {
     connectionTimeoutMillis: 5000,
   });
 
+  // CRITICAL: node-postgres emits 'error' on the Pool whenever an IDLE client in the pool loses
+  // its connection in the background (a brief network blip on Railway's internal Postgres link,
+  // completely unrelated to any query currently in flight). An EventEmitter 'error' with no
+  // listener is fatal in Node — it crashes the entire process, bypassing every query()-level
+  // try/catch in this file entirely, since those only guard queries actually awaited in request
+  // handlers, never this background event. Root cause of the 2026-10-09 production outage: no
+  // listener existed, so a single dropped idle connection took the whole server down for ~1 day
+  // until manually noticed. This listener alone fixes it — the pool recovers the dropped
+  // connection on its own; it just needs the 'error' event to not go unhandled.
+  pool.on("error", (err) => {
+    console.error("[DB] Pool error on idle client (recovered, not fatal):", err?.message || err);
+  });
+
   try {
     const result = await pool.query("SELECT version()");
     dbAvailable = true;
@@ -718,7 +731,7 @@ async function createTables(): Promise<void> {
       bottle_cooldown_hours  REAL,
       updated_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
-    -- autoclicker_threshold: per-player override of AUTOCLICKER_TAPS_PER_24H_THRESHOLD (10000
+    -- autoclicker_threshold: per-player override of AUTOCLICKER_TAPS_PER_24H_THRESHOLD (20000
     -- by default). NULL = no override, uses the global default. Set LOWER than the default to
     -- watch one specific account more closely (re-flags it sooner); set higher to relax it for a
     -- known-legitimate fast clicker. See isAutoClickerToday() in paAnalytics.ts.
@@ -1831,7 +1844,17 @@ export async function savePASave(uid: string, saveJson: string): Promise<boolean
        )`,
       [uid]
     );
-    await query(
+    // query() swallows DB errors internally and returns null rather than throwing (by design, so
+    // one failed query doesn't take down unrelated code) — but that means THIS function must
+    // check the result itself, or a connection hiccup during the one write that actually matters
+    // silently returns `true` to the client anyway, reporting a successful cloud save that never
+    // actually happened (found 2026-10-10 while investigating the DB pool crash outage — a
+    // separate, pre-existing bug, not something that outage itself caused). The two steps above
+    // (history archive/trim) are best-effort and intentionally NOT checked the same way — losing
+    // one history row to a hiccup is fine; a player being told their actual save succeeded when
+    // it didn't is not. An UPDATE/INSERT with no RETURNING clause resolves an empty array (not
+    // null) on real success, so null here unambiguously means the query itself failed.
+    const result = await query(
       `INSERT INTO pa_save_data (uid, save_json, updated_at)
        VALUES ($1, $2, now())
        ON CONFLICT (uid) DO UPDATE SET
@@ -1839,7 +1862,7 @@ export async function savePASave(uid: string, saveJson: string): Promise<boolean
          updated_at = now()`,
       [uid, saveJson]
     );
-    return true;
+    return result !== null;
   } catch (err) {
     console.error('[DB] savePASave error:', err);
     return false;
