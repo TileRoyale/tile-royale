@@ -2427,7 +2427,7 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.7.77"; // Build 541 [Production] — live on Play Store 2026-10-05
+const PA_LATEST_VERSION     = "v1.0.8.0"; // Build 552 [Production] — live on Play Store 2026-10-10
 // Set to null when there is no active announcement.
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
