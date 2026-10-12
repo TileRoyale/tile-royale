@@ -2433,7 +2433,11 @@ const PA_LATEST_VERSION     = "v1.0.8.1"; // Build 557 [Production] — live on 
 // from Android's build number / versionName above. The iOS client compares itself only
 // against these two values, never against PA_MIN_CLIENT_VERSION/PA_LATEST_VERSION.
 const PA_IOS_MIN_CLIENT_VERSION = "v1.0";
-const PA_IOS_LATEST_VERSION     = "v1.0.8"; // live on the App Store — bump to v1.0.9 once that version goes live
+const PA_IOS_LATEST_VERSION     = "v1.0.9"; // live on the App Store
+// Temporary compatibility switch for iOS 1.0.9 (Build 51), which predates the
+// ?platform=ios client fix and would otherwise compare itself against Android.
+// Set to false when iOS 1.0.10 is live.
+const PA_LEGACY_IOS_VERSION_CHECK_DISABLED = true;
 // Set to null when there is no active announcement.
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
@@ -2466,8 +2470,13 @@ app.get("/pa/version", (req, res) => {
   // ?platform=ios selects the iOS-specific min/latest pair; everything else (Android,
   // web) keeps using the original Android values. See PA_IOS_MIN_CLIENT_VERSION above.
   const isIOS = String(req.query.platform || "").toLowerCase() === "ios";
+  const isLegacyIOS = PA_LEGACY_IOS_VERSION_CHECK_DISABLED
+    && !isIOS
+    && String(req.get("origin") || "").toLowerCase().startsWith("capacitor://");
   const payload: Record<string, unknown> = isIOS
     ? { minClientVersion: PA_IOS_MIN_CLIENT_VERSION, latestVersion: PA_IOS_LATEST_VERSION }
+    : isLegacyIOS
+      ? { minClientVersion: PA_IOS_MIN_CLIENT_VERSION, latestVersion: null }
     : { minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION };
   if (PA_ANNOUNCEMENT) payload.announcement = PA_ANNOUNCEMENT;
   res.json(payload);
