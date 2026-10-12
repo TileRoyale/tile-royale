@@ -2433,7 +2433,7 @@ const PA_LATEST_VERSION     = "v1.0.8.0"; // Build 552 [Production] — live on 
 // from Android's build number / versionName above. The iOS client compares itself only
 // against these two values, never against PA_MIN_CLIENT_VERSION/PA_LATEST_VERSION.
 const PA_IOS_MIN_CLIENT_VERSION = "v1.0";
-const PA_IOS_LATEST_VERSION     = "v1.0.7.79"; // live on the App Store
+const PA_IOS_LATEST_VERSION     = "v1.0.8"; // live on the App Store — bump to v1.0.9 once that version goes live
 // Set to null when there is no active announcement.
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.

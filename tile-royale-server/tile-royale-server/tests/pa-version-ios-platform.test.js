@@ -85,14 +85,14 @@ test('platform=ios -> returns the iOS-specific min+latest pair, never the Androi
   const handler = makeHandler();
   const body = handler({ platform: 'ios' });
   assert.strictEqual(body.minClientVersion, 'v1.0');
-  assert.strictEqual(body.latestVersion, 'v1.0.7.79');
+  assert.strictEqual(body.latestVersion, 'v1.0.8');
   assert.notStrictEqual(body.latestVersion, 'v1.0.8.0', 'must not leak the Android latest value onto iOS');
 });
 
 test('platform=IOS (case-insensitive) -> still resolves to the iOS pair', () => {
   const handler = makeHandler();
   const body = handler({ platform: 'IOS' });
-  assert.strictEqual(body.latestVersion, 'v1.0.7.79');
+  assert.strictEqual(body.latestVersion, 'v1.0.8');
 });
 
 test('platform=android (explicit, non-ios) -> falls back to the Android pair, same as omitted', () => {
