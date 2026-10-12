@@ -2427,7 +2427,7 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.8.0"; // Build 552 [Production] — live on Play Store 2026-10-10
+const PA_LATEST_VERSION     = "v1.0.8.1"; // Build 557 [Production] — live on Play Store 2026-10-12
 
 // iOS ships its own native App Store version numbers (e.g. "1.0.9"), set independently
 // from Android's build number / versionName above. The iOS client compares itself only
