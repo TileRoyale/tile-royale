@@ -2428,6 +2428,12 @@ app.get("/", (_req, res) => {
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
 const PA_LATEST_VERSION     = "v1.0.8.0"; // Build 552 [Production] — live on Play Store 2026-10-10
+
+// iOS ships its own native App Store version numbers (e.g. "1.0.9"), set independently
+// from Android's build number / versionName above. The iOS client compares itself only
+// against these two values, never against PA_MIN_CLIENT_VERSION/PA_LATEST_VERSION.
+const PA_IOS_MIN_CLIENT_VERSION = "v1.0";
+const PA_IOS_LATEST_VERSION     = "v1.0.7.79"; // live on the App Store
 // Set to null when there is no active announcement.
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
@@ -2456,8 +2462,13 @@ const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; te
     "zh-TW": "• 新增：古代大帆船現在有2個長夜間遠征（4小時/6小時）——睡前派遣，不再有50分鐘限制\n• 新增：遠征派遣介面重新設計——緊湊矩陣+參考表取代冗長列表\n• 新增：萬聖節獎勵標籤現在也顯示排行榜獎勵\n• 已修復：「神聖洞察」遺物加成未在金庫獎勵彈窗中顯示\n• 已修復：部落提示未提及Rep I也需要水晶",
   }
 };
-app.get("/pa/version", (_req, res) => {
-  const payload: Record<string, unknown> = { minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION };
+app.get("/pa/version", (req, res) => {
+  // ?platform=ios selects the iOS-specific min/latest pair; everything else (Android,
+  // web) keeps using the original Android values. See PA_IOS_MIN_CLIENT_VERSION above.
+  const isIOS = String(req.query.platform || "").toLowerCase() === "ios";
+  const payload: Record<string, unknown> = isIOS
+    ? { minClientVersion: PA_IOS_MIN_CLIENT_VERSION, latestVersion: PA_IOS_LATEST_VERSION }
+    : { minClientVersion: PA_MIN_CLIENT_VERSION, latestVersion: PA_LATEST_VERSION };
   if (PA_ANNOUNCEMENT) payload.announcement = PA_ANNOUNCEMENT;
   res.json(payload);
 });
