@@ -82,7 +82,7 @@ test('no platform query param -> returns the Android/web min+latest pair', () =>
   const handler = makeHandler();
   const body = handler({});
   assert.strictEqual(body.minClientVersion, 'v0.1.5');
-  assert.strictEqual(body.latestVersion, 'v1.0.8.1');
+  assert.strictEqual(body.latestVersion, 'v1.0.8.2');
 });
 
 test('legacy iOS origin without platform query -> temporarily disables the soft update version', () => {
@@ -95,7 +95,7 @@ test('legacy iOS origin without platform query -> temporarily disables the soft 
 test('Android Capacitor origin without platform query -> keeps Android/web versions', () => {
   const handler = makeHandler();
   const body = handler({}, 'https://localhost');
-  assert.strictEqual(body.latestVersion, 'v1.0.8.1');
+  assert.strictEqual(body.latestVersion, 'v1.0.8.2');
 });
 
 test('platform=ios -> returns the iOS-specific min+latest pair, never the Android one', () => {
@@ -115,7 +115,7 @@ test('platform=IOS (case-insensitive) -> still resolves to the iOS pair', () => 
 test('platform=android (explicit, non-ios) -> falls back to the Android pair, same as omitted', () => {
   const handler = makeHandler();
   const body = handler({ platform: 'android' });
-  assert.strictEqual(body.latestVersion, 'v1.0.8.1');
+  assert.strictEqual(body.latestVersion, 'v1.0.8.2');
 });
 
 test('announcement (when set) is included identically on both platforms', () => {
