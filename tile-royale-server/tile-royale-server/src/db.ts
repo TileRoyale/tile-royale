@@ -191,6 +191,31 @@ async function createTables(): Promise<void> {
       updated_at   TIMESTAMPTZ  DEFAULT now()
     );
 
+    -- Open Seas Mythics: a real-time exponential timer plus authoritative copies.
+    CREATE TABLE IF NOT EXISTS pa_mythic_state (
+      uid TEXT PRIMARY KEY,
+      fortune_level INTEGER NOT NULL DEFAULT 0,
+      hazard_progress DOUBLE PRECISION NOT NULL DEFAULT 0,
+      hazard_target DOUBLE PRECISION NOT NULL,
+      last_eval_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      pending BOOLEAN NOT NULL DEFAULT false,
+      pending_zone TEXT,
+      cooldown_until TIMESTAMPTZ,
+      active_zones_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    ALTER TABLE pa_mythic_state ADD COLUMN IF NOT EXISTS pending_zone TEXT;
+    ALTER TABLE pa_mythic_state ADD COLUMN IF NOT EXISTS cooldown_until TIMESTAMPTZ;
+    ALTER TABLE pa_mythic_state ADD COLUMN IF NOT EXISTS active_zones_json TEXT NOT NULL DEFAULT '[]';
+    CREATE TABLE IF NOT EXISTS pa_mythic_items (
+      uid TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      caught INTEGER NOT NULL DEFAULT 0,
+      available INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (uid, item_id)
+    );
+
     -- Rolling backup of the last 3 saves per player (auto-purged beyond 3)
     CREATE TABLE IF NOT EXISTS pa_save_history (
       id           SERIAL       PRIMARY KEY,
@@ -1926,6 +1951,8 @@ export async function deletePAAccountData(uid: string): Promise<boolean> {
       'DELETE FROM pa_codes_used WHERE uid = $1',
       'DELETE FROM pa_referral_codes WHERE uid = $1',
       'DELETE FROM pa_corrections WHERE uid = $1',
+      'DELETE FROM pa_mythic_items WHERE uid = $1',
+      'DELETE FROM pa_mythic_state WHERE uid = $1',
       'DELETE FROM pa_save_history WHERE uid = $1',
       'DELETE FROM pa_save_data WHERE uid = $1',
     ];

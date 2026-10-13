@@ -22,6 +22,7 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   getPlayerDropOverrides, setPlayerDropOverrides,
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
 import * as firebaseAdmin from "firebase-admin";
+import { PA_MYTHIC_COOLDOWN_MS, PA_MYTHIC_ZONES, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicFortune, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from "./paMythic";
 import { readFileSync } from "fs";
 import path from "path";
 // Environment/SignedDataVerifier are lazy-loaded (see _appleVerifierLib() near their first use,
@@ -2393,6 +2394,103 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
   const corrections = await popPACorrections(uid); // one-shot admin override; null if none pending
   if (!data) return res.json({ ok: true, save: null, ...(corrections ? { corrections } : {}) });
   res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt, ...(corrections ? { corrections } : {}) });
+});
+
+// Open Seas Mythics use real elapsed time and a server-owned exponential draw.
+// Time advances only while the authoritative cloud save has active Open Seas
+// automation. A pending reward is tied to one of those active zones.
+app.get('/pa/mythic/status', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const zone = typeof req.query.zone === 'string' ? req.query.zone : '';
+  const claim = req.query.claim === '1' && !!PA_MYTHIC_ZONES[zone];
+  const saveRow = await loadPASave(uid);
+  let save: any = {};
+  try { save = saveRow ? JSON.parse(saveRow.saveJson) : {}; } catch { save = {}; }
+  const fortune = paMythicFortune(save);
+  const activeZones = paMythicActiveZones(save);
+
+  await query(
+    `INSERT INTO pa_mythic_state (uid, fortune_level, hazard_target, active_zones_json)
+     VALUES ($1, $2, $3, $4) ON CONFLICT (uid) DO NOTHING`,
+    [uid, fortune, paMythicTarget(), JSON.stringify(activeZones)]
+  );
+  const stateRows = await query(`SELECT * FROM pa_mythic_state WHERE uid = $1`, [uid]);
+  if (!stateRows?.length) return res.status(503).json({ ok:false, error:'state_unavailable' });
+  const state: any = stateRows[0];
+  const previousFortune = Math.max(0, Math.min(100, Number(state.fortune_level) || 0));
+  const nowMs = Date.now();
+  const lastEvalMs = new Date(state.last_eval_at).getTime();
+  const cooldownUntilMs = state.cooldown_until ? new Date(state.cooldown_until).getTime() : null;
+  const elapsedMs = paMythicEligibleElapsed(lastEvalMs, nowMs, cooldownUntilMs);
+  let previousActiveZones: string[] = [];
+  try { previousActiveZones = JSON.parse(state.active_zones_json || '[]'); } catch { previousActiveZones = []; }
+  previousActiveZones = previousActiveZones.filter(id => !!PA_MYTHIC_ZONES[id]).slice(0, 2);
+  let progress = paMythicAdvance(Number(state.hazard_progress) || 0, elapsedMs, previousFortune, previousActiveZones);
+  let pending = !!state.pending || progress >= Number(state.hazard_target);
+  let pendingZone = typeof state.pending_zone === 'string' ? state.pending_zone : null;
+  if (pending && !pendingZone) pendingZone = paMythicPendingZone(previousActiveZones);
+  await query(
+    `UPDATE pa_mythic_state SET fortune_level=$2, hazard_progress=$3,
+       last_eval_at=now(), pending=$4, pending_zone=$5, active_zones_json=$6, updated_at=now() WHERE uid=$1`,
+    [uid, fortune, progress, pending, pendingZone, JSON.stringify(activeZones)]
+  );
+
+  const beforeRows = await query(`SELECT item_id, caught, available FROM pa_mythic_items WHERE uid=$1`, [uid]);
+  const before: Record<string, number> = {};
+  const available: Record<string, number> = {};
+  for (const row of beforeRows || []) {
+    before[String(row.item_id)] = Number(row.caught) || 0;
+    available[String(row.item_id)] = Number(row.available) || 0;
+  }
+  let event: any = null;
+
+  if (claim && pending && pendingZone === zone && activeZones.includes(zone)) {
+    // The conditional update makes delivery single-use even if two devices claim together.
+    const consumed = await query(
+      `UPDATE pa_mythic_state SET pending=false, pending_zone=NULL, hazard_progress=0, hazard_target=$2,
+         cooldown_until=now() + ($3 * interval '1 millisecond'),
+         last_eval_at=now(), updated_at=now() WHERE uid=$1 AND pending=true RETURNING uid`,
+      [uid, paMythicTarget(), PA_MYTHIC_COOLDOWN_MS]
+    );
+    if (consumed?.length) {
+      const itemId = paMythicPick(pendingZone, before);
+      if (itemId) {
+        const itemRows = await query(
+          `INSERT INTO pa_mythic_items (uid,item_id,caught,available)
+           VALUES ($1,$2,1,1)
+           ON CONFLICT (uid,item_id) DO UPDATE SET
+             caught=pa_mythic_items.caught+1,
+             available=pa_mythic_items.available+1,
+             updated_at=now()
+           RETURNING caught, available`,
+          [uid, itemId]
+        );
+        const caught = Number(itemRows?.[0]?.caught) || 1;
+        before[itemId] = caught;
+        available[itemId] = Number(itemRows?.[0]?.available) || 0;
+        event = { itemId, isFirst:caught === 1, zone };
+        pending = false;
+        progress = 0;
+      }
+    }
+  }
+
+  res.json({ ok:true, fortuneLevel:fortune, meanDays:paMythicMeanDays(fortune), pending, discoveries:before, available, event });
+});
+
+app.post('/pa/mythic/sell', verifyPAToken, express.json({ limit:'5kb' }), async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : '';
+  const validItems = new Set(Object.values(PA_MYTHIC_ZONES).flat());
+  if (!validItems.has(itemId)) return res.status(400).json({ ok:false, error:'invalid_item' });
+  const sold = await query(
+    `UPDATE pa_mythic_items SET available=available-1, updated_at=now()
+     WHERE uid=$1 AND item_id=$2 AND available>0 RETURNING available`,
+    [uid, itemId]
+  );
+  if (!sold?.length) return res.status(409).json({ ok:false, error:'no_duplicate_available' });
+  await addTrustedDiamonds(uid, 25);
+  res.json({ ok:true, diamonds:25, remaining:Number(sold[0].available) || 0 });
 });
 
 // In-app account deletion. The authenticated token is the sole source of the UID;
