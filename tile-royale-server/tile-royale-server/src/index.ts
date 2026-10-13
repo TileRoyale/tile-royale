@@ -2442,7 +2442,7 @@ const PA_LEGACY_IOS_VERSION_CHECK_DISABLED = true;
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
 // texts: localized announcement body keyed by locale code; 'en' is the required fallback.
-const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+const PA_ANNOUNCEMENT_PREVIOUS: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
   minBuild: 557,
   texts: {
@@ -2464,6 +2464,30 @@ const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; te
     "vi": "• Mới: Market Order giờ ưu tiên cá liên quan đến Guild Order hoặc Competition đang hoạt động của bạn\n• Giảm: các nhiệm vụ Trophy Hunt giai đoạn đầu giờ chỉ cần 3 cá thay vì 5\n• Đã sửa: Tap on Hold trong Halloween bị lỗi trên một số thiết bị\n• Đã sửa: tự động hóa trong Halloween vẫn tiếp tục câu cá bình thường trong suốt sự kiện\n• Đã sửa: popup Flagship và Relic Post không còn làm gián đoạn màn hình sự kiện nữa",
     "zh-CN": "• 新增：市场订单现在优先选择与你当前公会订单或竞赛相关的鱼类\n• 降低：早期的奖杯狩猎任务现在只需要3条鱼，而不是5条\n• 已修复：万圣节活动中的\"按住自动点击\"在部分设备上会失败\n• 已修复：万圣节活动期间自动化系统现在能正常持续捕鱼\n• 已修复：旗舰和遗物柱弹窗不再打断活动界面",
     "zh-TW": "• 新增：市場訂單現在優先選擇與你目前公會訂單或競賽相關的魚類\n• 降低：早期的獎盃狩獵任務現在只需要3條魚，而不是5條\n• 已修復：萬聖節活動中的「按住自動點擊」在部分裝置上會失敗\n• 已修復：萬聖節活動期間自動化系統現在能正常持續捕魚\n• 已修復：旗艦與遺物柱彈窗不再打斷活動畫面",
+  }
+};
+const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+  track: 'production',
+  minBuild: 560,
+  texts: {
+    "en": "• New: Mission Grace lowers an active mission's target after every 24 hours without progress\n• Improved: iPad and Android tablet layouts in portrait and landscape\n• Fixed: Android Google Sign-In now falls back safely when the modern sign-in flow times out\n• Fixed: Halloween fishing no longer starts another catch automatically",
+    "et": "• Uus: Mission Grace vähendab aktiivse missiooni eesmärki iga 24 tunni järel, kui progressi pole tehtud\n• Täiustatud: iPadi ja Androidi tahvelarvutite paigutus püst- ja rõhtvaates\n• Parandatud: Androidi Google'i sisselogimine kasutab nüüd turvalist varuvarianti, kui uus sisselogimisviis aegub\n• Parandatud: Halloweeni kalapüük ei alusta enam automaatselt uut püüki",
+    "de": "• Neu: Mission Grace senkt das Ziel einer aktiven Mission nach jeweils 24 Stunden ohne Fortschritt\n• Verbessert: Layouts für iPad und Android-Tablets im Hoch- und Querformat\n• Behoben: Die Google-Anmeldung unter Android wechselt bei einer Zeitüberschreitung sicher zum Ersatzverfahren\n• Behoben: Beim Halloween-Angeln startet nicht mehr automatisch ein weiterer Fang",
+    "el": "• Νέο: Το Mission Grace μειώνει τον στόχο μιας ενεργής αποστολής κάθε 24 ώρες χωρίς πρόοδο\n• Βελτιώθηκε: Η διάταξη σε iPad και Android tablet σε κατακόρυφη και οριζόντια προβολή\n• Διορθώθηκε: Η σύνδεση Google στο Android χρησιμοποιεί ασφαλή εναλλακτική όταν λήγει το νέο σύστημα σύνδεσης\n• Διορθώθηκε: Το ψάρεμα Halloween δεν ξεκινά πλέον αυτόματα νέο πιάσιμο",
+    "es": "• Nuevo: Mission Grace reduce el objetivo de una misión activa cada 24 horas sin progreso\n• Mejorado: diseño para iPad y tabletas Android en orientación vertical y horizontal\n• Corregido: el inicio de sesión con Google en Android usa una alternativa segura si el nuevo flujo agota el tiempo\n• Corregido: la pesca de Halloween ya no inicia otra captura automáticamente",
+    "fr": "• Nouveau : Mission Grace réduit l'objectif d'une mission active toutes les 24 heures sans progression\n• Amélioré : disposition sur iPad et tablettes Android en mode portrait et paysage\n• Corrigé : la connexion Google sur Android utilise une solution de secours sûre si le nouveau flux expire\n• Corrigé : la pêche d'Halloween ne lance plus automatiquement une nouvelle prise",
+    "id": "• Baru: Mission Grace menurunkan target misi aktif setiap 24 jam tanpa progres\n• Ditingkatkan: tata letak iPad dan tablet Android dalam mode potret dan lanskap\n• Diperbaiki: login Google Android kini memakai metode cadangan yang aman saat alur baru kehabisan waktu\n• Diperbaiki: memancing Halloween tidak lagi memulai tangkapan berikutnya secara otomatis",
+    "it": "• Novità: Mission Grace riduce l'obiettivo di una missione attiva ogni 24 ore senza progressi\n• Migliorato: layout per iPad e tablet Android in verticale e orizzontale\n• Risolto: l'accesso Google su Android usa un metodo alternativo sicuro se il nuovo flusso scade\n• Risolto: la pesca di Halloween non avvia più automaticamente una nuova cattura",
+    "ja": "• 新機能：進行がない状態で24時間経過するたびに、Mission Graceが進行中ミッションの目標を下げます\n• 改善：iPadとAndroidタブレットの縦向き・横向きレイアウト\n• 修正：AndroidのGoogleログインで新しい方式がタイムアウトした場合、安全な代替方式を使用します\n• 修正：ハロウィン釣りで次の釣りが自動的に始まらなくなりました",
+    "ko": "• 신규: 24시간 동안 진행이 없을 때마다 Mission Grace가 진행 중인 미션 목표를 낮춥니다\n• 개선: iPad 및 Android 태블릿의 세로·가로 화면 배치\n• 수정: Android Google 로그인에서 새 방식이 시간 초과되면 안전한 대체 방식을 사용합니다\n• 수정: 할로윈 낚시가 다음 낚시를 자동으로 시작하지 않습니다",
+    "nl": "• Nieuw: Mission Grace verlaagt het doel van een actieve missie na elke 24 uur zonder voortgang\n• Verbeterd: indeling voor iPad en Android-tablets in staande en liggende stand\n• Opgelost: Google-aanmelding op Android gebruikt veilig de reservemethode als de nieuwe methode een time-out krijgt\n• Opgelost: Halloween-vissen start niet langer automatisch een nieuwe vangst",
+    "pl": "• Nowość: Mission Grace obniża cel aktywnej misji po każdych 24 godzinach bez postępu\n• Ulepszono: układ na iPadach i tabletach z Androidem w pionie i poziomie\n• Naprawiono: logowanie Google na Androidzie bezpiecznie przełącza się na metodę zapasową po przekroczeniu czasu\n• Naprawiono: łowienie halloweenowe nie rozpoczyna już automatycznie kolejnego połowu",
+    "pt-BR": "• Novo: Mission Grace reduz a meta de uma missão ativa a cada 24 horas sem progresso\n• Melhorado: layout para iPad e tablets Android nos modos retrato e paisagem\n• Corrigido: o login do Google no Android usa uma alternativa segura se o novo fluxo expirar\n• Corrigido: a pesca de Halloween não inicia mais outra captura automaticamente",
+    "th": "• ใหม่: Mission Grace จะลดเป้าหมายของภารกิจที่กำลังทำทุก 24 ชั่วโมงที่ไม่มีความคืบหน้า\n• ปรับปรุง: รูปแบบหน้าจอ iPad และแท็บเล็ต Android ทั้งแนวตั้งและแนวนอน\n• แก้ไข: การเข้าสู่ระบบ Google บน Android จะใช้วิธีสำรองที่ปลอดภัยเมื่อวิธีใหม่หมดเวลา\n• แก้ไข: การตกปลา Halloween จะไม่เริ่มการจับครั้งถัดไปโดยอัตโนมัติอีกต่อไป",
+    "tr": "• Yeni: Mission Grace, ilerleme olmayan her 24 saatte etkin görevin hedefini düşürür\n• İyileştirildi: iPad ve Android tabletlerde dikey ve yatay düzen\n• Düzeltildi: Android Google girişi, yeni akış zaman aşımına uğradığında güvenli yedek yönteme geçer\n• Düzeltildi: Halloween balıkçılığı artık otomatik olarak yeni bir av başlatmaz",
+    "vi": "• Mới: Mission Grace giảm mục tiêu của nhiệm vụ đang hoạt động sau mỗi 24 giờ không có tiến triển\n• Cải thiện: bố cục iPad và máy tính bảng Android ở chế độ dọc và ngang\n• Đã sửa: đăng nhập Google trên Android dùng phương thức dự phòng an toàn khi luồng mới hết thời gian\n• Đã sửa: câu cá Halloween không còn tự động bắt đầu lượt câu tiếp theo",
+    "zh-CN": "• 新增：进行中的任务每24小时没有进展时，Mission Grace会降低任务目标\n• 改进：优化iPad和Android平板的竖屏与横屏布局\n• 修复：Android版Google登录的新流程超时时会安全切换到备用方式\n• 修复：万圣节钓鱼不再自动开始下一次垂钓",
+    "zh-TW": "• 新增：進行中的任務每24小時沒有進度時，Mission Grace會降低任務目標\n• 改進：最佳化iPad與Android平板的直向及橫向版面\n• 修正：Android版Google登入的新流程逾時時會安全切換至備用方式\n• 修正：萬聖節釣魚不再自動開始下一次垂釣"
   }
 };
 app.get("/pa/version", (req, res) => {
