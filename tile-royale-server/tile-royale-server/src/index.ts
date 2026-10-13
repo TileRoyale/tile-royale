@@ -2468,7 +2468,10 @@ app.get('/pa/mythic/status', verifyPAToken, async (req, res) => {
         const caught = Number(itemRows?.[0]?.caught) || 1;
         before[itemId] = caught;
         available[itemId] = Number(itemRows?.[0]?.available) || 0;
-        event = { itemId, isFirst:caught === 1, zone };
+        // Global discoverer count for the catch popup's "N players have found this before you"
+        // line — one row per player per item (PK uid,item_id), so COUNT(*) is exact.
+        const globalRows = await query(`SELECT COUNT(*)::int AS n FROM pa_mythic_items WHERE item_id=$1`, [itemId]);
+        event = { itemId, isFirst:caught === 1, zone, globalPlayerCount: Number(globalRows?.[0]?.n) || 0, yourCatchCount: caught };
         pending = false;
         progress = 0;
       }
@@ -2476,6 +2479,26 @@ app.get('/pa/mythic/status', verifyPAToken, async (req, res) => {
   }
 
   res.json({ ok:true, fortuneLevel:fortune, meanDays:paMythicMeanDays(fortune), pending, discoveries:before, available, event });
+});
+
+// Read-only, non-mutating stats lookup for one item — powers the localhost "Simulate" debug
+// buttons (so the dev-only catch-popup preview shows real global/own counts instead of fakes)
+// and is otherwise unused by the normal claim flow, which already computes this inline above.
+app.get('/pa/mythic/item-stats', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const itemId = typeof req.query.itemId === 'string' ? req.query.itemId : '';
+  const validItems = new Set(Object.values(PA_MYTHIC_ZONES).flat());
+  if (!validItems.has(itemId)) return res.status(400).json({ ok:false, error:'invalid_item' });
+  const [globalRows, yourRows] = await Promise.all([
+    query(`SELECT COUNT(*)::int AS n FROM pa_mythic_items WHERE item_id=$1`, [itemId]),
+    query(`SELECT caught FROM pa_mythic_items WHERE uid=$1 AND item_id=$2`, [uid, itemId]),
+  ]);
+  res.json({
+    ok: true,
+    itemId,
+    globalPlayerCount: Number(globalRows?.[0]?.n) || 0,
+    yourCatchCount: Number(yourRows?.[0]?.caught) || 0,
+  });
 });
 
 app.post('/pa/mythic/sell', verifyPAToken, express.json({ limit:'5kb' }), async (req, res) => {

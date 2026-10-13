@@ -215,6 +215,9 @@ async function createTables(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (uid, item_id)
     );
+    -- Used by the "N players have ever found this" stat on the catch popup — one row per
+    -- player per item, so COUNT(*) WHERE item_id=$1 is exactly the global discoverer count.
+    CREATE INDEX IF NOT EXISTS idx_pa_mythic_items_item_id ON pa_mythic_items(item_id);
 
     -- Rolling backup of the last 3 saves per player (auto-purged beyond 3)
     CREATE TABLE IF NOT EXISTS pa_save_history (
