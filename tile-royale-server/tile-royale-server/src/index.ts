@@ -2239,6 +2239,12 @@ gameServer.define("gauntlet", GauntletRoom)
 const PA_MAX_BOBBER_TIER           = 100;                  // absolute max tier per bobber
 const PA_ZONE_ORDER = [
   'pond','river','lake','bay','sea','ocean','trench','maelstrom','abyss',
+  // Abyss Descent zones (added to the client 2026-10-14) — were missing here entirely, so
+  // validatePASave()'s absolute `invalid_zone` check permanently rejected (HTTP 400) every save
+  // from any player who reached one of these zones, with no recovery short of a server fix
+  // (player report, 2026-10-15: uid r1K3rVd5RscWDKnypgZlFIkVlBs1, recHighestZone sunless_grave,
+  // cloud save stuck rejecting for days). Ordered by in-game depth, matching client ZONE_DATA.
+  'twilight_shelf','midnight_reach','sunless_grave','hadal_frontier','abyss_entrance',
   'forgotten_isle',
   'emerald_cavern','amber_cavern','amethyst_cavern','ruby_cavern',
   'aquamarine_cavern','opal_cavern','obsidian_cavern','topaz_cavern',
