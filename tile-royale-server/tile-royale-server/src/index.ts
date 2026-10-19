@@ -22,7 +22,7 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   getPlayerDropOverrides, setPlayerDropOverrides,
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
 import * as firebaseAdmin from "firebase-admin";
-import { PA_MYTHIC_COOLDOWN_MS, PA_MYTHIC_ZONES, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicFortune, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from "./paMythic";
+import { PA_MYTHIC_COOLDOWN_MS, PA_MYTHIC_ZONES, paFortuneRaw, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from "./paMythic";
 import { readFileSync } from "fs";
 import path from "path";
 // Environment/SignedDataVerifier are lazy-loaded (see _appleVerifierLib() near their first use,
@@ -2407,23 +2407,37 @@ app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
 // automation. A pending reward is tied to one of those active zones.
 app.get('/pa/mythic/status', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
+  // Serialize this player's status/claim requests. This is only a narrow race-condition
+  // guard: two devices must not consume the same pending Mythic at the same time.
+  const mythicLock = await getPool()?.connect();
+  if (!mythicLock) return res.status(503).json({ ok:false, error:'state_unavailable' });
+  await mythicLock.query(`SELECT pg_advisory_lock(hashtext($1))`, ['pa-mythic:' + uid]);
+  try {
   const zone = typeof req.query.zone === 'string' ? req.query.zone : '';
   const claim = req.query.claim === '1' && !!PA_MYTHIC_ZONES[zone];
   const saveRow = await loadPASave(uid);
   let save: any = {};
   try { save = saveRow ? JSON.parse(saveRow.saveJson) : {}; } catch { save = {}; }
-  const fortune = paMythicFortune(save);
+  // Only the freshly calculated value enters the authoritative DB high-water mark.
+  // Never trust the client-save highestFortune field as authority.
+  const calculatedFortune = paFortuneRaw(save);
   const activeZones = paMythicActiveZones(save);
 
   await query(
-    `INSERT INTO pa_mythic_state (uid, fortune_level, hazard_target, active_zones_json)
-     VALUES ($1, $2, $3, $4) ON CONFLICT (uid) DO NOTHING`,
-    [uid, fortune, paMythicTarget(), JSON.stringify(activeZones)]
+    `INSERT INTO pa_mythic_state (uid, fortune_level, fortune_high_water, hazard_target, active_zones_json)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (uid) DO NOTHING`,
+    [uid, calculatedFortune, calculatedFortune, paMythicTarget(), JSON.stringify(activeZones)]
   );
   const stateRows = await query(`SELECT * FROM pa_mythic_state WHERE uid = $1`, [uid]);
   if (!stateRows?.length) return res.status(503).json({ ok:false, error:'state_unavailable' });
   const state: any = stateRows[0];
-  const previousFortune = Math.max(0, Math.min(100, Number(state.fortune_level) || 0));
+  const fortune = Math.max(calculatedFortune, Math.max(0, Number(state.fortune_high_water)||0));
+  // Existing rows created before unlimited Fortune have no high-water value yet.
+  // Migrate those rows at the current authoritative Fortune so their first
+  // evaluation cannot be penalized by the retired 0-100 score.
+  const previousFortune = state.fortune_high_water == null
+    ? fortune
+    : Math.max(0, Number(state.fortune_level) || 0);
   const nowMs = Date.now();
   const lastEvalMs = new Date(state.last_eval_at).getTime();
   const cooldownUntilMs = state.cooldown_until ? new Date(state.cooldown_until).getTime() : null;
@@ -2436,9 +2450,9 @@ app.get('/pa/mythic/status', verifyPAToken, async (req, res) => {
   let pendingZone = typeof state.pending_zone === 'string' ? state.pending_zone : null;
   if (pending && !pendingZone) pendingZone = paMythicPendingZone(previousActiveZones);
   await query(
-    `UPDATE pa_mythic_state SET fortune_level=$2, hazard_progress=$3,
-       last_eval_at=now(), pending=$4, pending_zone=$5, active_zones_json=$6, updated_at=now() WHERE uid=$1`,
-    [uid, fortune, progress, pending, pendingZone, JSON.stringify(activeZones)]
+    `UPDATE pa_mythic_state SET fortune_level=$2, fortune_high_water=$3, hazard_progress=$4,
+       last_eval_at=now(), pending=$5, pending_zone=$6, active_zones_json=$7, updated_at=now() WHERE uid=$1`,
+    [uid, fortune, fortune, progress, pending, pendingZone, JSON.stringify(activeZones)]
   );
 
   const beforeRows = await query(`SELECT item_id, caught, available FROM pa_mythic_items WHERE uid=$1`, [uid]);
@@ -2485,6 +2499,10 @@ app.get('/pa/mythic/status', verifyPAToken, async (req, res) => {
   }
 
   res.json({ ok:true, fortuneLevel:fortune, meanDays:paMythicMeanDays(fortune), pending, discoveries:before, available, event });
+  } finally {
+    await mythicLock.query(`SELECT pg_advisory_unlock(hashtext($1))`, ['pa-mythic:' + uid]).catch(() => {});
+    mythicLock.release();
+  }
 });
 
 // Read-only, non-mutating stats lookup for one item — powers the localhost "Simulate" debug
@@ -2512,14 +2530,40 @@ app.post('/pa/mythic/sell', verifyPAToken, express.json({ limit:'5kb' }), async 
   const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : '';
   const validItems = new Set(Object.values(PA_MYTHIC_ZONES).flat());
   if (!validItems.has(itemId)) return res.status(400).json({ ok:false, error:'invalid_item' });
-  const sold = await query(
-    `UPDATE pa_mythic_items SET available=available-1, updated_at=now()
-     WHERE uid=$1 AND item_id=$2 AND available>0 RETURNING available`,
-    [uid, itemId]
-  );
-  if (!sold?.length) return res.status(409).json({ ok:false, error:'no_duplicate_available' });
-  await addTrustedDiamonds(uid, 25);
-  res.json({ ok:true, diamonds:25, remaining:Number(sold[0].available) || 0 });
+  const client = await getPool()?.connect();
+  if (!client) return res.status(503).json({ ok:false, error:'state_unavailable' });
+  try {
+    await client.query('BEGIN');
+    const sold = await client.query(
+      `UPDATE pa_mythic_items SET available=available-1, updated_at=now()
+       WHERE uid=$1 AND item_id=$2 AND available>0 RETURNING available`,
+      [uid, itemId]
+    );
+    if (!sold.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ ok:false, error:'no_duplicate_available' });
+    }
+    const saveRows = await client.query(`SELECT save_json FROM pa_save_data WHERE uid=$1 FOR UPDATE`, [uid]);
+    let save: any = {};
+    try { save = saveRows.rows.length ? JSON.parse(saveRows.rows[0].save_json) : {}; } catch { save = {}; }
+    // Keep legitimate unsynced local diamonds too; this endpoint is persistence plumbing,
+    // not a new server-authoritative currency system.
+    save.diamonds = Math.max(0, Number(save.diamonds) || 0, Number(req.body?.currentDiamonds) || 0) + 25;
+    await client.query(
+      `INSERT INTO pa_save_data (uid, save_json, updated_at) VALUES ($1,$2,now())
+       ON CONFLICT (uid) DO UPDATE SET save_json=EXCLUDED.save_json, updated_at=now()`,
+      [uid, JSON.stringify(save)]
+    );
+    await client.query('COMMIT');
+    await addTrustedDiamonds(uid, 25);
+    res.json({ ok:true, diamonds:25, totalDiamonds:save.diamonds, remaining:Number(sold.rows[0].available) || 0 });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[PA Mythic] sell failed:', err);
+    res.status(503).json({ ok:false, error:'sell_failed' });
+  } finally {
+    client.release();
+  }
 });
 
 // In-app account deletion. The authenticated token is the sole source of the UID;
@@ -2594,6 +2638,16 @@ const PA_ANNOUNCEMENT_PREVIOUS: { track?: 'internal' | 'production'; minBuild: n
   }
 };
 const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+  track: 'production',
+  minBuild: 574,
+  texts: {
+    // Non-English locales are placeholders (same EN text) until Codex translates them — see
+    // feedback_localization_owner.md. Client falls back to 'en' for any locale not listed, so this
+    // is already safe to ship; swap each value for its real translation as it comes in.
+    "en": "Full patch notes on Reddit & Discord!\n\n• Fortune & Open Seas Mythics\n• Abyss Descent — 5 new deep-sea zones\n• Lost Civilization & Ancient Expeditions\n• Momentum Exchange\n• 10 new Hidden Bobbers\n• 6 new Pet Skills & 13 new Pet Items\n• Sell All Tracker & Cloud Sync Status\n• Balance changes and bug fixes",
+  }
+};
+const PA_ANNOUNCEMENT_PREVIOUS_2: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
   minBuild: 560,
   texts: {
@@ -2922,6 +2976,33 @@ app.get('/pa/community/leaderboard', verifyPAToken, async (req, res) => {
   // Player-facing leaderboard shows top 50 only (matches Event Island's top50 list).
   const rows = await getCELeaderboard(eventId, 50);
   res.json({ ok: true, rows });
+});
+
+// GET /pa/competition/names?count=9
+// Public angler names for the local five-minute AI competitions. No account IDs are exposed.
+app.get('/pa/competition/names', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const requested = Number.parseInt(String(req.query.count || '9'), 10);
+  const count = Math.max(1, Math.min(20, Number.isFinite(requested) ? requested : 9));
+  const rows = await query(
+    `SELECT name FROM (
+       SELECT DISTINCT BTRIM(save_json::jsonb->>'playerName') AS name
+       FROM pa_save_data
+       WHERE uid <> $1
+         AND updated_at > now() - interval '180 days'
+         AND save_json::jsonb->>'playerName' IS NOT NULL
+         AND CHAR_LENGTH(BTRIM(save_json::jsonb->>'playerName')) BETWEEN 2 AND 24
+         AND LOWER(BTRIM(save_json::jsonb->>'playerName')) NOT IN
+             ('angler', 'player', 'anonymous angler', 'you')
+     ) public_names
+     ORDER BY RANDOM()
+     LIMIT $2`,
+    [uid, count]
+  );
+  const names = (rows || [])
+    .map((row: any) => String(row.name || '').replace(/[\u0000-\u001f\u007f]/g, '').trim())
+    .filter((name: string) => name.length >= 2 && name.length <= 24);
+  res.json({ ok: true, names });
 });
 
 // ── Anglers Competition Island ────────────────────────────────────────────────

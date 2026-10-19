@@ -6,6 +6,7 @@ export const PA_MYTHIC_ZONES: Record<string, string[]> = {
 };
 export const PA_MYTHIC_MIN_MEAN_DAYS = 7;
 export const PA_MYTHIC_MAX_MEAN_DAYS = 90;
+export const PA_MYTHIC_MAX_FORTUNE = 180;
 export const PA_MYTHIC_COOLDOWN_MS = 17 * 60 * 60 * 1000;
 const PA_MYTHIC_UNLOCKS: Record<string, { rod?: string; transport?: string }> = {
   pond: {}, river: { rod:'river_rod', transport:'waders' }, lake: { rod:'lake_rod', transport:'rowing_boat' },
@@ -34,7 +35,7 @@ export function paMythicPendingZone(activeZones: string[], random = Math.random)
   if (!activeZones.length) return null;
   return activeZones[Math.min(activeZones.length - 1, Math.floor(Math.max(0, random()) * activeZones.length))];
 }
-export function paMythicFortune(save: any): number {
+export function paLegacyMythicFortune(save: any): number {
   const stats = save?.stats || {};
   const logScore = (value: unknown, cap: number) => Math.min(1, Math.log10(1 + Math.max(0, Number(value) || 0)) / Math.log10(1 + cap));
   const expeditions = (Number(stats.ghostShipExpeditions)||0) + (Number(stats.dvCompleted)||0)
@@ -57,8 +58,45 @@ export function paMythicFortune(save: any): number {
      3 * masteryRatio;
   return Math.max(0, Math.min(100, Math.round(score)));
 }
+function fortuneLog(value: unknown, scale: number): number {
+  return Math.log10(1 + Math.max(0, Number(value) || 0) / scale);
+}
+function fortuneExpeditions(save: any): number {
+  const stats = save?.stats || {};
+  return (Number(stats.ghostShipExpeditions)||0) + (Number(stats.dvCompleted)||0)
+    + (Number(save?.abyssExpeditionsCompleted)||0) + (Number(save?.maelstrom?.stats?.missionsCompleted)||0);
+}
+function fortuneCavernRep(save: any): number {
+  return Object.values(save?.tribeReputation || {}).reduce<number>((sum, state: any) => sum + Math.max(0, Number(state?.level)||0), 0);
+}
+function fortuneAbyssZones(save: any): number {
+  return Object.values(save?.abyssDescentEverUnlocked || {}).filter(Boolean).length;
+}
+export function paFortuneRaw(save: any): number {
+  const stats = save?.stats || {};
+  const lifetimeCatches = Math.max(Number(stats.totalFish)||0, (Number(stats.autoCatchTotal)||0) + (Number(stats.manualFishTotal)||0), Number(stats.offlineFishTotal)||0);
+  const uniqueFishdex = new Set(Array.isArray(save?.fishdex) ? save.fishdex : []).size;
+  const score =
+    5 * fortuneLog(lifetimeCatches, 1e6) +
+    3 * fortuneLog(stats.lifeCoinsEarned, 1e12) +
+    4 * fortuneLog(stats.lifePearlsEarned, 1e4) +
+    5 * fortuneLog(stats.totalLegendary, 10) +
+    4 * fortuneLog(fortuneExpeditions(save), 5) +
+    3 * fortuneLog(stats.islesDiscovered, 2) +
+        fortuneLog((Number(stats.totalSeagull)||0) + (Number(stats.totalCrystalBugs)||0), 10) +
+        fortuneLog(stats.trophyCatches, 5) +
+        Math.sqrt(Math.max(0, Number(save?.prestigeCount)||0)) +
+        fortuneCavernRep(save) +
+    5 * fortuneAbyssZones(save) +
+    0.02 * uniqueFishdex +
+    0.5 * fortuneLog(stats.dailyQuestsCompleted, 10);
+  return Math.max(0, Math.round(score));
+}
+export function paFortune(save: any): number {
+  return Math.max(Math.max(0, Math.round(Number(save?.highestFortune)||0)), paFortuneRaw(save));
+}
 export function paMythicMeanDays(fortune: number): number {
-  const normalized = Math.max(0, Math.min(100, Number(fortune) || 0)) / 100;
+  const normalized = Math.max(0, Math.min(PA_MYTHIC_MAX_FORTUNE, Number(fortune) || 0)) / PA_MYTHIC_MAX_FORTUNE;
   return PA_MYTHIC_MAX_MEAN_DAYS * Math.pow(PA_MYTHIC_MIN_MEAN_DAYS / PA_MYTHIC_MAX_MEAN_DAYS, normalized);
 }
 export function paMythicTarget(random = Math.random): number {

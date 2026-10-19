@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
-import { PA_MYTHIC_COOLDOWN_MS, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicFortune, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from '../src/paMythic';
+import { PA_MYTHIC_COOLDOWN_MS, paFortune, paFortuneRaw, paLegacyMythicFortune, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from '../src/paMythic';
 
-assert.equal(paMythicFortune({}), 0);
-assert.equal(paMythicFortune({ fishdex:Array.from({length:517},(_,i)=>String(i)), prestigeCount:40, abyssExpeditionsCompleted:10000, stats:{mythicCatchRate:1e13,autoCatchTotal:1e16,lifeCoinsEarned:1e24,lifePearlsEarned:1e10,totalLegendary:1e6,islesDiscovered:300,totalSeagull:1e4,totalCrystalBugs:1e3,trophyCatches:1e4,mythicMasteryRatio:1} }), 100);
+assert.equal(paFortune({}), 0);
+assert.equal(paLegacyMythicFortune({ fishdex:Array.from({length:517},(_,i)=>String(i)), prestigeCount:40, abyssExpeditionsCompleted:10000, stats:{mythicCatchRate:1e13,autoCatchTotal:1e16,lifeCoinsEarned:1e24,lifePearlsEarned:1e10,totalLegendary:1e6,islesDiscovered:300,totalSeagull:1e4,totalCrystalBugs:1e3,trophyCatches:1e4,mythicMasteryRatio:1} }), 100);
+const fortuneSave = { fishdex:['a','b','b'], prestigeCount:9, abyssDescentEverUnlocked:{twilight_shelf:true,midnight_reach:true}, tribeReputation:{a:{level:10},b:{level:7}}, abyssExpeditionsCompleted:25, maelstrom:{stats:{missionsCompleted:5}}, stats:{totalFish:2e6,autoCatchTotal:1e6,manualFishTotal:2e6,offlineFishTotal:4e6,lifeCoinsEarned:1e15,lifePearlsEarned:1e6,totalLegendary:100,ghostShipExpeditions:10,dvCompleted:10,islesDiscovered:8,totalSeagull:20,totalCrystalBugs:10,trophyCatches:25,dailyQuestsCompleted:50} };
+assert.ok(paFortuneRaw(fortuneSave) > 0);
+assert.equal(paFortune({...fortuneSave,highestFortune:999}), 999);
 assert.equal(paMythicMeanDays(0), 90);
-assert.ok(Math.abs(paMythicMeanDays(100) - 7) < 1e-12);
-assert.ok(Math.abs(paMythicMeanDays(50) - Math.sqrt(630)) < 1e-12);
+assert.ok(Math.abs(paMythicMeanDays(180) - 7) < 1e-12);
+assert.ok(Math.abs(paMythicMeanDays(90) - Math.sqrt(630)) < 1e-12);
+assert.ok(Math.abs(paMythicMeanDays(215) - 7) < 1e-12);
 assert.ok(Math.abs(paMythicTarget(() => Math.exp(-2)) - 2) < 1e-12);
 assert.equal(paMythicPick('pond', {}, () => 0), 'my_pond_pondkeeper');
 assert.equal(paMythicPick('pond', { my_pond_pondkeeper:1 }, () => 0.99), 'my_pond_grenade');
@@ -14,7 +18,7 @@ assert.deepEqual(paMythicActiveZones({ activeAutomationZones:['pond','emerald_ca
 assert.deepEqual(paMythicActiveZones({ activeAutomationZones:['river'], ownedRods:['river_rod'], ownedTransport:[] }), []);
 assert.deepEqual(paMythicActiveZones({ activeAutomationZones:['river','lake'], ownedRods:['river_rod','lake_rod'], ownedTransport:['waders','rowing_boat'] }), ['river','lake']);
 assert.equal(paMythicAdvance(0.25, 86400000, 7, []), 0.25);
-assert.ok(Math.abs(paMythicAdvance(0.25, 86400000, 100, ['pond']) - (0.25 + 1/7)) < 1e-12);
+assert.ok(Math.abs(paMythicAdvance(0.25, 86400000, 180, ['pond']) - (0.25 + 1/7)) < 1e-12);
 assert.equal(PA_MYTHIC_COOLDOWN_MS, 17 * 60 * 60 * 1000);
 assert.equal(paMythicEligibleElapsed(0, 16 * 60 * 60 * 1000, PA_MYTHIC_COOLDOWN_MS), 0);
 assert.equal(paMythicEligibleElapsed(0, 18 * 60 * 60 * 1000, PA_MYTHIC_COOLDOWN_MS), 60 * 60 * 1000);

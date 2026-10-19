@@ -1036,7 +1036,7 @@ export async function handleAdminDataQuality(_req: Request, res: Response): Prom
   res.json(rows);
 }
 
-// Flags accounts whose tap activity exceeds 10,000 taps per 24h, in one of two modes:
+// Flags accounts whose tap activity exceeds 20,000 taps per 24h, in one of two modes:
 //  - 'lifetime' (default): stats.totalTaps / activePlaytimeMs extrapolated to 24 active
 //    hours — a stable, noise-resistant average that works for every existing player right
 //    now, but isn't a real recent-activity window (a player clean today but abusive months
@@ -1047,7 +1047,7 @@ export async function handleAdminDataQuality(_req: Request, res: Response): Prom
 //    who haven't played today simply have no data yet (reported separately, not as "clean").
 // A confidence floor on the lifetime mode (>=1h active playtime, >=1000 taps) excludes
 // brand-new/edge-case saves where a tiny denominator would produce a meaningless rate spike.
-const AUTOCLICKER_TAPS_PER_24H_THRESHOLD = 10000;
+const AUTOCLICKER_TAPS_PER_24H_THRESHOLD = 20000; // raised from 10,000 — 2026-10-08, player/admin directive
 const AUTOCLICKER_MIN_ACTIVE_MS = 60 * 60 * 1000; // 1 hour
 const AUTOCLICKER_MIN_TAPS      = 1000;
 
@@ -1395,7 +1395,7 @@ canvas{width:100%!important;height:120px!important}
 
   <!-- Auto Clickers Tab -->
   <div class="tab-content" id="tab-autoclickers">
-    <h2>Auto Clickers <span style="font-size:11px;color:#8b949e;font-weight:400">— flagged uids exceeding 10,000 taps/24h</span></h2>
+    <h2>Auto Clickers <span style="font-size:11px;color:#8b949e;font-weight:400">— flagged uids exceeding 20,000 taps/24h</span></h2>
     <div style="margin-bottom:12px;display:flex;gap:6px">
       <div id="ac-mode-lifetime" class="tab active" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setAutoclickerMode('lifetime')">Lifetime Average</div>
       <div id="ac-mode-today" class="tab" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setAutoclickerMode('today')">Last 24h (today, UTC)</div>

@@ -207,6 +207,7 @@ async function createTables(): Promise<void> {
     ALTER TABLE pa_mythic_state ADD COLUMN IF NOT EXISTS pending_zone TEXT;
     ALTER TABLE pa_mythic_state ADD COLUMN IF NOT EXISTS cooldown_until TIMESTAMPTZ;
     ALTER TABLE pa_mythic_state ADD COLUMN IF NOT EXISTS active_zones_json TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE pa_mythic_state ADD COLUMN IF NOT EXISTS fortune_high_water INTEGER;
     CREATE TABLE IF NOT EXISTS pa_mythic_items (
       uid TEXT NOT NULL,
       item_id TEXT NOT NULL,
