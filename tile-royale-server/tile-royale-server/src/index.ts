@@ -2639,12 +2639,12 @@ const PA_ANNOUNCEMENT_PREVIOUS: { track?: 'internal' | 'production'; minBuild: n
 };
 const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
-  minBuild: 576,
+  minBuild: 577,
   texts: {
     // Non-English locales are placeholders (same EN text) until Codex translates them — see
     // feedback_localization_owner.md. Client falls back to 'en' for any locale not listed, so this
     // is already safe to ship; swap each value for its real translation as it comes in.
-    "en": "• New: Push Notifications — missions, expeditions, pets, events & more (configurable in Settings)\n• New: Option to disable Special-Event ad popups\n• Improved: Tracker Settings — all on-screen trackers (incl. Sell All) managed from one place\n• Fixed: Successful Voyages mission not progressing from auto-claimed expeditions",
+    "en": "• New: Push Notifications — missions, expeditions, pets, events & more (configurable in Settings)\n• New: Option to disable Special-Event ad popups\n• Improved: Tracker Settings — all on-screen trackers (incl. Sell All) managed from one place\n• Rebalanced: Mini Kraken's Relic Salvage skill\n• Fixed: Successful Voyages mission not progressing from auto-claimed expeditions",
   }
 };
 const PA_ANNOUNCEMENT_PREVIOUS_3: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
