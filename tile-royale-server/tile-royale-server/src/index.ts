@@ -2639,11 +2639,18 @@ const PA_ANNOUNCEMENT_PREVIOUS: { track?: 'internal' | 'production'; minBuild: n
 };
 const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
-  minBuild: 574,
+  minBuild: 576,
   texts: {
     // Non-English locales are placeholders (same EN text) until Codex translates them — see
     // feedback_localization_owner.md. Client falls back to 'en' for any locale not listed, so this
     // is already safe to ship; swap each value for its real translation as it comes in.
+    "en": "• New: Push Notifications — missions, expeditions, pets, events & more (configurable in Settings)\n• New: Option to disable Special-Event ad popups\n• Improved: Tracker Settings — all on-screen trackers (incl. Sell All) managed from one place\n• Fixed: Successful Voyages mission not progressing from auto-claimed expeditions",
+  }
+};
+const PA_ANNOUNCEMENT_PREVIOUS_3: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+  track: 'production',
+  minBuild: 574,
+  texts: {
     "en": "Full patch notes on Reddit & Discord!\n\n• Fortune & Open Seas Mythics\n• Abyss Descent — 5 new deep-sea zones\n• Lost Civilization & Ancient Expeditions\n• Momentum Exchange\n• 10 new Hidden Bobbers\n• 6 new Pet Skills & 13 new Pet Items\n• Sell All Tracker & Cloud Sync Status\n• Balance changes and bug fixes",
   }
 };
