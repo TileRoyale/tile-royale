@@ -20,9 +20,11 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   hasAciRewardClaim, recordAciRewardClaim, getAciPlayerRank,
   openAciBottle, redeemAciBottleCode, recordBottleFind, reportAciCasts, getAciCastCount,
   getPlayerDropOverrides, setPlayerDropOverrides,
-  getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies } from "./db";
+  getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies, logDepthlightDrop,
+  isAciWinnerCooldown } from "./db";
 import * as firebaseAdmin from "firebase-admin";
 import { PA_MYTHIC_COOLDOWN_MS, PA_MYTHIC_ZONES, paFortuneRaw, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from "./paMythic";
+import { getAciRewardBracket } from "./aciRanking";
 import { readFileSync } from "fs";
 import path from "path";
 // Environment/SignedDataVerifier are lazy-loaded (see _appleVerifierLib() near their first use,
@@ -2613,34 +2615,46 @@ const PA_LEGACY_IOS_VERSION_CHECK_DISABLED = true;
 // track: 'internal' = only shown to vX.X.X.X.X builds; 'production' = only shown to vX.X.X.X builds; omit for both.
 // minBuild: first versionCode that should show the popup.
 // texts: localized announcement body keyed by locale code; 'en' is the required fallback.
-const PA_ANNOUNCEMENT_PREVIOUS: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
-  minBuild: 577,
+  minBuild: 591,
   texts: {
-    // Non-English locales are placeholders (same EN text) until Codex translates them — see
-    // feedback_localization_owner.md. Client falls back to 'en' for any locale not listed, so this
-    // is already safe to ship; swap each value for its real translation as it comes in.
-    "en": "• New: Push Notifications — missions, expeditions, pets, events & more (configurable in Settings)\n• New: Option to disable Special-Event ad popups\n• Improved: Tracker Settings — all on-screen trackers (incl. Sell All) managed from one place\n• Rebalanced: Mini Kraken's Relic Salvage skill\n• Fixed: Successful Voyages mission not progressing from auto-claimed expeditions",
+    "en": "• New: Harbor Crate - Gain helpful loot shipments from local harbor. Upgrade shipments for more frequent and improved loot!\n• New: Weekly Treasure Hunt missions\n• New: New cat pet item\n• New: Pet Respec now available for Ghost Dog, Treasure Goblin, Treasure Hunter Seagull, and Mini Kraken\n• New: Ads removal package has an option to auto claim the rewards\n• Reworked: Crystal Survey expedition sped up 50% and additional boost mechanic implemented\n• Fixed: ACI Message in a Bottle sometimes selling for 0 Black Pearls\n• Various other bug fixes and improvements",
+    "et": "• Uus: Harbor Crate — saad sadamast kasulikke lootisaadetisi. Uuenda saadetisi sagedasemaks ja paremaks saagiks!\n• Uus: Weekly Treasure Hunt missioonid\n• Uus: uus kassi lemmikloom\n• Uus: Pet Respec nüüd saadaval ka Ghost Dogile, Treasure Goblinile, Treasure Hunter Seagullile ja Mini Krakenile\n• Uus: Reklaamide eemaldamise paketil on nüüd valik auhindade automaatseks kogumiseks\n• Ümber tehtud: Crystal Survey ekspeditsioon kiirenes 50% ja lisati uus boost-mehaanika\n• Parandatud: ACI Message in a Bottle müüs mõnikord 0 Black Pearli eest\n• Mitmed muud vea- ja tasakaaluparandused",
+    "de": "• Neu: Harbor Crate – Erhalte hilfreiche Beutelieferungen vom örtlichen Hafen. Verbessere die Lieferungen für häufigere und bessere Beute!\n• Neu: Wöchentliche Weekly Treasure Hunt-Missionen\n• Neu: Neues Katzen-Haustier-Item\n• Neu: Pet Respec jetzt auch für Ghost Dog, Treasure Goblin, Treasure Hunter Seagull und Mini Kraken verfügbar\n• Neu: Das Werbefrei-Paket hat jetzt eine Option zum automatischen Einsammeln der Belohnungen\n• Überarbeitet: Crystal Survey-Expedition um 50% beschleunigt, zusätzlicher Boost-Mechanismus eingeführt\n• Behoben: ACI Message in a Bottle verkaufte sich manchmal für 0 Black Pearls\n• Weitere verschiedene Fehlerbehebungen und Verbesserungen",
+    "el": "• Νέο: Harbor Crate – Απόκτησε χρήσιμα φορτία λείας από το τοπικό λιμάνι. Αναβάθμισε τα φορτία για πιο συχνή και καλύτερη λεία!\n• Νέο: Εβδομαδιαίες αποστολές Weekly Treasure Hunt\n• Νέο: Νέο αντικείμενο κατοικίδιου γάτας\n• Νέο: Το Pet Respec είναι πλέον διαθέσιμο για τα Ghost Dog, Treasure Goblin, Treasure Hunter Seagull και Mini Kraken\n• Νέο: Το πακέτο αφαίρεσης διαφημίσεων έχει πλέον επιλογή αυτόματης συλλογής ανταμοιβών\n• Αναθεωρήθηκε: Η αποστολή Crystal Survey επιταχύνθηκε κατά 50% και προστέθηκε νέος μηχανισμός ενίσχυσης\n• Διορθώθηκε: Το ACI Message in a Bottle πουλιόταν μερικές φορές για 0 Black Pearls\n• Διάφορες άλλες διορθώσεις σφαλμάτων και βελτιώσεις",
+    "es": "• Nuevo: Harbor Crate - Recibe envíos de botín útiles desde el puerto local. ¡Mejora los envíos para obtener botín más frecuente y mejorado!\n• Nuevo: Misiones semanales de Weekly Treasure Hunt\n• Nuevo: Nuevo objeto de mascota gato\n• Nuevo: Pet Respec ya disponible para Ghost Dog, Treasure Goblin, Treasure Hunter Seagull y Mini Kraken\n• Nuevo: El paquete de eliminación de anuncios tiene una opción para reclamar recompensas automáticamente\n• Rediseñado: La expedición Crystal Survey es un 50% más rápida y se implementó un nuevo mecanismo de impulso\n• Corregido: Message in a Bottle de ACI a veces se vendía por 0 Black Pearls\n• Varias otras correcciones de errores y mejoras",
+    "fr": "• Nouveau : Harbor Crate - Recevez des cargaisons de butin utiles depuis le port local. Améliorez les cargaisons pour un butin plus fréquent et de meilleure qualité !\n• Nouveau : Missions hebdomadaires Weekly Treasure Hunt\n• Nouveau : Nouvel objet d'animal de compagnie chat\n• Nouveau : Pet Respec désormais disponible pour Ghost Dog, Treasure Goblin, Treasure Hunter Seagull et Mini Kraken\n• Nouveau : Le pack de suppression des publicités propose désormais une option de réclamation automatique des récompenses\n• Retravaillé : L'expédition Crystal Survey est 50 % plus rapide et un nouveau mécanisme de boost a été ajouté\n• Corrigé : Message in a Bottle de l'ACI se vendait parfois pour 0 Black Pearls\n• Diverses autres corrections de bugs et améliorations",
+    "id": "• Baru: Harbor Crate - Dapatkan kiriman jarahan berguna dari pelabuhan setempat. Tingkatkan kiriman untuk jarahan yang lebih sering dan lebih baik!\n• Baru: Misi mingguan Weekly Treasure Hunt\n• Baru: Item hewan peliharaan kucing baru\n• Baru: Pet Respec kini tersedia untuk Ghost Dog, Treasure Goblin, Treasure Hunter Seagull, dan Mini Kraken\n• Baru: Paket penghapusan iklan kini memiliki opsi klaim hadiah otomatis\n• Dirombak: Ekspedisi Crystal Survey dipercepat 50% dan mekanisme boost tambahan diterapkan\n• Diperbaiki: ACI Message in a Bottle terkadang terjual seharga 0 Black Pearls\n• Berbagai perbaikan bug dan peningkatan lainnya",
+    "it": "• Nuovo: Harbor Crate - Ricevi utili spedizioni di bottino dal porto locale. Potenzia le spedizioni per un bottino più frequente e migliore!\n• Nuovo: Missioni settimanali Weekly Treasure Hunt\n• Nuovo: Nuovo oggetto animale domestico gatto\n• Nuovo: Pet Respec ora disponibile anche per Ghost Dog, Treasure Goblin, Treasure Hunter Seagull e Mini Kraken\n• Nuovo: Il pacchetto di rimozione annunci ora ha un'opzione per riscattare automaticamente le ricompense\n• Rielaborato: La spedizione Crystal Survey è più veloce del 50% ed è stato aggiunto un nuovo meccanismo di boost\n• Corretto: Message in a Bottle dell'ACI a volte veniva venduto per 0 Black Pearls\n• Varie altre correzioni di bug e miglioramenti",
+    "ja": "• 新機能: Harbor Crate - 地元の港から役立つ戦利品の荷物を受け取ろう。荷物をアップグレードすれば、より頻繁に、より良い戦利品が手に入る!\n• 新機能: 週替わりのWeekly Treasure Huntミッション\n• 新機能: 新しい猫のペットアイテム\n• 新機能: Pet RespecがGhost Dog、Treasure Goblin、Treasure Hunter Seagull、Mini Krakenでも利用可能に\n• 新機能: 広告削除パッケージに報酬の自動受け取りオプションを追加\n• 改修: Crystal Surveyの遠征速度が50%アップし、新たなブースト機構を追加\n• 修正: ACIのMessage in a Bottleが0 Black Pearlsで売れてしまうことがある不具合\n• その他様々な不具合修正と改善",
+    "ko": "• 신규: Harbor Crate - 지역 항구에서 유용한 전리품 화물을 받으세요. 화물을 업그레이드하면 더 자주, 더 좋은 전리품을 얻을 수 있습니다!\n• 신규: 주간 Weekly Treasure Hunt 미션\n• 신규: 새로운 고양이 펫 아이템\n• 신규: Pet Respec이 Ghost Dog, Treasure Goblin, Treasure Hunter Seagull, Mini Kraken에서도 가능해졌습니다\n• 신규: 광고 제거 패키지에 보상 자동 수령 옵션이 추가되었습니다\n• 개편: Crystal Survey 탐사 속도가 50% 빨라지고 새로운 부스트 메커니즘이 추가되었습니다\n• 수정: ACI Message in a Bottle이 가끔 0 Black Pearls에 판매되던 문제\n• 기타 다양한 버그 수정 및 개선 사항",
+    "nl": "• Nieuw: Harbor Crate - Ontvang handige buitzendingen vanuit de lokale haven. Upgrade zendingen voor frequentere en betere buit!\n• Nieuw: Wekelijkse Weekly Treasure Hunt-missies\n• Nieuw: Nieuw kattenhuisdier-item\n• Nieuw: Pet Respec nu ook beschikbaar voor Ghost Dog, Treasure Goblin, Treasure Hunter Seagull en Mini Kraken\n• Nieuw: Het advertentie-verwijderingspakket heeft nu een optie om beloningen automatisch te claimen\n• Herzien: Crystal Survey-expeditie 50% sneller gemaakt en extra boost-mechanisme toegevoegd\n• Opgelost: ACI Message in a Bottle werd soms verkocht voor 0 Black Pearls\n• Diverse andere bugfixes en verbeteringen",
+    "pl": "• Nowość: Harbor Crate - Zdobywaj przydatne przesyłki z łupem z lokalnego portu. Ulepszaj przesyłki, aby zdobywać łup częściej i w lepszej jakości!\n• Nowość: Cotygodniowe misje Weekly Treasure Hunt\n• Nowość: Nowy przedmiot zwierzaka - kot\n• Nowość: Pet Respec dostępny teraz również dla Ghost Dog, Treasure Goblin, Treasure Hunter Seagull i Mini Kraken\n• Nowość: Pakiet usunięcia reklam ma teraz opcję automatycznego odbierania nagród\n• Przebudowano: Ekspedycja Crystal Survey przyspieszona o 50% i dodano nowy mechanizm wzmocnienia\n• Naprawiono: ACI Message in a Bottle czasami sprzedawało się za 0 Black Pearls\n• Różne inne poprawki błędów i ulepszenia",
+    "pt-BR": "• Novo: Harbor Crate - Receba cargas úteis de saque do porto local. Melhore as cargas para um saque mais frequente e melhor!\n• Novo: Missões semanais do Weekly Treasure Hunt\n• Novo: Novo item de pet gato\n• Novo: Pet Respec agora disponível para Ghost Dog, Treasure Goblin, Treasure Hunter Seagull e Mini Kraken\n• Novo: O pacote de remoção de anúncios agora tem uma opção para resgatar recompensas automaticamente\n• Reformulado: Expedição Crystal Survey 50% mais rápida e novo mecanismo de impulso implementado\n• Corrigido: Message in a Bottle do ACI às vezes vendia por 0 Black Pearls\n• Diversas outras correções de bugs e melhorias",
+    "th": "• ใหม่: Harbor Crate - รับสินค้าของล้ำค่าที่เป็นประโยชน์จากท่าเรือท้องถิ่น อัปเกรดการขนส่งเพื่อให้ได้ของล้ำค่าบ่อยขึ้นและดีขึ้น!\n• ใหม่: ภารกิจ Weekly Treasure Hunt รายสัปดาห์\n• ใหม่: ไอเทมสัตว์เลี้ยงแมวตัวใหม่\n• ใหม่: Pet Respec ใช้ได้แล้วสำหรับ Ghost Dog, Treasure Goblin, Treasure Hunter Seagull และ Mini Kraken\n• ใหม่: แพ็กเกจลบโฆษณามีตัวเลือกรับรางวัลอัตโนมัติแล้ว\n• ปรับปรุงใหม่: การสำรวจ Crystal Survey เร็วขึ้น 50% และเพิ่มกลไกเสริมพลังใหม่\n• แก้ไข: ACI Message in a Bottle บางครั้งขายได้ 0 Black Pearls\n• การแก้ไขบั๊กและปรับปรุงอื่นๆ อีกมากมาย",
+    "tr": "• Yeni: Harbor Crate - Yerel limandan yararlı ganimet sevkiyatları kazan. Daha sık ve daha iyi ganimet için sevkiyatları yükselt!\n• Yeni: Haftalık Weekly Treasure Hunt görevleri\n• Yeni: Yeni kedi evcil hayvan eşyası\n• Yeni: Pet Respec artık Ghost Dog, Treasure Goblin, Treasure Hunter Seagull ve Mini Kraken için de kullanılabilir\n• Yeni: Reklam kaldırma paketine ödülleri otomatik alma seçeneği eklendi\n• Yeniden düzenlendi: Crystal Survey keşfi %50 hızlandırıldı ve ek bir güçlendirme mekaniği eklendi\n• Düzeltildi: ACI Message in a Bottle bazen 0 Black Pearls karşılığında satılıyordu\n• Çeşitli diğer hata düzeltmeleri ve iyileştirmeler",
+    "vi": "• Mới: Harbor Crate - Nhận các chuyến hàng chiến lợi phẩm hữu ích từ bến cảng địa phương. Nâng cấp các chuyến hàng để nhận chiến lợi phẩm thường xuyên hơn và tốt hơn!\n• Mới: Nhiệm vụ Weekly Treasure Hunt hàng tuần\n• Mới: Vật phẩm thú cưng mèo mới\n• Mới: Pet Respec hiện đã khả dụng cho Ghost Dog, Treasure Goblin, Treasure Hunter Seagull và Mini Kraken\n• Mới: Gói xóa quảng cáo hiện có tùy chọn tự động nhận phần thưởng\n• Cải tiến: Thám hiểm Crystal Survey tăng tốc 50% và bổ sung cơ chế tăng lực mới\n• Đã sửa: ACI Message in a Bottle đôi khi bán được 0 Black Pearls\n• Nhiều sửa lỗi và cải tiến khác",
+    "zh-CN": "• 新增：Harbor Crate - 从当地港口获取有用的战利品货运。升级货运以获得更频繁、更优质的战利品！\n• 新增：每周 Weekly Treasure Hunt 任务\n• 新增：全新猫咪宠物道具\n• 新增：Pet Respec 现已支持 Ghost Dog、Treasure Goblin、Treasure Hunter Seagull 和 Mini Kraken\n• 新增：去广告礼包现可自动领取奖励\n• 改版：Crystal Survey 探索速度提升 50%，并新增额外增益机制\n• 修复：ACI 的 Message in a Bottle 有时会以 0 Black Pearls 出售\n• 其他多项错误修复与改进",
+    "zh-TW": "• 新增：Harbor Crate - 從當地港口獲得有用的戰利品貨運。升級貨運以獲得更頻繁、更優質的戰利品！\n• 新增：每週 Weekly Treasure Hunt 任務\n• 新增：全新貓咪寵物道具\n• 新增：Pet Respec 現已支援 Ghost Dog、Treasure Goblin、Treasure Hunter Seagull 和 Mini Kraken\n• 新增：移除廣告方案現可自動領取獎勵\n• 改版：Crystal Survey 探勘速度提升 50%，並新增額外增益機制\n• 修復：ACI 的 Message in a Bottle 有時會以 0 Black Pearls 售出\n• 其他多項錯誤修復與改進",
   }
 };
-const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+const PA_ANNOUNCEMENT_PREVIOUS: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
   minBuild: 581,
   texts: {
-    // en + et confirmed directly with the owner this cycle. The other 16 locales are placeholders
-    // (fall back to 'en') until Codex translates them — see feedback_localization_owner.md.
     "en": "• New: Active Pet tracker on the fishing screen (opt-in, Tracker Settings)\n• New: Account Age and Active Gameplay Time in your stats\n• Rebalanced: pet XP gain (Ghost Dog expedition XP greatly increased, Pet Rock catch XP increased)\n• Fixed: Crystal Storage rate underestimating fill speed for some players\n• New: Mythic Collection — tap a caught Mythic to revisit its discovery story\n• Fixed: Ancient Archive Vault (Forgotten Isle) now opens automatically, easier dial controls, fixed a bug blocking some players from accessing it",
     "et": "• Uus: Active Pet jälgija kalapüügiekraanil (valikuline, Tracker Settings)\n• Uus: Account Age ja Active Gameplay Time statistika sinu andmetes\n• Tasakaalustatud: lemmikloomade XP saamine (Ghost Dogi ekspeditsiooni-XP oluliselt tõstetud, Pet Rocki saagi-XP suurendatud)\n• Parandatud: Crystal Storage täitumiskiiruse alahindamine osadel mängijatel\n• Uus: Mythic kollektsioon — puuduta püütud Mythicut, et näha uuesti selle avastamisloo popup'i\n• Parandatud: Ancient Archive Vault (Forgotten Isle) avaneb nüüd automaatselt, lihtsam juhtimine, parandatud viga, mis takistas osadel mängijatel ligipääsu",
   }
 };
-const PA_ANNOUNCEMENT_PREVIOUS_3: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+const PA_ANNOUNCEMENT_PREVIOUS_2: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
-  minBuild: 574,
+  minBuild: 577,
   texts: {
-    "en": "Full patch notes on Reddit & Discord!\n\n• Fortune & Open Seas Mythics\n• Abyss Descent — 5 new deep-sea zones\n• Lost Civilization & Ancient Expeditions\n• Momentum Exchange\n• 10 new Hidden Bobbers\n• 6 new Pet Skills & 13 new Pet Items\n• Sell All Tracker & Cloud Sync Status\n• Balance changes and bug fixes",
+    "en": "• New: Push Notifications — missions, expeditions, pets, events & more (configurable in Settings)\n• New: Option to disable Special-Event ad popups\n• Improved: Tracker Settings — all on-screen trackers (incl. Sell All) managed from one place\n• Rebalanced: Mini Kraken's Relic Salvage skill\n• Fixed: Successful Voyages mission not progressing from auto-claimed expeditions",
   }
 };
-const PA_ANNOUNCEMENT_PREVIOUS_2: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+const PA_ANNOUNCEMENT_PREVIOUS_3: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
   minBuild: 560,
   texts: {
@@ -2715,6 +2729,16 @@ const PA_CONFIG_DEFAULTS: Record<string, unknown> = {
   bottleManualChance:        1/10000,  // per-tap MIAB drop chance outside ACI
   bottleMaxHeld:             1,        // max unopened bottles held at once (ACI + manual combined)
   bottleDailyMax:            0,        // max bottles obtainable per rolling 24h (0 = unlimited)
+  // ACI manual-fishing click-sequence minigame balance (live competition only — Practice Mode's
+  // own per-player sliders are a separate, localhost-only debug tool and never read these).
+  // Fixed (no randomness, min=max) per owner spec 2026-10-24 — spawn 1.2s, tap cooldown 0.6s,
+  // clicksRequired 5, reaction window 1.4s.
+  aciSpawnMinMs:             1200,     // delay before a CLICK prompt appears
+  aciSpawnMaxMs:             1200,
+  aciCooldownMinMs:          600,      // pause between a valid click and the next prompt
+  aciCooldownMaxMs:          600,
+  aciClicksRequired:         5,        // clicks needed to complete one cast
+  aciReactionMs:             1400,     // must click within this long once the prompt appears
 };
 
 // Public — clients poll this on every launch
@@ -3165,7 +3189,8 @@ app.get('/pa/aci/comp', verifyPAToken, async (req, res) => {
       serverTime: Date.now(),
     });
   }
-  const participation = await getAciResult(comp.comp_id, uid);
+  const winnerCooldown = await isAciWinnerCooldown(uid, comp.comp_id);
+  const participation = winnerCooldown ? null : await getAciResult(comp.comp_id, uid);
   res.json({
     ok: true,
     comp: {
@@ -3178,6 +3203,7 @@ app.get('/pa/aci/comp', verifyPAToken, async (req, res) => {
     aciGoalComplete: !!aciGoalEventId,
     participated:    !!participation,
     bestScore:       participation ? participation.score_rank.toString() : null,
+    winnerCooldown,
     serverTime:      Date.now(),
   });
 });
@@ -3269,10 +3295,16 @@ app.post('/pa/aci/cast/complete', verifyPAToken, async (req, res) => {
       await client.query('ROLLBACK');
       return res.json({ ok: false, error: 'token_owner_mismatch' });
     }
+    const winnerCooldown = await isAciWinnerCooldown(uid, tRow.comp_id);
     // Idempotent: return stored result if token was already completed
     if (tRow.used && tRow.result_json) {
       await client.query('ROLLBACK');
-      return res.json({ ok: true, catch: JSON.parse(tRow.result_json), isNewBest: false, cached: true });
+      const cachedCatch = JSON.parse(tRow.result_json);
+      if (winnerCooldown) {
+        cachedCatch.aciWinnerCooldown = true;
+        cachedCatch.aciReleased = true;
+      }
+      return res.json({ ok: true, catch: cachedCatch, isNewBest: false, winnerCooldown, cached: true });
     }
     if (tRow.used) {
       await client.query('ROLLBACK');
@@ -3305,6 +3337,8 @@ app.post('/pa/aci/cast/complete', verifyPAToken, async (req, res) => {
       value:            cd.value,
       w1legendary:      cd.w1legendary,
       aciMaxDisplaySize: cd.aciMaxDisplaySize,
+      aciWinnerCooldown: winnerCooldown,
+      aciReleased:       winnerCooldown,
     };
     const resultJson = JSON.stringify(catchObj);
     // Resolve display name
@@ -3316,18 +3350,18 @@ app.post('/pa/aci/cast/complete', verifyPAToken, async (req, res) => {
       if (nr?.name) displayName = nr.name;
     } catch { /* ignore */ }
     // Check existing best score
-    const existing = (await client.query(
+    const existing = winnerCooldown ? null : (await client.query(
       `SELECT score_rank FROM aci_results WHERE comp_id=$1 AND uid=$2`, [tRow.comp_id, uid]
     )).rows[0];
     const existingScore = existing ? BigInt(existing.score_rank) : 0n;
     const isNewBest = !existing || cd.scoreRank > existingScore;
-    if (!existing) {
+    if (!winnerCooldown && !existing) {
       await client.query(
         `INSERT INTO aci_results (comp_id,uid,display_name,score_rank,fish_id,result_json,recorded_at)
          VALUES ($1,$2,$3,$4,$5,$6,now())`,
         [tRow.comp_id, uid, displayName, cd.scoreRank.toString(), cd.fishId, resultJson]
       );
-    } else if (isNewBest) {
+    } else if (!winnerCooldown && isNewBest) {
       await client.query(
         `UPDATE aci_results SET score_rank=$1,fish_id=$2,result_json=$3,display_name=$4,recorded_at=now()
          WHERE comp_id=$5 AND uid=$6`,
@@ -3338,7 +3372,7 @@ app.post('/pa/aci/cast/complete', verifyPAToken, async (req, res) => {
       `UPDATE aci_cast_tokens SET used=true,result_json=$1 WHERE token=$2`, [resultJson, token]
     );
     await client.query('COMMIT');
-    res.json({ ok: true, catch: catchObj, isNewBest, cached: false });
+    res.json({ ok: true, catch: catchObj, isNewBest: winnerCooldown ? false : isNewBest, winnerCooldown, cached: false });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('ACI cast/complete error:', err);
@@ -3388,6 +3422,9 @@ app.post('/pa/aci/score/submit', verifyPAToken, async (req, res) => {
   );
   if (!comp.rows[0]) return res.status(404).json({ ok: false, error: 'comp_not_found' });
   if (new Date(comp.rows[0].ends_at) <= new Date()) return res.status(400).json({ ok: false, error: 'competition_expired' });
+  if (await isAciWinnerCooldown(uid, compId)) {
+    return res.json({ ok: true, winnerCooldown: true, bestScore: null });
+  }
 
   const submitted = BigInt(scoreRank);
   const existing  = (await dbPool.query(
@@ -3452,6 +3489,9 @@ app.post('/pa/aci/casts/report', verifyPAToken, async (req, res) => {
   if (!comp) return res.status(404).json({ ok: false, error: 'comp_not_found' });
   const now = Date.now();
   if (new Date(comp.ends_at).getTime() <= now) return res.status(400).json({ ok: false, error: 'competition_expired' });
+  if (await isAciWinnerCooldown(uid, compId)) {
+    return res.json({ ok: true, winnerCooldown: true, casts: 0 });
+  }
   const maxPlausible = Math.max(0, Math.floor((now - new Date(comp.starts_at).getTime()) / 1000));
   const stored = await reportAciCasts(compId, uid, Math.min(casts, maxPlausible));
   if (stored === null) return res.status(500).json({ ok: false, error: 'server_error' });
@@ -3477,17 +3517,14 @@ app.get('/pa/aci/reward/pending', verifyPAToken, async (req, res) => {
     params
   )).rows[0];
   if (!row) return res.json({ ok: true, pending: null });
+  if (await isAciWinnerCooldown(uid, row.comp_id)) return res.json({ ok: true, pending: null });
   const [rank, total] = await Promise.all([
     getAciPlayerRank(row.comp_id, uid),
     getAciParticipantCount(row.comp_id),
   ]);
-  let bracket = 'participant'; let diamonds: number = ACI_REWARDS.participant.diamonds; let tokens: number = ACI_REWARDS.participant.tokens;
-  if (rank !== null && total > 0) {
-    const pct = rank / total * 100;
-    if      (pct <= 1) { bracket = 'top1'; diamonds = ACI_REWARDS.top1.diamonds; tokens = ACI_REWARDS.top1.tokens; }
-    else if (pct <= 3) { bracket = 'top3'; diamonds = ACI_REWARDS.top3.diamonds; tokens = ACI_REWARDS.top3.tokens; }
-    else if (pct <= 5) { bracket = 'top5'; diamonds = ACI_REWARDS.top5.diamonds; tokens = ACI_REWARDS.top5.tokens; }
-  }
+  const bracket = getAciRewardBracket(rank, total);
+  let diamonds: number = ACI_REWARDS[bracket].diamonds;
+  let tokens: number = ACI_REWARDS[bracket].tokens;
   if (bracket === 'participant') {
     if ((await getAciCastCount(row.comp_id, uid)) < ACI_PARTICIPATION_MIN_CASTS) return res.json({ ok: true, pending: null });
   }
@@ -3499,6 +3536,9 @@ app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
   const { compId } = req.body;
   if (!compId) return res.status(400).json({ ok: false, error: 'missing_comp_id' });
+  if (await isAciWinnerCooldown(uid, compId)) {
+    return res.json({ ok: false, error: 'winner_cooldown' });
+  }
   // Comp must be over
   const activeComp = await getActiveAciCompetition();
   if (activeComp && activeComp.comp_id === compId) {
@@ -3515,15 +3555,9 @@ app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
     getAciPlayerRank(compId, uid),
     getAciParticipantCount(compId),
   ]);
-  let bracket = 'participant';
-  let diamonds: number = ACI_REWARDS.participant.diamonds;
-  let tokens: number   = ACI_REWARDS.participant.tokens;
-  if (rank !== null && total > 0) {
-    const pct = rank / total * 100;
-    if      (pct <= 1) { bracket = 'top1'; diamonds = ACI_REWARDS.top1.diamonds; tokens = ACI_REWARDS.top1.tokens; }
-    else if (pct <= 3) { bracket = 'top3'; diamonds = ACI_REWARDS.top3.diamonds; tokens = ACI_REWARDS.top3.tokens; }
-    else if (pct <= 5) { bracket = 'top5'; diamonds = ACI_REWARDS.top5.diamonds; tokens = ACI_REWARDS.top5.tokens; }
-  }
+  const bracket = getAciRewardBracket(rank, total);
+  let diamonds: number = ACI_REWARDS[bracket].diamonds;
+  let tokens: number = ACI_REWARDS[bracket].tokens;
   if (bracket === 'participant') {
     if ((await getAciCastCount(compId, uid)) < ACI_PARTICIPATION_MIN_CASTS) tokens = 0;
   }
@@ -3627,7 +3661,32 @@ app.post('/pa/aci/bottle/found', verifyPAToken, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'invalid_bottle' });
   }
   const safeCompId = typeof compId === 'string' && compId ? compId : null;
+  if (safeCompId && await isAciWinnerCooldown(uid, safeCompId)) {
+    return res.json({ ok: true, winnerCooldown: true });
+  }
   await recordBottleFind(bottleId, uid, safeCompId);
+  res.json({ ok: true });
+});
+
+// Temporary diagnostic for the Depthlight Core "got it without Abyss Descent unlocked"
+// investigation (2026-10-23). Client calls this right after a real Depthlight Core drop fires
+// (game.js, inside _applyManualCatchResult) with the exact zone context at that moment, so the
+// next real occurrence can be inspected directly in pa_depthlight_drop_log instead of guessed at.
+// Remove this endpoint + the table once the root cause is found. Fire-and-forget from the
+// client — never blocks or fails the actual drop if this call fails.
+app.post('/pa/debug/depthlight-drop', verifyPAToken, express.json({ limit: '2kb' }), async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const b = (req.body || {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' && v.length <= 64 ? v : null);
+  await logDepthlightDrop(uid, {
+    catchZone:   str(b.catchZone),
+    currentZone: str(b.currentZone),
+    fiActive:    !!b.fiActive,
+    fiVariant:   str(b.fiVariant),
+    aciActive:   !!b.aciActive,
+    eiActive:    !!b.eiActive,
+    petSource:   !!b.petSource,
+  });
   res.json({ ok: true });
 });
 
@@ -4429,6 +4488,9 @@ const PA_PRODUCT_CATALOG: Record<string, { type: 'consumable' | 'non_consumable'
   dev_support_package_2: { type: 'non_consumable',              grant: { devSupport2: true } },
   dev_support_mini:      { type: 'consumable',                  grant: { devSupportMini: 2 } },
   dev_support_mini_2:    { type: 'consumable',                  grant: { devSupportMini2: 2 } },
+  dev_support_credit_1:  { type: 'consumable',                  grant: { devSupportCredits: 1 } },
+  dev_support_credit_10: { type: 'consumable',                  grant: { devSupportCredits: 10 } },
+  dev_support_credit_20: { type: 'consumable',                  grant: { devSupportCredits: 20 } },
   prestige_pack:         { type: 'consumable',     diamonds: 100, grant: { diamonds: 100 } },
   'ei_event_reward':     { type: 'consumable',                  grant: { eiAllTiersUnlocked: true } },
   time_skip_12:          { type: 'consumable',                  grant: { autoIncomePackages: 12 } },
@@ -4626,6 +4688,34 @@ function _reverseGrant(save: any, grant: any): { modified: boolean; desc: string
     const before = Math.max(0, Math.floor(Number(save.devSupportMini2Count) || 0));
     save.devSupportMini2Count = Math.max(0, before - Math.max(0, Math.floor(Number(grant.devSupportMini2) || 0)));
     parts.push(`devSupportMini2Count ${before}→${save.devSupportMini2Count}`);
+  }
+  if (grant.devSupportCredits) {
+    let remaining = Math.max(0, Math.floor(Number(grant.devSupportCredits) || 0));
+    const beforeUnused = Math.max(0, Math.floor(Number(save.devSupportCredits) || 0));
+    const unusedRemoved = Math.min(beforeUnused, remaining);
+    save.devSupportCredits = beforeUnused - unusedRemoved;
+    remaining -= unusedRemoved;
+
+    // Revoke only bonuses allocated from the new credit system. Historical direct
+    // Dev Support I/II purchases are deliberately excluded from these counters.
+    const beforeApplied1 = Math.max(0, Math.floor(Number(save.devSupportCreditApplied1) || 0));
+    const applied1Removed = Math.min(beforeApplied1, remaining);
+    if (applied1Removed > 0) {
+      save.devSupportCreditApplied1 = beforeApplied1 - applied1Removed;
+      save.devSupportMiniCount = Math.max(0, Math.floor(Number(save.devSupportMiniCount) || 0) - applied1Removed * 2);
+      remaining -= applied1Removed;
+    }
+
+    const beforeApplied2 = Math.max(0, Math.floor(Number(save.devSupportCreditApplied2) || 0));
+    const applied2Removed = Math.min(beforeApplied2, remaining);
+    if (applied2Removed > 0) {
+      save.devSupportCreditApplied2 = beforeApplied2 - applied2Removed;
+      save.devSupportMini2Count = Math.max(0, Math.floor(Number(save.devSupportMini2Count) || 0) - applied2Removed * 2);
+      remaining -= applied2Removed;
+    }
+
+    parts.push(`support credits -${Math.max(0, Math.floor(Number(grant.devSupportCredits) || 0)) - remaining}`);
+    if (remaining > 0) parts.push(`${remaining} support credits already unavailable`);
   }
   if (grant.cashBobber) {
     if (Array.isArray(save.unlockedBobberCosmetics)) {
@@ -4936,6 +5026,32 @@ app.post('/admin/pa/grant-diamonds', paAdminMiddleware, express.json(), async (r
 
   console.log(`[PA Admin] grant-diamonds: +${amount} to ${uid} (${before}→${save.diamonds}) reason="${reason}"`);
   res.json({ ok: true, uid, before, after: save.diamonds, granted: amount });
+});
+
+// POST /admin/pa/grant-dev-support-credit  { uid, credits, reason? }
+// Manually grants N Support Credits (the dev_support_credit_1/10/20 IAP currency) to a player's
+// save (for support cases). Mirrors grant-diamonds — direct DB mutation, no client build needed.
+app.post('/admin/pa/grant-dev-support-credit', paAdminMiddleware, express.json(), async (req, res) => {
+  const { uid, credits, reason = '' } = req.body;
+  if (!uid || typeof uid !== 'string') { res.status(400).json({ error: 'missing uid' }); return; }
+  const amount = parseInt(credits, 10);
+  if (!amount || amount < 1 || amount > 1000) { res.status(400).json({ error: 'invalid credits (1–1000)' }); return; }
+
+  const existing = await loadPASave(uid);
+  if (!existing) { res.status(404).json({ error: 'player not found' }); return; }
+
+  let save: any;
+  try { save = JSON.parse(existing.saveJson); } catch { res.status(500).json({ error: 'save parse error' }); return; }
+
+  const before = Math.max(0, Math.floor(Number(save.devSupportCredits) || 0));
+  save.devSupportCredits = before + amount;
+  save._savedAt = Date.now();
+
+  const ok = await savePASave(uid, JSON.stringify(save));
+  if (!ok) { res.status(500).json({ error: 'db write failed' }); return; }
+
+  console.log(`[PA Admin] grant-dev-support-credit: +${amount} to ${uid} (${before}→${save.devSupportCredits}) reason="${reason}"`);
+  res.json({ ok: true, uid, before, after: save.devSupportCredits, granted: amount });
 });
 
 // POST /admin/pa/grant-remove-ads  { uid }
