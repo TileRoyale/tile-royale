@@ -2606,7 +2606,7 @@ const PA_LATEST_VERSION     = "v1.0.8.5"; // Build 577 [Production] — released
 // from Android's build number / versionName above. The iOS client compares itself only
 // against these two values, never against PA_MIN_CLIENT_VERSION/PA_LATEST_VERSION.
 const PA_IOS_MIN_CLIENT_VERSION = "v1.0";
-const PA_IOS_LATEST_VERSION     = "v1.0.9"; // live on the App Store
+const PA_IOS_LATEST_VERSION     = "v1.0.14"; // live on the App Store
 // Temporary compatibility switch for iOS 1.0.9 (Build 51), which predates the
 // ?platform=ios client fix and would otherwise compare itself against Android.
 // Set to false when iOS 1.0.10 is live.
