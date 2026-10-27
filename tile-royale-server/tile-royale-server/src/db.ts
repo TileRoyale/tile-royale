@@ -710,6 +710,17 @@ async function createTables(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_aci_trophies_uid ON aci_trophies(uid, awarded_at DESC);
 
+    -- ACI winner rotation: after three consecutive top-1% finishes, the immediately following
+    -- competition is exhibition-only for that player. Rows are materialized from final results so
+    -- claim timing cannot bypass the cooldown, while original competition results remain intact.
+    CREATE TABLE IF NOT EXISTS aci_winner_cooldowns (
+      uid         TEXT        NOT NULL,
+      comp_id     TEXT        NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (uid, comp_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_aci_winner_cooldowns_comp ON aci_winner_cooldowns(comp_id);
+
     -- ACI: per-player cast total per competition, reported by the client (casts are rolled locally, so the
     -- server never sees them individually). Used for the "at least 25 casts" participation reward.
     CREATE TABLE IF NOT EXISTS aci_cast_counts (
@@ -765,6 +776,23 @@ async function createTables(): Promise<void> {
     -- watch one specific account more closely (re-flags it sooner); set higher to relax it for a
     -- known-legitimate fast clicker. See isAutoClickerToday() in paAnalytics.ts.
     ALTER TABLE pa_player_drop_overrides ADD COLUMN IF NOT EXISTS autoclicker_threshold INTEGER;
+
+    -- Temporary diagnostic log for the Depthlight Core "got it without Abyss Descent unlocked"
+    -- investigation (2026-10-23): client reports every real Depthlight Core drop here with the
+    -- exact zone context at the moment of the roll, so the next occurrence can be inspected
+    -- directly instead of guessed at from static code review. Safe to drop once resolved.
+    CREATE TABLE IF NOT EXISTS pa_depthlight_drop_log (
+      id             BIGSERIAL    PRIMARY KEY,
+      uid            TEXT         NOT NULL,
+      catch_zone     TEXT,
+      current_zone   TEXT,
+      fi_active      BOOLEAN,
+      fi_variant     TEXT,
+      aci_active     BOOLEAN,
+      ei_active      BOOLEAN,
+      pet_source     BOOLEAN,
+      logged_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
   `);
   // Indexes created separately so IF NOT EXISTS works (constraints don't support it)
   await pool!.query(`
@@ -1940,6 +1968,7 @@ export async function deletePAAccountData(uid: string): Promise<boolean> {
       'DELETE FROM aci_results WHERE uid = $1',
       'DELETE FROM aci_reward_claims WHERE uid = $1',
       'DELETE FROM aci_trophies WHERE uid = $1',
+      'DELETE FROM aci_winner_cooldowns WHERE uid = $1',
       'DELETE FROM aci_cast_counts WHERE uid = $1',
       'DELETE FROM aci_bottles WHERE uid = $1',
       'DELETE FROM ei_lb_claims WHERE uid = $1',
@@ -3582,12 +3611,21 @@ export async function getAciLeaderboard(
   compId: string, uid: string
 ): Promise<{ rows: any[]; selfRow: any | null }> {
   if (!pool) return { rows: [], selfRow: null };
+  await syncAciWinnerCooldowns(compId);
 
   const top = await pool.query(
-    `SELECT display_name, score_rank::text AS score_rank,
-            ROW_NUMBER() OVER (ORDER BY score_rank::bigint DESC) AS rank,
-            (uid = $2) AS is_self
-     FROM aci_results WHERE comp_id = $1
+    `SELECT COALESCE(
+              NULLIF(LEFT(BTRIM(s.save_json::jsonb->>'playerName'), 24), ''),
+              NULLIF(BTRIM(r.display_name), ''),
+              'Anonymous Angler'
+            ) AS display_name,
+            score_rank::text AS score_rank,
+            RANK() OVER (ORDER BY score_rank::bigint DESC) AS rank,
+            (r.uid = $2) AS is_self
+     FROM aci_results r
+     LEFT JOIN pa_save_data s ON s.uid = r.uid
+     WHERE comp_id = $1 AND score_rank > 0
+       AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns wc WHERE wc.comp_id = $1 AND wc.uid = r.uid)
      ORDER BY score_rank::bigint DESC LIMIT 100`,
     [compId, uid || '']
   );
@@ -3604,10 +3642,19 @@ export async function getAciLeaderboard(
 
   if (!selfInTop && uid) {
     const self = await pool.query(
-      `SELECT display_name, score_rank::text AS score_rank,
+      `SELECT COALESCE(
+                NULLIF(LEFT(BTRIM(s.save_json::jsonb->>'playerName'), 24), ''),
+                NULLIF(BTRIM(r.display_name), ''),
+                'Anonymous Angler'
+              ) AS display_name,
+              score_rank::text AS score_rank,
               (SELECT COUNT(*) + 1 FROM aci_results r2
-               WHERE r2.comp_id = $1 AND r2.score_rank::bigint > r.score_rank::bigint) AS rank
-       FROM aci_results r WHERE comp_id = $1 AND uid = $2`,
+               WHERE r2.comp_id = $1 AND r2.score_rank::bigint > r.score_rank::bigint
+                 AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns wc2 WHERE wc2.comp_id = $1 AND wc2.uid = r2.uid)) AS rank
+       FROM aci_results r
+       LEFT JOIN pa_save_data s ON s.uid = r.uid
+       WHERE comp_id = $1 AND r.uid = $2 AND score_rank > 0
+         AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns wc WHERE wc.comp_id = $1 AND wc.uid = r.uid)`,
       [compId, uid]
     );
     if (self.rows[0]) {
@@ -3625,11 +3672,58 @@ export async function getAciLeaderboard(
 
 export async function getAciParticipantCount(compId: string): Promise<number> {
   if (!pool) return 0;
+  await syncAciWinnerCooldowns(compId);
   const r = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM aci_results WHERE comp_id=$1 AND score_rank > 0`,
+    `SELECT COUNT(*) AS cnt FROM aci_results r WHERE comp_id=$1 AND score_rank > 0
+       AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns wc WHERE wc.comp_id = $1 AND wc.uid = r.uid)`,
     [compId]
   );
   return Number(r.rows[0]?.cnt ?? 0);
+}
+
+/**
+ * Materializes the winner's cooldown for currentCompId from the final leaderboards of the three
+ * immediately preceding competitions. This does not depend on trophy/reward claim timing.
+ */
+export async function syncAciWinnerCooldowns(currentCompId: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `WITH current_comp AS (
+       SELECT starts_at FROM aci_competitions WHERE comp_id = $1
+     ), previous_comps AS (
+       SELECT c.comp_id
+       FROM aci_competitions c, current_comp cur
+       WHERE c.starts_at < cur.starts_at
+       ORDER BY c.starts_at DESC
+       LIMIT 3
+     ), placements AS (
+       SELECT own.uid, p.comp_id,
+              RANK() OVER (PARTITION BY p.comp_id ORDER BY own.score_rank DESC)::BIGINT AS rank,
+              COUNT(*) OVER (PARTITION BY p.comp_id)::BIGINT AS total
+       FROM previous_comps p
+       JOIN aci_results own ON own.comp_id = p.comp_id
+       WHERE own.score_rank > 0
+         AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns owc
+           WHERE owc.comp_id = p.comp_id AND owc.uid = own.uid)
+     )
+     INSERT INTO aci_winner_cooldowns (uid, comp_id)
+     SELECT uid, $1 FROM placements
+     GROUP BY uid
+     HAVING COUNT(*) = 3
+        AND BOOL_AND(total > 0 AND rank <= GREATEST(1::BIGINT, total / 100))
+     ON CONFLICT (uid, comp_id) DO NOTHING`,
+    [currentCompId]
+  );
+}
+
+export async function isAciWinnerCooldown(uid: string, compId: string): Promise<boolean> {
+  if (!pool) return false;
+  await syncAciWinnerCooldowns(compId);
+  const r = await pool.query(
+    `SELECT 1 FROM aci_winner_cooldowns WHERE uid = $1 AND comp_id = $2`,
+    [uid, compId]
+  );
+  return r.rows.length > 0;
 }
 
 export async function hasAciRewardClaim(compId: string, uid: string): Promise<boolean> {
@@ -3654,10 +3748,13 @@ export async function recordAciRewardClaim(
 
 export async function getAciPlayerRank(compId: string, uid: string): Promise<number | null> {
   if (!pool) return null;
+  await syncAciWinnerCooldowns(compId);
   const r = await pool.query(
     `SELECT (SELECT COUNT(*) + 1 FROM aci_results r2
-             WHERE r2.comp_id = $1 AND r2.score_rank > r.score_rank) AS rank
-     FROM aci_results r WHERE comp_id = $1 AND uid = $2`,
+             WHERE r2.comp_id = $1 AND r2.score_rank > r.score_rank
+               AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns wc2 WHERE wc2.comp_id = $1 AND wc2.uid = r2.uid)) AS rank
+     FROM aci_results r WHERE comp_id = $1 AND uid = $2 AND score_rank > 0
+       AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns wc WHERE wc.comp_id = $1 AND wc.uid = r.uid)`,
     [compId, uid]
   );
   if (!r.rows[0]) return null;
@@ -3833,6 +3930,23 @@ export async function recordBottleFind(bottleId: string, uid: string, compId: st
   } catch (err) {
     console.error('[DB] recordBottleFind error:', err);
     return false;
+  }
+}
+
+// Temporary diagnostic for the Depthlight Core investigation (2026-10-23) — see table comment.
+export async function logDepthlightDrop(uid: string, ctx: {
+  catchZone?: string | null; currentZone?: string | null; fiActive?: boolean; fiVariant?: string | null;
+  aciActive?: boolean; eiActive?: boolean; petSource?: boolean;
+}): Promise<void> {
+  if (!pool || !dbAvailable) return;
+  try {
+    await pool.query(
+      `INSERT INTO pa_depthlight_drop_log (uid, catch_zone, current_zone, fi_active, fi_variant, aci_active, ei_active, pet_source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [uid, ctx.catchZone ?? null, ctx.currentZone ?? null, !!ctx.fiActive, ctx.fiVariant ?? null, !!ctx.aciActive, !!ctx.eiActive, !!ctx.petSource]
+    );
+  } catch (err) {
+    console.error('[DB] logDepthlightDrop error:', err);
   }
 }
 

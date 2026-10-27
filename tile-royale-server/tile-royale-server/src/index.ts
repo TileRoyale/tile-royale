@@ -3433,14 +3433,17 @@ app.post('/pa/aci/score/submit', verifyPAToken, async (req, res) => {
   const existingScore = existing ? BigInt(existing.score_rank) : 0n;
 
   if (!existing) {
-    // Best-effort display name from saved game state
+    // Best-effort display name from saved game state. Patient Angler stores the chosen name as
+    // playerName; displayName is retained only as a compatibility fallback for older/test saves.
     let displayName = 'Anonymous Angler';
     try {
       const save = await loadPASave(uid);
       if (save) {
         const parsed = JSON.parse(save.saveJson) as Record<string, unknown>;
-        if (typeof parsed.displayName === 'string' && parsed.displayName) {
-          displayName = parsed.displayName;
+        const savedName = [parsed.playerName, parsed.displayName, parsed.username, parsed.anglerName]
+          .find(value => typeof value === 'string' && value.trim()) as string | undefined;
+        if (savedName) {
+          displayName = savedName.trim().slice(0, 24);
         }
       }
     } catch {}
