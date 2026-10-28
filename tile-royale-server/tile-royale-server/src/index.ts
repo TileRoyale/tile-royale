@@ -2251,6 +2251,13 @@ const PA_ZONE_ORDER = [
   'emerald_cavern','amber_cavern','amethyst_cavern','ruby_cavern',
   'aquamarine_cavern','opal_cavern','obsidian_cavern','topaz_cavern',
   'sapphire_cavern','blue_diamond_cavern',
+  // Anglers Competition Island — a non-depth minigame zone the client can set as currentZone
+  // while a player is inside it. Missing here too (same bug class as the Abyss Descent zones
+  // above), causing the same permanent HTTP 400 "server error" cloud-sync failure for any
+  // player who entered ACI (player reports, 2026-10-28: uids r1K3rVd5RscWDKnypgZlFIkVlBs1,
+  // tA5RIRmR6IXiCXC1W61mBETAciZ2, a3FWM5yQCWMStf68ANuskOdwgii2). Appended at the end since it
+  // isn't part of the depth progression order.
+  'anglers_competition_island',
 ];
 const PA_BOBBER_IDS = ['basic_bobber','sensitive_bobber','heavy_bobber','electronic_bobber'];
 const PA_PEARL_UPGRADE_MAXLEVEL: Record<string, number> = {
