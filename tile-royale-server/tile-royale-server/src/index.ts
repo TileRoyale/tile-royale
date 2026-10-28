@@ -3189,6 +3189,45 @@ function _rollAciCatch() {
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { randomUUID: _aciUUID } = require('crypto') as { randomUUID: () => string };
 
+// Automatically chains a new 24h ACI competition the moment the previous one ends, so the island
+// never sits empty waiting for an admin to manually recreate one (owner report, 2026-10-28: the
+// one existing competition sat expired for 7+ minutes with nothing replacing it — before that,
+// ACI had gone an entire month with zero active competition, since nothing anywhere ever
+// re-created one; createAciCompetition() was only ever called once, at the original CE-goal
+// bootstrap, or via the manual admin endpoint below). Starting the next competition immediately
+// does NOT block players from redeeming the previous one's rewards — /pa/aci/reward/pending
+// already excludes whichever comp is currently active when looking for an unclaimed finished one,
+// and /pa/aci/reward/claim only refuses a claim for the comp that is STILL active, never a past one.
+async function _aciAutoRenew(): Promise<void> {
+  try {
+    const dbPool = getPool();
+    if (!dbPool) return;
+    const aciGoalEventId = await getAciGoalComplete();
+    if (!aciGoalEventId) return; // ACI itself not unlocked yet — nothing to renew
+    const activeComp = await getActiveAciCompetition();
+    if (activeComp) return;
+    const prevRow = (await dbPool.query(
+      `SELECT comp_id, name_index FROM aci_competitions ORDER BY starts_at DESC LIMIT 1`
+    ).catch(() => ({ rows: [] as any[] }))).rows[0];
+    const prevIdx = prevRow?.name_index ?? null;
+    let nameIdx: number;
+    do { nameIdx = Math.floor(Math.random() * ACI_COMPETITION_NAMES.length); }
+    while (nameIdx === prevIdx && ACI_COMPETITION_NAMES.length > 1);
+    const compId = _aciUUID();
+    await createAciCompetition(compId, nameIdx, prevRow?.comp_id ?? null);
+    console.log(`[ACI] Auto-started competition ${compId} ("${ACI_COMPETITION_NAMES[nameIdx]}")`);
+  } catch (e) {
+    console.error('[ACI] Auto-renew failed:', e);
+  }
+}
+// Checked every 2 minutes — frequent enough that the gap between one competition ending and the
+// next starting is negligible next to the 24h competition length, cheap enough (two indexed reads,
+// a no-op in the overwhelmingly common case) to run this often. Also fires once shortly after
+// startup so a competition that expired while the server was redeploying is replaced right away,
+// not after waiting out the first 2-minute tick.
+setTimeout(() => { _aciAutoRenew(); }, 30_000);
+setInterval(() => { _aciAutoRenew(); }, 2 * 60 * 1000);
+
 // GET /pa/aci/comp
 app.get('/pa/aci/comp', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
