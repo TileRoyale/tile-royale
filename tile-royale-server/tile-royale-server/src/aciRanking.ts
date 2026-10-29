@@ -7,17 +7,25 @@ export interface AciRewardCutoffs {
 }
 
 /**
- * Returns conservative leaderboard cutoffs for the ACI percentage rewards.
+ * Returns leaderboard cutoffs for ACI rewards.
  *
- * At least the winner always belongs to the top-1% bracket, even when there
- * are fewer than 100 participants. The other percentage brackets use floor,
- * so a small leaderboard does not manufacture extra rewarded positions.
+ * Below 100 participants the actual finishing positions are used: first place
+ * is Top 1, places 2-3 are Top 3, and places 4-5 are Top 5. At 100 or more
+ * participants the brackets switch to the Top 1% / 3% / 5% percentile model.
  */
 export function getAciRewardCutoffs(totalParticipants: number): AciRewardCutoffs {
   const total = Number.isFinite(totalParticipants)
     ? Math.max(0, Math.floor(totalParticipants))
     : 0;
   if (total === 0) return { top1: 0, top3: 0, top5: 0 };
+
+  if (total < 100) {
+    return {
+      top1: 1,
+      top3: Math.min(3, total),
+      top5: Math.min(5, total),
+    };
+  }
 
   const top1 = Math.max(1, Math.floor(total * 0.01));
   const top3 = Math.max(top1, Math.floor(total * 0.03));

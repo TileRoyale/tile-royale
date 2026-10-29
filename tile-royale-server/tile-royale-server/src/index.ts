@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 import { createServer } from "http";
 import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
@@ -193,6 +194,9 @@ const app    = express();
 // Bump this when releasing a client version that is required (breaks old clients)
 const MIN_CLIENT_VERSION = "v1.0.22";
 
+// Transparently compress JSON/text responses larger than 1 KB. Saves Railway egress without
+// changing response bodies or client behavior; WebSocket traffic is not handled by this middleware.
+app.use(compression({ threshold: 1024 }));
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
 
@@ -2339,8 +2343,27 @@ async function validatePASave(prev: any, next: any, uid: string): Promise<{ ok: 
 
 // Cache for Google credential → Firebase UID mapping (avoids hitting tokeninfo on every request)
 const _gcredCache = new Map<string, { uid: string; exp: number }>();
+const _GCRED_CACHE_MAX = 2000;
+const _GCRED_CACHE_PRUNE_MS = 10 * 60 * 1000;
+let _gcredCacheLastPrune = 0;
+
+function _pruneGcredCache(now = Date.now()): void {
+  if (now - _gcredCacheLastPrune < _GCRED_CACHE_PRUNE_MS && _gcredCache.size <= _GCRED_CACHE_MAX) return;
+  _gcredCacheLastPrune = now;
+  for (const [key, entry] of _gcredCache) {
+    if (entry.exp <= now) _gcredCache.delete(key);
+  }
+  // Map preserves insertion order; discard the oldest still-valid entries if an unusual traffic
+  // spike exceeds the cap. They can be safely re-verified on their next request.
+  while (_gcredCache.size > _GCRED_CACHE_MAX) {
+    const oldest = _gcredCache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    _gcredCache.delete(oldest);
+  }
+}
 
 async function _verifyGoogleCred(googleToken: string): Promise<string> {
+  _pruneGcredCache();
   const cacheKey = googleToken.slice(-32);
   const cached   = _gcredCache.get(cacheKey);
   if (cached && Date.now() < cached.exp) return cached.uid;

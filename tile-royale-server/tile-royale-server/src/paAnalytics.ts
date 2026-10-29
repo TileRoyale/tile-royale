@@ -18,12 +18,25 @@ if (!ADMIN_SECRET) console.warn('[PA Admin] PA_ADMIN_SECRET not set — admin lo
 
 // ─── Rate Limiter (analytics uploads) ────────────────────────────────────────
 const _rl = new Map<string, number>();
+let _rlLastPrune = 0;
+function _pruneRateLimits(now: number): void {
+  if (now - _rlLastPrune < 60_000 && _rl.size <= 20_000) return;
+  _rlLastPrune = now;
+  for (const [key, lastSeen] of _rl) {
+    if (now - lastSeen > 300_000) _rl.delete(key);
+  }
+  while (_rl.size > 20_000) {
+    const oldest = _rl.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    _rl.delete(oldest);
+  }
+}
 function _rateLimit(key: string, windowMs = 15_000): boolean {
   const now = Date.now();
+  _pruneRateLimits(now);
   const last = _rl.get(key) || 0;
   if (now - last < windowMs) return true;
   _rl.set(key, now);
-  if (_rl.size > 20_000) { for (const [k,t] of _rl) { if (now - t > 300_000) _rl.delete(k); } }
   return false;
 }
 
@@ -32,6 +45,20 @@ interface _LoginEntry { count: number; resetAt: number }
 const _loginFailures = new Map<string, _LoginEntry>();
 const _LOGIN_MAX     = 5;
 const _LOGIN_WINDOW  = 15 * 60 * 1000;
+let _loginFailuresLastPrune = 0;
+
+function _pruneLoginFailures(now: number): void {
+  if (now - _loginFailuresLastPrune < 60_000 && _loginFailures.size <= 5000) return;
+  _loginFailuresLastPrune = now;
+  for (const [ip, entry] of _loginFailures) {
+    if (entry.resetAt <= now) _loginFailures.delete(ip);
+  }
+  while (_loginFailures.size > 5000) {
+    const oldest = _loginFailures.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    _loginFailures.delete(oldest);
+  }
+}
 
 function _clientIp(req: Request): string {
   const xff = req.headers['x-forwarded-for'];
@@ -48,14 +75,25 @@ function _isLoginLocked(ip: string): boolean {
 
 function _recordLoginFail(ip: string): void {
   const now = Date.now();
+  _pruneLoginFailures(now);
   const e   = _loginFailures.get(ip);
   if (!e || now > e.resetAt) _loginFailures.set(ip, { count: 1, resetAt: now + _LOGIN_WINDOW });
   else e.count++;
-  if (_loginFailures.size > 5000) { for (const [k,v] of _loginFailures) { if (Date.now() > v.resetAt) _loginFailures.delete(k); } }
 }
 
 // ─── Admin Session Management ─────────────────────────────────────────────────
 const _adminSessions = new Map<string, number>();
+
+function _pruneAdminSessions(now: number): void {
+  for (const [token, exp] of _adminSessions) {
+    if (exp <= now) _adminSessions.delete(token);
+  }
+  while (_adminSessions.size > 1000) {
+    const oldest = _adminSessions.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    _adminSessions.delete(oldest);
+  }
+}
 
 function _parseCookie(req: Request, name: string): string | null {
   const header = (req.headers['cookie'] as string) || '';
@@ -69,7 +107,7 @@ function _parseCookie(req: Request, name: string): string | null {
 
 function _makeAdminSession(res: Response): void {
   const now    = Date.now();
-  if (_adminSessions.size > 1000) { for (const [t, exp] of _adminSessions) { if (exp < now) _adminSessions.delete(t); } }
+  _pruneAdminSessions(now);
   const token  = crypto.randomBytes(32).toString('hex');
   _adminSessions.set(token, now + 3_600_000);
   const secure = _IS_PROD ? '; Secure' : '';
