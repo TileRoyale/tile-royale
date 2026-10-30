@@ -81,6 +81,22 @@ const bodySrc = dbSource.slice(bodyStart, bodyEnd);
   assert.match(routeSrc, /res\.json\(\{\s*ok\s*\}\);/, 'legacy /pa/save must still respond with exactly { ok }');
 }
 
+// ── adoptLocalSave must be a distinct, separately-named flag from explicitReset ────────────────
+// (owner correction, 2026-10-30: "Ära kasuta explicitReset nime tavalise Save to Cloud jaoks...
+// lisa eraldi selgelt nimetatud adoptLocalSave") — Settings → Account "Save to Cloud" opting a
+// never-before-synced device into v2 must stay auditably distinct from the progress-reset flow,
+// even though both end up calling the same unconditional savePASave() underneath.
+{
+  const v2Start = indexSource.indexOf('app.post("/pa/save-v2", verifyPAToken');
+  assert(v2Start !== -1, 'POST /pa/save-v2 route not found');
+  const v2End = indexSource.indexOf('\napp.get("/pa/load/:uid"', v2Start);
+  assert(v2End !== -1, 'POST /pa/save-v2 route end not found');
+  const v2Src = indexSource.slice(v2Start, v2End);
+  assert.match(v2Src, /explicitReset/, '/pa/save-v2 must still support explicitReset for the progress-reset flow');
+  assert.match(v2Src, /adoptLocalSave/, '/pa/save-v2 must support a separate adoptLocalSave flag for "Save to Cloud" opt-in');
+  assert.doesNotMatch(v2Src, /adoptLocalSave\s*===\s*explicitReset|explicitReset\s*\|\|\s*adoptLocalSave|adoptLocalSave\s*\|\|\s*explicitReset/, 'adoptLocalSave and explicitReset must be handled as two distinct conditions, not merged into one check');
+}
+
 // ── pa_save_data schema change must be metadata-only — no content migration/rewrite ────────────
 // (regression #2: "olemasolev save_json jääb revision schema lisamisel muutmata") — Postgres 11+
 // does not rewrite a table for ADD COLUMN ... DEFAULT <constant> (metadata-only), and this project

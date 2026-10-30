@@ -2439,7 +2439,7 @@ app.post("/pa/save", verifyPAToken, express.json({ limit: "500kb" }), async (req
 // savePASaveConditional() in db.ts for the exact (and previously buggy, now fixed) WHERE clause.
 app.post("/pa/save-v2", verifyPAToken, express.json({ limit: "500kb" }), async (req, res) => {
   const uid  = res.locals.paUid as string; // uid from verified token — never trust body
-  const { save, expectedRevision, explicitReset } = req.body;
+  const { save, expectedRevision, explicitReset, adoptLocalSave } = req.body;
   if (!save || typeof save !== "object")
     return res.status(400).json({ ok: false, error: "invalid_request" });
   const prev      = await loadPASave(uid);
@@ -2457,6 +2457,20 @@ app.post("/pa/save-v2", verifyPAToken, express.json({ limit: "500kb" }), async (
   // back to cache afterward — savePASave() itself always bumps revision too (see its own comment
   // in db.ts), it just never checks expectedRevision first.
   if (explicitReset === true) {
+    const ok = await savePASave(uid, JSON.stringify(save));
+    if (!ok) return res.json({ ok: false });
+    const after = await loadPASave(uid);
+    return res.json({ ok: true, revision: after ? after.revision : 1 });
+  }
+  // Opt-in to v2 (owner request, 2026-10-30) — a device that has never cached a revision for this
+  // account (hasn't opted in yet) uses Settings → Account → "Save to Cloud" to deliberately make
+  // its current local save the new cloud truth, activating the revision-tracked flow for every
+  // automatic save from here on (see _adoptLocalSaveAsCloudTruth() in auth.js). Mechanically
+  // identical to the explicitReset branch above (unconditional savePASave(), real revision
+  // returned) — kept as its own separately-named, separately-commented field rather than reusing
+  // explicitReset so the two stay auditably distinct: this is a normal player choosing which
+  // already-real device save becomes authoritative, never a progress reset.
+  if (adoptLocalSave === true) {
     const ok = await savePASave(uid, JSON.stringify(save));
     if (!ok) return res.json({ ok: false });
     const after = await loadPASave(uid);
