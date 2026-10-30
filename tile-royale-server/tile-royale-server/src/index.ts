@@ -2708,7 +2708,10 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.8.12"; // Build 605 [Production] — released 2026-10-30
+const PA_LATEST_VERSION     = "v1.0.8.11"; // Build 596 [Production] — reverted 2026-10-30: bumped to
+// v1.0.8.12 prematurely, before Google Play's production rollout had actually propagated to
+// players — this banner must only point at a version players can actually install right now.
+// Re-bump to v1.0.8.12 only after confirming the Play Store listing shows it as the live version.
 
 // iOS ships its own native App Store version numbers (e.g. "1.0.9"), set independently
 // from Android's build number / versionName above. The iOS client compares itself only
