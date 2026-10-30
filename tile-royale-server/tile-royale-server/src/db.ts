@@ -188,8 +188,17 @@ async function createTables(): Promise<void> {
     CREATE TABLE IF NOT EXISTS pa_save_data (
       uid          TEXT         PRIMARY KEY,
       save_json    TEXT         NOT NULL,
+      revision     INTEGER      NOT NULL DEFAULT 1,
       updated_at   TIMESTAMPTZ  DEFAULT now()
     );
+    -- Multi-device conflict protection (owner request, 2026-10-30): monotonically increasing
+    -- per-player revision counter. Every accepted /pa/save bumps it; a client's /pa/save is only
+    -- accepted when its expectedRevision matches the current value (see savePASaveConditional()),
+    -- so a stale device that missed another device's newer save gets HTTP 409 instead of silently
+    -- overwriting it. Existing rows predating this column default to 1, which is safe: the first
+    -- save attempt from any already-signed-in device will have fetched (and cached) the real
+    -- current revision via /pa/load or /pa/save-revision before ever attempting a conditional save.
+    ALTER TABLE pa_save_data ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
 
     -- Open Seas Mythics: a real-time exponential timer plus authoritative copies.
     CREATE TABLE IF NOT EXISTS pa_mythic_state (
@@ -1911,11 +1920,16 @@ export async function savePASave(uid: string, saveJson: string): Promise<boolean
     // one history row to a hiccup is fine; a player being told their actual save succeeded when
     // it didn't is not. An UPDATE/INSERT with no RETURNING clause resolves an empty array (not
     // null) on real success, so null here unambiguously means the query itself failed.
+    // Unconditional write (admin tools, corrections apply-back, reset flow) — always allowed to
+    // bypass the revision check below, but still bumps revision so a stale, already-connected
+    // device's next conditional save (savePASaveConditional) correctly gets rejected instead of
+    // silently clobbering this write.
     const result = await query(
-      `INSERT INTO pa_save_data (uid, save_json, updated_at)
-       VALUES ($1, $2, now())
+      `INSERT INTO pa_save_data (uid, save_json, revision, updated_at)
+       VALUES ($1, $2, 1, now())
        ON CONFLICT (uid) DO UPDATE SET
          save_json  = EXCLUDED.save_json,
+         revision   = pa_save_data.revision + 1,
          updated_at = now()`,
       [uid, saveJson]
     );
@@ -1923,6 +1937,85 @@ export async function savePASave(uid: string, saveJson: string): Promise<boolean
   } catch (err) {
     console.error('[DB] savePASave error:', err);
     return false;
+  }
+}
+
+// Multi-device conflict protection (owner request, 2026-10-30). Performs the write only if
+// expectedRevision matches the row's current revision (or the row doesn't exist yet — a brand
+// new account's first save is always accepted regardless of what the client sent). Pass null for
+// expectedRevision when the caller has no cached revision at all (treated the same as "new save").
+// Single atomic statement — no explicit transaction/row lock needed, Postgres's own ON CONFLICT
+// evaluation is atomic per row.
+// Flat (non-discriminated-union) result shape deliberately — this project's tsconfig runs with
+// strict/strictNullChecks off, under which TS does not narrow a discriminated union by its `ok`
+// literal, so callers would need unsafe casts to read conflict/currentRevision/updatedAt/revision.
+// Optional fields read as `T | undefined` instead, which works fine without strict mode.
+//
+// Only ever called from the new POST /pa/save-v2 (index.ts) — the legacy POST /pa/save endpoint
+// is intentionally untouched and keeps calling the plain, unconditional savePASave() above, exactly
+// as it always has, so no currently-installed Android/iOS build's cloud save behavior changes.
+// Because only the new v2 endpoint reaches this function, it is unconditionally strict: an
+// EXISTING row only accepts a save whose expectedRevision is a real number matching the row's
+// current revision — null/missing never matches. (An earlier version of this function tried to
+// keep one shared endpoint and added a strictSync flag to choose between a strict and a legacy
+// WHERE clause; that legacy branch — `$3::int IS NULL OR revision = $3` — is exactly the hole a
+// later review caught: null made it true even against an existing row. Splitting into two
+// endpoints removes the need for that flag entirely instead of trying to parameterize around it.)
+// A brand-new uid's first save is always accepted regardless of expectedRevision, via the
+// ON CONFLICT's INSERT branch, which this WHERE never gates.
+export async function savePASaveConditional(
+  uid: string,
+  saveJson: string,
+  expectedRevision: number | null
+): Promise<{
+  ok: boolean;
+  conflict: boolean;
+  revision?: number;
+  currentRevision?: number;
+  updatedAt?: string | null;
+}> {
+  if (!pool || !dbAvailable) return { ok: false, conflict: false };
+  try {
+    // Best-effort rolling history backup, same as savePASave() above. Harmless if this attempt
+    // turns out to be a conflict below — the archived row is just a copy of data that's still
+    // the current row's own content, and gets trimmed back down to 3 on the next successful save.
+    await query(
+      `INSERT INTO pa_save_history (uid, save_json, saved_at)
+       SELECT uid, save_json, now() FROM pa_save_data WHERE uid = $1`,
+      [uid]
+    );
+    await query(
+      `DELETE FROM pa_save_history WHERE id IN (
+         SELECT id FROM pa_save_history WHERE uid = $1
+         ORDER BY saved_at DESC OFFSET 3
+       )`,
+      [uid]
+    );
+    const result = await query(
+      `INSERT INTO pa_save_data (uid, save_json, revision, updated_at)
+       VALUES ($1, $2, 1, now())
+       ON CONFLICT (uid) DO UPDATE SET
+         save_json  = EXCLUDED.save_json,
+         revision   = pa_save_data.revision + 1,
+         updated_at = now()
+       WHERE $3::int IS NOT NULL AND pa_save_data.revision = $3
+       RETURNING revision`,
+      [uid, saveJson, expectedRevision]
+    );
+    if (result === null) return { ok: false, conflict: false };
+    if (result.length === 1) return { ok: true, conflict: false, revision: Number(result[0].revision) };
+    // 0 rows returned: the row exists but its revision didn't match expectedRevision (a real
+    // conflict — ON CONFLICT's UPDATE...WHERE excluded it, and since a conflict existed the
+    // INSERT branch was never taken either). Fetch the current state to report it to the caller.
+    const current = await query(`SELECT revision, updated_at FROM pa_save_data WHERE uid = $1`, [uid]);
+    if (current?.length) {
+      return { ok: false, conflict: true, currentRevision: Number(current[0].revision) || 1, updatedAt: current[0].updated_at };
+    }
+    // Row vanished between statements (e.g. account deletion mid-request) — not a real conflict.
+    return { ok: false, conflict: false };
+  } catch (err) {
+    console.error('[DB] savePASaveConditional error:', err);
+    return { ok: false, conflict: false };
   }
 }
 
@@ -1934,13 +2027,13 @@ export async function loadPASaveHistory(uid: string): Promise<Array<{ saveJson: 
   return (rows || []).map((r: any) => ({ saveJson: r.save_json, savedAt: r.saved_at }));
 }
 
-export async function loadPASave(uid: string): Promise<{ saveJson: string; updatedAt: string } | null> {
+export async function loadPASave(uid: string): Promise<{ saveJson: string; updatedAt: string; revision: number } | null> {
   const rows = await query(
-    `SELECT save_json, updated_at FROM pa_save_data WHERE uid = $1`,
+    `SELECT save_json, updated_at, revision FROM pa_save_data WHERE uid = $1`,
     [uid]
   );
   if (!rows?.length) return null;
-  return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at };
+  return { saveJson: rows[0].save_json, updatedAt: rows[0].updated_at, revision: Number(rows[0].revision) || 1 };
 }
 
 // Permanently removes every Patient Angler record that is keyed to a Firebase UID.

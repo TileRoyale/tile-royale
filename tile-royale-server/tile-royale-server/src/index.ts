@@ -7,7 +7,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, loadPASave, loadPASaveHistory, deletePAAccountData, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig, getPAPurchaseReceiptFull, isPAVoidedPurchaseProcessed, recordPAVoidedPurchase,
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, savePASaveConditional, loadPASave, loadPASaveHistory, deletePAAccountData, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig, getPAPurchaseReceiptFull, isPAVoidedPurchaseProcessed, recordPAVoidedPurchase,
   getCEActivePlayerCount, getCEContribution, upsertCEContribution, getCECommunityTotal, getCELeaderboard,
   getCEClaimedMilestones, hasCEMilestoneClaim, recordCEMilestoneClaim,
   hasCELbClaim, recordCELbClaim, getCEPlayerPercentile,
@@ -2410,6 +2410,12 @@ async function verifyPAToken(req: express.Request, res: express.Response, next: 
   }
 }
 
+// Legacy save endpoint — deliberately left EXACTLY as it was before the multi-device conflict
+// work below (owner safety requirement, 2026-10-30: no change may affect any currently-installed
+// Android/iOS build's cloud save behavior). No revision check, no 409, unconditional accept — a
+// currently-installed app keeps working exactly as it always has. New client builds use
+// POST /pa/save-v2 instead (see below); this endpoint stays reachable only until a mandatory
+// update has fully retired the last pre-v2 client in the wild.
 app.post("/pa/save", verifyPAToken, express.json({ limit: "500kb" }), async (req, res) => {
   const uid  = res.locals.paUid as string; // uid from verified token — never trust body
   const { save } = req.body;
@@ -2426,12 +2432,70 @@ app.post("/pa/save", verifyPAToken, express.json({ limit: "500kb" }), async (req
   res.json({ ok });
 });
 
+// Multi-device conflict protection (owner request, 2026-10-30) — a new, separate endpoint rather
+// than changing /pa/save in place, specifically so this cannot affect any already-installed
+// client. An EXISTING cloud row only accepts a save whose expectedRevision is a real number
+// matching the row's current revision; a brand new uid's first save is always accepted. See
+// savePASaveConditional() in db.ts for the exact (and previously buggy, now fixed) WHERE clause.
+app.post("/pa/save-v2", verifyPAToken, express.json({ limit: "500kb" }), async (req, res) => {
+  const uid  = res.locals.paUid as string; // uid from verified token — never trust body
+  const { save, expectedRevision, explicitReset } = req.body;
+  if (!save || typeof save !== "object")
+    return res.status(400).json({ ok: false, error: "invalid_request" });
+  const prev      = await loadPASave(uid);
+  const prevData  = prev ? JSON.parse(prev.saveJson) : null;
+  const check     = await validatePASave(prevData, save, uid);
+  if (!check.ok) {
+    console.warn(`[PA] Anti-cheat triggered uid=${uid}: ${check.reason}`);
+    return res.status(400).json({ ok: false, error: "validation_failed", reason: check.reason });
+  }
+  // Explicit reset/overwrite flow — the player already went through the existing cloud-restore
+  // prompt and deliberately chose "Overwrite Cloud & Continue" (or confirmed a progress reset);
+  // the whole point of that choice is to replace whatever is on the server regardless of its
+  // current revision. This stays inside the v2 (revision-tracked) path rather than falling back
+  // to the legacy endpoint above, specifically so the client still gets a real, usable revision
+  // back to cache afterward — savePASave() itself always bumps revision too (see its own comment
+  // in db.ts), it just never checks expectedRevision first.
+  if (explicitReset === true) {
+    const ok = await savePASave(uid, JSON.stringify(save));
+    if (!ok) return res.json({ ok: false });
+    const after = await loadPASave(uid);
+    return res.json({ ok: true, revision: after ? after.revision : 1 });
+  }
+  const normalizedExpected = (typeof expectedRevision === "number" && Number.isFinite(expectedRevision))
+    ? expectedRevision : null;
+  const result = await savePASaveConditional(uid, JSON.stringify(save), normalizedExpected);
+  if (!result.ok) {
+    if (result.conflict) {
+      return res.status(409).json({
+        ok: false, error: "revision_conflict",
+        currentRevision: result.currentRevision,
+        updatedAt: result.updatedAt,
+      });
+    }
+    return res.json({ ok: false });
+  }
+  res.json({ ok: true, revision: result.revision });
+});
+
 app.get("/pa/load/:uid", verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string; // uid from token — ignores URL param
   const data = await loadPASave(uid);
   const corrections = await popPACorrections(uid); // one-shot admin override; null if none pending
-  if (!data) return res.json({ ok: true, save: null, ...(corrections ? { corrections } : {}) });
-  res.json({ ok: true, save: JSON.parse(data.saveJson), updatedAt: data.updatedAt, ...(corrections ? { corrections } : {}) });
+  if (!data) return res.json({ ok: true, save: null, revision: 0, ...(corrections ? { corrections } : {}) });
+  res.json({ ok: true, save: JSON.parse(data.saveJson), revision: data.revision, updatedAt: data.updatedAt, ...(corrections ? { corrections } : {}) });
+});
+
+// Lightweight revision check (owner request, 2026-10-30) — used by the client on cold start and
+// real foreground/resume to detect "another device has saved more recently than what I know
+// about" BEFORE this device's autosave would otherwise push and risk a 409. Deliberately does
+// NOT touch pa_corrections (unlike /pa/load/:uid, whose corrections are one-shot/popped) and does
+// NOT return the (potentially large) save payload, so it's safe to call on every resume.
+app.get("/pa/save-revision/:uid", verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const data = await loadPASave(uid);
+  if (!data) return res.json({ ok: true, revision: 0, updatedAt: null });
+  res.json({ ok: true, revision: data.revision, updatedAt: data.updatedAt });
 });
 
 // Open Seas Mythics use real elapsed time and a server-owned exponential draw.
