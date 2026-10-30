@@ -2708,9 +2708,8 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.8.12"; // Build 605 [Production] — owner confirmed live on Play
-// Store 2026-10-30 (explicit separate permission given to bump this), after the earlier premature
-// bump on the same day was reverted — see feedback_update_notification.md.
+const PA_LATEST_VERSION     = "v1.0.8.13"; // Build 606 [Production] — hotfix (disabled unfinished
+// Kraken Ship tab, fixed Ghost Dog GS skill), owner confirmed live on Play Store 2026-10-30.
 
 // iOS ships its own native App Store version numbers (e.g. "1.0.9"), set independently
 // from Android's build number / versionName above. The iOS client compares itself only
