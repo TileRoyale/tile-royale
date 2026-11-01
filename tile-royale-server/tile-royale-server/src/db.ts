@@ -2162,6 +2162,36 @@ export async function checkAndRecordPARedeem(
   }
 }
 
+// Same as checkAndRecordPARedeem, but for codes with a total-use cap (e.g. "first 5 players").
+// The count check and the insert run under one per-code transaction lock, so players redeeming at
+// the same moment cannot both pass the check and push the code past its cap.
+export async function checkAndRecordPARedeemCapped(
+  uid: string,
+  code: string,
+  maxUses: number
+): Promise<'ok' | 'already_redeemed' | 'max_uses_reached' | 'error'> {
+  if (!pool || !dbAvailable) return 'error';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, ['pa_code_cap:' + code]);
+    const dup = await client.query(`SELECT 1 FROM pa_codes_used WHERE code = $1 AND uid = $2`, [code, uid]);
+    if (dup.rowCount) { await client.query('ROLLBACK'); return 'already_redeemed'; }
+    const cnt = await client.query(`SELECT COUNT(*)::INT AS n FROM pa_codes_used WHERE code = $1`, [code]);
+    if ((cnt.rows[0]?.n ?? 0) >= maxUses) { await client.query('ROLLBACK'); return 'max_uses_reached'; }
+    await client.query(`INSERT INTO pa_codes_used (code, uid) VALUES ($1, $2)`, [code, uid]);
+    await client.query('COMMIT');
+    return 'ok';
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err.code === '23505') return 'already_redeemed';
+    console.error('[DB] pa capped redeem error:', err);
+    return 'error';
+  } finally {
+    client.release();
+  }
+}
+
 // ─── Push Tokens ───────────────────────────────────────────────────────────────
 
 export async function upsertPushToken(playerId: string, token: string, platform: string): Promise<boolean> {

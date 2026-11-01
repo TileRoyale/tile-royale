@@ -7,7 +7,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { TileRoyaleRoom } from "./rooms/TileRoyaleRoom";
 import { GauntletRoom } from "./rooms/GauntletRoom";
-import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, savePASaveConditional, loadPASave, loadPASaveHistory, deletePAAccountData, checkAndRecordPARedeem, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig, getPAPurchaseReceiptFull, isPAVoidedPurchaseProcessed, recordPAVoidedPurchase,
+import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbStatus, getGlobalStats, getWorldRecords, getPlayerPercentiles, findPlayerByTag, sendFriendRequest, respondFriendRequest, getFriends, getFriendRequests, getFriendsLeaderboard, getFriendshipStatus, getFavoriteMode, updatePlayerProgress, getPlayerAchievements, getNews, getLatestNews, createNewsPost, deleteNewsPost, upsertPlayer, writeGameResult, query, getPlayerNotifications, markNotificationRead, claimNotificationReward, createPlayerNotification, savePlayerData, loadPlayerData, upsertPushToken, getPushTokenCount, getPlayerPushToken, checkAndRecordPromoRedemption, getPromoStats, getTrustedDiamonds, setTrustedDiamonds, addTrustedDiamonds, getKothWeeklyLeaderboard, getKothDailyStats, claimKothDailyReward, claimKothWeeklyPrize, recordPurchaseReceipt, getPurchaseReceipt, getProcessedTokens, recordPAPurchaseReceipt, getPAPurchaseReceipt, getPurchaseSpendStats, upsertPracticeScore, getPracticeLeaderboard, createRingGrant, validateRingGrant, createRingTrade, acceptRingTrade, cancelRingTrade, upsertSoloScore, getSoloLeaderboard, getGauntletMMR, getGauntletLeaderboard, claimGauntletWeeklyReward, recordDailyLoginClaim, recordMissionClaim, getAndValidateModeRewardClaim, getModeRewardPercentile, deletePlayerData, resetAllPlayerData, recordTrophyMilestoneClaim, recordAchievementUnlock, hasAchievementUnlock, checkAdRewardCooldown, recordAdRewardClaim, recordOfflineRewardClaim, getPlayerLastSeen, recordDcClaim, recordDiamondSpend, getMissionServerCount, recordSurpriseGrant, recordLevelUpClaim, recordSoloLevelClaim, getPlayerGameStats, recordTicketEvent, recordDcSwap, recordKothFastestClaim, recordSoloMilestoneClaim, savePASave, savePASaveConditional, loadPASave, loadPASaveHistory, deletePAAccountData, checkAndRecordPARedeem, checkAndRecordPARedeemCapped, exportAllPASaves, getPAVerifiedProductIds, getPARemoteConfig, setPARemoteConfig, getPAPurchaseReceiptFull, isPAVoidedPurchaseProcessed, recordPAVoidedPurchase,
   getCEActivePlayerCount, getCEContribution, upsertCEContribution, getCECommunityTotal, getCELeaderboard,
   getCEClaimedMilestones, hasCEMilestoneClaim, recordCEMilestoneClaim,
   hasCELbClaim, recordCELbClaim, getCEPlayerPercentile,
@@ -4276,6 +4276,8 @@ const PA_REDEEM_CODES: Record<string, {
   patch?: Record<string, any>;
   desc: string;
   maxUses?: number;
+  // Only players whose cloud save has at least this many prestiges may redeem (others get invalid_code).
+  minPrestige?: number;
   targetUid?: string;
   expires?: string;
 }> = {
@@ -4306,10 +4308,14 @@ const PA_REDEEM_CODES: Record<string, {
   'GEM48CP9RX':      { diamonds: 48, maxUses: 1, targetUid: 'cpUSLr1VmEYsfhAolmNeuQh2QKx2', desc: '48 Diamonds gift!' },
   'ANGLERS50':       { diamonds: 25, autoIncomePackages: 1, desc: '25 Diamonds + 1 Automation Income Token — thanks for being part of the community!' },
   'FESTIVAL21':      { diamonds: 25, blackPearls: 5, autoIncomePackages: 2, expires: '2026-09-23T23:59:59Z', desc: '25 Diamonds + 2 Auto Income Tokens + 5 Black Pearls — community event is coming!' },
-  'KRAKENFIGHT':     { krakenTest: 'fight', multiUse: true, desc: 'Kraken test fight ready — test mode, no rewards.' },
+  // 'KRAKENFIGHT' retired 2026-10-31 (owner request) — must no longer be redeemable. Do not re-add
+  // this key; KRAKENTEST2 is the live Kraken test-fight code now.
+  'KRAKENTEST2':     { krakenTest: 'fight', multiUse: true, desc: 'Kraken test fight ready — test mode, no rewards.' },
   'ACIPRACTICE':     { aciPractice: true, multiUse: true, desc: 'ACI Practice Mode unlocked — no rewards or leaderboard progress.' },
   'CELEBRATE':       { diamonds: 100, autoIncomePackages: 4, expires: '2026-10-01T23:59:59Z', desc: 'Celebration gift! 🎉 100 Diamonds + 4 Auto Income Tokens!' },
   'IOSLAUNCH':       { diamonds: 100, autoIncomePackages: 10, desc: 'Patient Angler is now on iOS! 🎉 100 Diamonds + 10 Auto Income Tokens!' },
+  // Hidden Letters hunt (2026-11-01): the first 5 players with at least 1 prestige get 1 Message in a Bottle.
+  'GHOSTREEF':       { messageBottles: 1, maxUses: 5, minPrestige: 1, desc: 'Hidden Letters solved! You are one of the first 5 — 1 Message in a Bottle!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -4349,14 +4355,28 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   if (!getDbStatus().available)
     return res.json({ ok: false, error: 'server_error' });
 
-  // maxUses: check total redemption count before allowing
-  if (entry.maxUses != null) {
+  // minPrestige: read the player's cloud save; no save or too few prestiges = not eligible
+  if (entry.minPrestige != null) {
+    const rows = await query('SELECT save_json FROM pa_save_data WHERE uid=$1', [uid]);
+    const raw = rows?.[0]?.save_json;
+    let prestiges = 0;
+    try { const s = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {}; prestiges = Number(s.prestigeCount) || 0; } catch { prestiges = 0; }
+    if (prestiges < entry.minPrestige) return res.json({ ok: false, error: 'invalid_code' });
+  }
+
+  // maxUses: count check + insert under one per-code lock, so simultaneous redeems cannot exceed the cap
+  if (entry.maxUses != null && !entry.multiUse) {
+    const result = await checkAndRecordPARedeemCapped(uid, code, entry.maxUses);
+    if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
+    if (result === 'max_uses_reached') return res.json({ ok: false, error: 'expired' });
+    if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
+  } else if (entry.maxUses != null) {
     const rows = await query(`SELECT COUNT(*)::INT AS n FROM pa_codes_used WHERE code = $1`, [code]);
     const used = rows?.[0]?.n ?? 0;
     if (used >= entry.maxUses) return res.json({ ok: false, error: 'invalid_code' });
   }
 
-  if (!entry.multiUse) {
+  if (!entry.multiUse && entry.maxUses == null) {
     const result = await checkAndRecordPARedeem(uid, code);
     if (result === 'already_redeemed') return res.json({ ok: false, error: 'already_redeemed' });
     if (result === 'error')            return res.json({ ok: false, error: 'server_error' });
