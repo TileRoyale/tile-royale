@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { randomUUID } from "crypto";
 
 // ─── Connection ────────────────────────────────────────────────────────────────
 // DATABASE_URL is set as a Railway environment variable.
@@ -696,6 +697,12 @@ async function createTables(): Promise<void> {
       claimed_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
       PRIMARY KEY (comp_id, uid)
     );
+    -- 2026-11-02: how the reward was delivered. 'corrections' = old clients (pa_corrections, which a
+    -- /pa/load peek can drop); 'direct' = new clients get the amounts in the claim response and apply
+    -- them to their own save, then ack. Only 'direct' claims are ever re-sent to a client, so a reward
+    -- an old client already received through corrections can never be paid a second time.
+    ALTER TABLE aci_reward_claims ADD COLUMN IF NOT EXISTS delivery TEXT NOT NULL DEFAULT 'corrections';
+    ALTER TABLE aci_reward_claims ADD COLUMN IF NOT EXISTS acked_at TIMESTAMPTZ;
 
     -- ACI: permanent trophy room — one row per competition where the player placed top1/top3/top5,
     -- written when they claim that competition's reward. Not retroactive: only competitions claimed
@@ -767,6 +774,32 @@ async function createTables(): Promise<void> {
       comp_id    TEXT,
       found_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
+
+    -- ACI monthly grand prize (2026-11-02). A month is finalized exactly once after it ends: its top 5
+    -- are frozen here, so the result never shifts afterwards (late cooldown materialization, a changed
+    -- player name or the same-day-only auto-clicker flag can no longer move it).
+    CREATE TABLE IF NOT EXISTS aci_monthly_finalized (
+      month_key     TEXT         PRIMARY KEY,   -- 'YYYY-MM' (UTC)
+      finalized_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
+    -- One row per monthly winner = one diamond grant. Two-phase delivery like the Community Event
+    -- leaderboard grants: the client applies the diamonds to its save, then acks; an unacked grant is
+    -- simply returned again, and the client's own applied-grant list prevents paying it twice.
+    CREATE TABLE IF NOT EXISTS aci_monthly_winners (
+      grant_id      TEXT         PRIMARY KEY,
+      month_key     TEXT         NOT NULL,
+      uid           TEXT         NOT NULL,
+      rank          INT          NOT NULL,
+      display_name  TEXT         NOT NULL DEFAULT 'Anonymous Angler',
+      points        INT          NOT NULL,
+      days_counted  INT          NOT NULL,
+      diamonds      INT          NOT NULL,
+      created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+      ack_at        TIMESTAMPTZ,
+      UNIQUE (month_key, uid),
+      UNIQUE (month_key, rank)
+    );
+    CREATE INDEX IF NOT EXISTS idx_aci_monthly_winners_uid ON aci_monthly_winners(uid);
 
     -- Per-player anti-cheat drop cooldown overrides (admin-set, targets a single flagged
     -- account without affecting anyone else). Each *_cooldown_hours column, when set and > 0,
@@ -3858,14 +3891,34 @@ export async function hasAciRewardClaim(compId: string, uid: string): Promise<bo
   return r.rows.length > 0;
 }
 
+/** Returns true only if THIS call inserted the claim (so the caller pays exactly once). */
 export async function recordAciRewardClaim(
-  compId: string, uid: string, bracket: string, diamonds: number, tokens: number
-): Promise<void> {
+  compId: string, uid: string, bracket: string, diamonds: number, tokens: number,
+  delivery: 'corrections' | 'direct' = 'corrections'
+): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query(
+    `INSERT INTO aci_reward_claims (comp_id, uid, bracket, diamonds, tokens, delivery)
+     VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+    [compId, uid, bracket, diamonds, tokens, delivery]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function getAciRewardClaim(compId: string, uid: string): Promise<any | null> {
+  if (!pool) return null;
+  const r = await pool.query(
+    `SELECT comp_id, bracket, diamonds, tokens, delivery, acked_at FROM aci_reward_claims WHERE comp_id = $1 AND uid = $2`,
+    [compId, uid]
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function ackAciRewardClaim(compId: string, uid: string): Promise<void> {
   if (!pool) return;
   await pool.query(
-    `INSERT INTO aci_reward_claims (comp_id, uid, bracket, diamonds, tokens)
-     VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
-    [compId, uid, bracket, diamonds, tokens]
+    `UPDATE aci_reward_claims SET acked_at = now() WHERE comp_id = $1 AND uid = $2 AND delivery = 'direct' AND acked_at IS NULL`,
+    [compId, uid]
   );
 }
 
@@ -4168,4 +4221,157 @@ export async function getAciCastCount(compId: string, uid: string): Promise<numb
     [compId, uid]
   );
   return Number(r.rows[0]?.n ?? 0);
+}
+
+// ─── ACI monthly grand prize ─────────────────────────────────────────────────────────────────────
+// Every finished daily ACI competition gives placement points: 1st 10, 2nd 7, 3rd 5, 4th 3, 5th 2,
+// any other ranked participation 1. Places are the same ones the daily leaderboard shows (RANK by
+// score, winner-cooldown players excluded). A competition belongs to the UTC month in which it ENDS.
+// Only a player's best ACI_MONTHLY_BEST_DAYS results count. Ties: points, then best single place,
+// then uid (deterministic). Top 5 win ACI_MONTHLY_DIAMONDS.
+export const ACI_MONTHLY_BEST_DAYS = 20;
+export const ACI_MONTHLY_DIAMONDS = [500, 400, 300, 200, 100];
+
+export interface AciMonthlyRow {
+  uid: string;
+  rank: number;
+  display_name: string;
+  points: number;
+  days_counted: number;
+  best_place: number;
+}
+
+/** Materializes winner cooldowns for every finished competition ending in [startIso, endIso), so the
+ *  monthly places match the daily leaderboards even for competitions nobody re-opened later. */
+export async function syncAciCooldownsForRange(startIso: string, endIso: string): Promise<void> {
+  if (!pool) return;
+  const comps = await pool.query(
+    `SELECT comp_id FROM aci_competitions WHERE ends_at >= $1 AND ends_at < $2 AND ends_at <= now()`,
+    [startIso, endIso]
+  );
+  for (const c of comps.rows) await syncAciWinnerCooldowns(c.comp_id);
+}
+
+/** Full monthly standings (all players with at least one ranked result), best first. */
+export async function getAciMonthlyStandings(startIso: string, endIso: string): Promise<AciMonthlyRow[]> {
+  if (!pool) return [];
+  const r = await pool.query(
+    `WITH comps AS (
+       SELECT comp_id FROM aci_competitions
+       WHERE ends_at >= $1 AND ends_at < $2 AND ends_at <= now()
+     ), placed AS (
+       SELECT r.uid, RANK() OVER (PARTITION BY r.comp_id ORDER BY r.score_rank DESC)::INT AS place
+       FROM aci_results r
+       JOIN comps c ON c.comp_id = r.comp_id
+       WHERE r.score_rank > 0
+         AND NOT EXISTS (SELECT 1 FROM aci_winner_cooldowns wc WHERE wc.comp_id = r.comp_id AND wc.uid = r.uid)
+     ), scored AS (
+       SELECT uid, place,
+              CASE place WHEN 1 THEN 10 WHEN 2 THEN 7 WHEN 3 THEN 5 WHEN 4 THEN 3 WHEN 5 THEN 2 ELSE 1 END AS pts
+       FROM placed
+     ), ordered AS (
+       SELECT uid, place, pts, ROW_NUMBER() OVER (PARTITION BY uid ORDER BY pts DESC, place ASC) AS rn
+       FROM scored
+     ), agg AS (
+       SELECT uid,
+              SUM(pts) FILTER (WHERE rn <= $3)::INT AS points,
+              COUNT(*) FILTER (WHERE rn <= $3)::INT AS days_counted,
+              MIN(place)::INT AS best_place
+       FROM ordered GROUP BY uid
+     )
+     SELECT a.uid, a.points, a.days_counted, a.best_place,
+            COALESCE(
+              NULLIF(LEFT(BTRIM(s.save_json::jsonb->>'playerName'), 24), ''),
+              (SELECT NULLIF(BTRIM(r2.display_name), '') FROM aci_results r2 WHERE r2.uid = a.uid ORDER BY r2.recorded_at DESC LIMIT 1),
+              'Anonymous Angler'
+            ) AS display_name,
+            ROW_NUMBER() OVER (ORDER BY a.points DESC, a.best_place ASC, a.uid ASC)::INT AS rank
+     FROM agg a
+     LEFT JOIN pa_save_data s ON s.uid = a.uid
+     ORDER BY rank`,
+    [startIso, endIso, ACI_MONTHLY_BEST_DAYS]
+  );
+  return r.rows.map(x => ({
+    uid: x.uid, rank: Number(x.rank), display_name: x.display_name,
+    points: Number(x.points), days_counted: Number(x.days_counted), best_place: Number(x.best_place),
+  }));
+}
+
+export async function isAciMonthFinalized(monthKey: string): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query(`SELECT 1 FROM aci_monthly_finalized WHERE month_key = $1`, [monthKey]);
+  return r.rows.length > 0;
+}
+
+/**
+ * Freezes a finished month's top 5 and creates their diamond grants, exactly once (advisory lock +
+ * finalized marker in one transaction). `isExcluded` drops players from the prize ranking (the
+ * auto-clicker check); the next eligible players move up so 5 prizes are still paid when possible.
+ */
+export async function finalizeAciMonth(
+  monthKey: string, startIso: string, endIso: string,
+  isExcluded: (uid: string) => Promise<boolean>
+): Promise<boolean> {
+  if (!pool || !dbAvailable) return false;
+  if (await isAciMonthFinalized(monthKey)) return false;
+  await syncAciCooldownsForRange(startIso, endIso);
+  const standings = await getAciMonthlyStandings(startIso, endIso);
+  const winners: AciMonthlyRow[] = [];
+  for (const row of standings) {
+    if (winners.length >= ACI_MONTHLY_DIAMONDS.length) break;
+    if (await isExcluded(row.uid)) continue;
+    winners.push(row);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, ['aci_monthly:' + monthKey]);
+    const done = await client.query(`SELECT 1 FROM aci_monthly_finalized WHERE month_key = $1`, [monthKey]);
+    if (done.rowCount) { await client.query('ROLLBACK'); return false; }
+    for (let i = 0; i < winners.length; i++) {
+      const w = winners[i];
+      await client.query(
+        `INSERT INTO aci_monthly_winners (grant_id, month_key, uid, rank, display_name, points, days_counted, diamonds)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [randomUUID(), monthKey, w.uid, i + 1, w.display_name, w.points, w.days_counted, ACI_MONTHLY_DIAMONDS[i]]
+      );
+    }
+    await client.query(`INSERT INTO aci_monthly_finalized (month_key) VALUES ($1)`, [monthKey]);
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[DB] finalizeAciMonth error:', err);
+    return false;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getAciMonthlyWinners(monthKey: string): Promise<any[]> {
+  if (!pool) return [];
+  const r = await pool.query(
+    `SELECT rank, display_name, points, days_counted, diamonds, uid FROM aci_monthly_winners
+     WHERE month_key = $1 ORDER BY rank`,
+    [monthKey]
+  );
+  return r.rows;
+}
+
+export async function getAciMonthlyUnackedGrants(uid: string): Promise<any[]> {
+  if (!pool) return [];
+  const r = await pool.query(
+    `SELECT grant_id, month_key, rank, points, days_counted, diamonds FROM aci_monthly_winners
+     WHERE uid = $1 AND ack_at IS NULL ORDER BY month_key`,
+    [uid]
+  );
+  return r.rows;
+}
+
+export async function ackAciMonthlyGrant(uid: string, grantId: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `UPDATE aci_monthly_winners SET ack_at = now() WHERE grant_id = $1 AND uid = $2 AND ack_at IS NULL`,
+    [grantId, uid]
+  );
 }

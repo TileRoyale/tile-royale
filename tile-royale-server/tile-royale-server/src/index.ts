@@ -18,11 +18,13 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   popPACorrections, setPACorrections, peekPACorrections,
   getPool, getAciGoalComplete, setAciGoalComplete, getActiveAciCompetition, createAciCompetition,
   getAciResult, getAciLeaderboard, getAciParticipantCount,
-  hasAciRewardClaim, recordAciRewardClaim, getAciPlayerRank,
+  recordAciRewardClaim, getAciPlayerRank, getAciRewardClaim, ackAciRewardClaim,
   openAciBottle, redeemAciBottleCode, recordBottleFind, reportAciCasts, getAciCastCount,
   getPlayerDropOverrides, setPlayerDropOverrides,
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies, logDepthlightDrop,
-  isAciWinnerCooldown } from "./db";
+  isAciWinnerCooldown,
+  ACI_MONTHLY_BEST_DAYS, ACI_MONTHLY_DIAMONDS, syncAciCooldownsForRange, getAciMonthlyStandings,
+  isAciMonthFinalized, finalizeAciMonth, getAciMonthlyWinners, getAciMonthlyUnackedGrants, ackAciMonthlyGrant } from "./db";
 import * as firebaseAdmin from "firebase-admin";
 import { PA_MYTHIC_COOLDOWN_MS, PA_MYTHIC_ZONES, paFortuneRaw, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from "./paMythic";
 import { getAciRewardBracket } from "./aciRanking";
@@ -3671,24 +3673,40 @@ app.post('/pa/aci/casts/report', verifyPAToken, async (req, res) => {
 });
 
 // GET /pa/aci/reward/pending  — unclaimed reward from most recent finished comp
+// ?direct=1 (clients from 2026-11-02): also returns a claim that was already recorded with direct
+// delivery but never acked (e.g. the claim response was lost), flagged alreadyClaimed, with the
+// recorded amounts — the client applies it only if its own save does not already have that compId.
 app.get('/pa/aci/reward/pending', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
+  const direct = req.query.direct === '1';
   const dbPool = getPool();
   if (!dbPool) return res.status(503).json({ ok: false, error: 'db_unavailable' });
   const activeComp = await getActiveAciCompetition();
   const params: any[] = [uid];
   let excludeClause = '';
   if (activeComp) { params.push(activeComp.comp_id); excludeClause = `AND c.comp_id != $${params.length}`; }
+  const unclaimedOrUnacked = direct
+    ? `(cl.comp_id IS NULL OR (cl.delivery = 'direct' AND cl.acked_at IS NULL))`
+    : `cl.comp_id IS NULL`;
   const row = (await dbPool.query(
-    `SELECT c.comp_id, c.name_index
+    `SELECT c.comp_id, c.name_index, cl.comp_id AS claimed_comp, cl.bracket AS claimed_bracket,
+            cl.diamonds AS claimed_diamonds, cl.tokens AS claimed_tokens
      FROM aci_competitions c
      JOIN aci_results r ON r.comp_id = c.comp_id AND r.uid = $1
      LEFT JOIN aci_reward_claims cl ON cl.comp_id = c.comp_id AND cl.uid = $1
-     WHERE c.ends_at <= now() AND cl.comp_id IS NULL ${excludeClause}
+     WHERE c.ends_at <= now() AND ${unclaimedOrUnacked} ${excludeClause}
      ORDER BY c.ends_at DESC LIMIT 1`,
     params
   )).rows[0];
   if (!row) return res.json({ ok: true, pending: null });
+  if (row.claimed_comp) {
+    const [rank, total] = await Promise.all([getAciPlayerRank(row.comp_id, uid), getAciParticipantCount(row.comp_id)]);
+    return res.json({ ok: true, pending: {
+      compId: row.comp_id, nameIndex: row.name_index, rank, totalParticipants: total,
+      bracket: row.claimed_bracket, diamonds: Number(row.claimed_diamonds) || 0, tokens: Number(row.claimed_tokens) || 0,
+      alreadyClaimed: true,
+    } });
+  }
   if (await isAciWinnerCooldown(uid, row.comp_id)) return res.json({ ok: true, pending: null });
   const [rank, total] = await Promise.all([
     getAciPlayerRank(row.comp_id, uid),
@@ -3703,10 +3721,14 @@ app.get('/pa/aci/reward/pending', verifyPAToken, async (req, res) => {
   res.json({ ok: true, pending: { compId: row.comp_id, nameIndex: row.name_index, rank, totalParticipants: total, bracket, diamonds, tokens } });
 });
 
-// POST /pa/aci/reward/claim  { compId }
+// POST /pa/aci/reward/claim  { compId, direct? }
+// direct: true (clients from 2026-11-02) — the amounts are returned in the response and the client
+// applies them to its own save, then calls /pa/aci/reward/ack. Without it (older clients) the reward
+// still goes through pa_corrections exactly as before, so old builds keep working.
 app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
   const uid = res.locals.paUid as string;
   const { compId } = req.body;
+  const direct = req.body?.direct === true;
   if (!compId) return res.status(400).json({ ok: false, error: 'missing_comp_id' });
   if (await isAciWinnerCooldown(uid, compId)) {
     return res.json({ ok: false, error: 'winner_cooldown' });
@@ -3719,8 +3741,16 @@ app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
   // Player must have participated
   const result = await getAciResult(compId, uid);
   if (!result) return res.json({ ok: false, error: 'no_participation' });
-  // Idempotent
-  if (await hasAciRewardClaim(compId, uid)) {
+  // Idempotent. A direct-delivery claim is returned again (with its recorded amounts) so a client
+  // whose first response was lost can still apply it; the client's own saved compId list prevents a
+  // second payment. A corrections-delivered claim is never re-sent (it was already queued once).
+  const prior = await getAciRewardClaim(compId, uid);
+  if (prior) {
+    if (direct && prior.delivery === 'direct') {
+      const [rank0, total0] = await Promise.all([getAciPlayerRank(compId, uid), getAciParticipantCount(compId)]);
+      return res.json({ ok: true, alreadyClaimed: true, direct: true, bracket: prior.bracket, rank: rank0, totalParticipants: total0,
+        diamonds: Number(prior.diamonds) || 0, tokens: Number(prior.tokens) || 0 });
+    }
     return res.json({ ok: false, error: 'already_claimed' });
   }
   const [rank, total] = await Promise.all([
@@ -3733,7 +3763,10 @@ app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
   if (bracket === 'participant') {
     if ((await getAciCastCount(compId, uid)) < ACI_PARTICIPATION_MIN_CASTS) tokens = 0;
   }
-  await recordAciRewardClaim(compId, uid, bracket, diamonds, tokens);
+  // Only the request that actually inserts the claim pays (two concurrent claims could otherwise both
+  // pass the check above and queue the reward twice).
+  const inserted = await recordAciRewardClaim(compId, uid, bracket, diamonds, tokens, direct ? 'direct' : 'corrections');
+  if (!inserted) return res.json({ ok: false, error: 'already_claimed' });
   // Trophy room: permanent record of this placement, independent of the reward-claim payout above.
   if (bracket !== 'participant' && rank !== null) {
     const nameIndex = await getAciCompetitionNameIndex(compId);
@@ -3746,6 +3779,9 @@ app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
     } catch {}
     await recordAciTrophy(uid, compId, nameIndex, bracket, rank, total, result.fish_id || '', fishSizeQ, fishMaxDisplaySize, fishWeightMg, String(result.score_rank ?? '0'));
   }
+  if (direct) {
+    return res.json({ ok: true, direct: true, bracket, rank, totalParticipants: total, diamonds, tokens });
+  }
   if (diamonds > 0 || tokens > 0) {
     const existing = await peekPACorrections(uid);
     const prev = (existing?.corrections || {}) as Record<string, any>;
@@ -3755,6 +3791,138 @@ app.post('/pa/aci/reward/claim', verifyPAToken, async (req, res) => {
     await setPACorrections(uid, merged);
   }
   res.json({ ok: true, bracket, rank, totalParticipants: total });
+});
+
+// POST /pa/aci/reward/ack  { compId } — direct-delivery client confirms the reward is in its save
+app.post('/pa/aci/reward/ack', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { compId } = (req.body || {}) as { compId?: unknown };
+  if (typeof compId !== 'string' || !compId || compId.length > 80) return res.status(400).json({ ok: false, error: 'missing_comp_id' });
+  await ackAciRewardClaim(compId, uid);
+  res.json({ ok: true });
+});
+
+// ─── ACI monthly grand prize (owner design, 2026-11-02) ──────────────────────────────────────────
+// Placement points from every finished daily competition, best ACI_MONTHLY_BEST_DAYS days count,
+// top 5 of each UTC month win ACI_MONTHLY_DIAMONDS (see db.ts for the exact rules). The month is
+// finalized (frozen + grants created) once, a few minutes after it ends; players whose save is
+// flagged by the auto-clicker check at that moment are skipped and the next player moves up.
+// Diamonds are delivered with a two-phase grant (pending -> client applies to its save -> ack), NOT
+// via pa_corrections, which a /pa/load peek can drop.
+const ACI_MONTHLY_FIRST_MONTH = '2026-11';   // never pay out months before the feature launched
+const ACI_MONTHLY_POINTS = [10, 7, 5, 3, 2, 1]; // display only — the SQL in db.ts is the source of truth
+const ACI_MONTHLY_FINALIZE_DELAY_MS = 5 * 60 * 1000;
+
+function _aciMonthBounds(offset: number, now: Date = new Date()) {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+  const end   = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+  const key = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`;
+  return { key, startIso: start.toISOString(), endIso: end.toISOString(), startsAt: start.getTime(), endsAt: end.getTime() };
+}
+
+async function _aciMonthlyExcluded(uid: string): Promise<boolean> {
+  try {
+    const overrides = await getPlayerDropOverrides(uid);
+    const row = await loadPASave(uid);
+    return row ? isAutoClickerToday(JSON.parse(row.saveJson), overrides.autoclickerThreshold) : false;
+  } catch { return false; } // never exclude on a read failure
+}
+
+let _aciMonthlyFinalizing = false;
+async function _aciFinalizePreviousMonthIfDue(): Promise<void> {
+  if (_aciMonthlyFinalizing) return;
+  const prev = _aciMonthBounds(-1);
+  if (prev.key < ACI_MONTHLY_FIRST_MONTH) return;
+  if (Date.now() < prev.endsAt + ACI_MONTHLY_FINALIZE_DELAY_MS) return;
+  _aciMonthlyFinalizing = true;
+  try {
+    if (await isAciMonthFinalized(prev.key)) return;
+    const done = await finalizeAciMonth(prev.key, prev.startIso, prev.endIso, _aciMonthlyExcluded);
+    if (done) console.log(`[ACI] Monthly grand prize finalized for ${prev.key}`);
+  } catch (e) {
+    console.error('[ACI] Monthly finalize failed:', e);
+  } finally {
+    _aciMonthlyFinalizing = false;
+  }
+}
+setTimeout(() => { _aciFinalizePreviousMonthIfDue(); }, 60_000);
+setInterval(() => { _aciFinalizePreviousMonthIfDue(); }, 10 * 60 * 1000);
+
+const _aciMonthlyCache = new Map<string, { at: number; rows: Awaited<ReturnType<typeof getAciMonthlyStandings>> }>();
+async function _aciMonthlyStandingsCached(b: ReturnType<typeof _aciMonthBounds>) {
+  const hit = _aciMonthlyCache.get(b.key);
+  if (hit && Date.now() - hit.at < 2 * 60 * 1000) return hit.rows;
+  await syncAciCooldownsForRange(b.startIso, b.endIso);
+  const rows = await getAciMonthlyStandings(b.startIso, b.endIso);
+  _aciMonthlyCache.clear();
+  _aciMonthlyCache.set(b.key, { at: Date.now(), rows });
+  return rows;
+}
+
+// GET /pa/aci/monthly — current month's standings (finished competitions only) + last month's winners
+app.get('/pa/aci/monthly', verifyPAToken, async (_req, res) => {
+  const uid = res.locals.paUid as string;
+  if (!getPool()) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  try {
+    const cur = _aciMonthBounds(0);
+    const all = cur.key >= ACI_MONTHLY_FIRST_MONTH ? await _aciMonthlyStandingsCached(cur) : [];
+    const toRow = (r: any) => ({ rank: r.rank, display_name: r.display_name, points: r.points, days_counted: r.days_counted, is_self: r.uid === uid });
+    const rows = all.slice(0, 20).map(toRow);
+    const self = all.find(r => r.uid === uid);
+    const selfRow = self && self.rank > 20 ? toRow(self) : null;
+    const prev = _aciMonthBounds(-1);
+    const prevWinners = prev.key >= ACI_MONTHLY_FIRST_MONTH && await isAciMonthFinalized(prev.key)
+      ? (await getAciMonthlyWinners(prev.key)).map(w => ({ rank: w.rank, display_name: w.display_name, points: w.points, diamonds: w.diamonds, is_self: w.uid === uid }))
+      : [];
+    res.json({
+      ok: true,
+      monthKey: cur.key, startsAt: cur.startsAt, endsAt: cur.endsAt,
+      bestDays: ACI_MONTHLY_BEST_DAYS, diamonds: ACI_MONTHLY_DIAMONDS, points: ACI_MONTHLY_POINTS,
+      rows, selfRow, totalPlayers: all.length,
+      previous: { monthKey: prev.key, winners: prevWinners },
+      serverTime: Date.now(),
+    });
+  } catch (e) {
+    console.error('[ACI] monthly standings failed:', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// GET /pa/aci/monthly/pending — this player's unacknowledged monthly prize grants (normally 0 or 1)
+app.get('/pa/aci/monthly/pending', verifyPAToken, async (_req, res) => {
+  const uid = res.locals.paUid as string;
+  if (!getPool()) return res.status(503).json({ ok: false, error: 'db_unavailable' });
+  await _aciFinalizePreviousMonthIfDue();
+  const grants = await getAciMonthlyUnackedGrants(uid);
+  res.json({
+    ok: true,
+    grants: grants.map(g => ({
+      grantId: g.grant_id, monthKey: g.month_key, rank: g.rank,
+      points: g.points, daysCounted: g.days_counted, diamonds: g.diamonds,
+    })),
+  });
+});
+
+// POST /pa/aci/monthly/ack  { grantId } — client calls after the diamonds are in its saved state
+app.post('/pa/aci/monthly/ack', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const { grantId } = (req.body || {}) as { grantId?: unknown };
+  if (typeof grantId !== 'string' || !grantId || grantId.length > 80) return res.status(400).json({ ok: false, error: 'missing_grant_id' });
+  await ackAciMonthlyGrant(uid, grantId);
+  res.json({ ok: true });
+});
+
+// GET /admin/pa/aci/monthly?month=YYYY-MM — admin preview of a month's full standings and winners
+app.get('/admin/pa/aci/monthly', requireAdmin, async (req, res) => {
+  const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : _aciMonthBounds(0).key;
+  const [y, m] = month.split('-').map(Number);
+  const b = _aciMonthBounds(0, new Date(Date.UTC(y, m - 1, 15)));
+  const standings = await getAciMonthlyStandings(b.startIso, b.endIso);
+  res.json({
+    ok: true, monthKey: b.key, finalized: await isAciMonthFinalized(b.key),
+    winners: await getAciMonthlyWinners(b.key),
+    standings: standings.slice(0, 50),
+  });
 });
 
 // GET /pa/aci/trophies — the player's permanent Trophy Room (top1/top3/top5 placements ever claimed)
