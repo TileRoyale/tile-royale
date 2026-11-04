@@ -4462,6 +4462,11 @@ const PA_REDEEM_CODES: Record<string, {
   messageBottles?: number;
   krakenTest?: string;
   aciPractice?: boolean;
+  // Harbor Crate items by loot id, e.g. { patience_hourglass: 5 }. Clients older than minBuild cannot
+  // apply them, so such codes should always set minBuild.
+  harborItems?: Record<string, number>;
+  // Lowest client BUILD_NUMBER allowed to redeem; older clients get update_required and the code is NOT consumed.
+  minBuild?: number;
   multiUse?: boolean;
   patchArrayAppend?: Record<string, string[]>;
   // Legacy fields — kept for backward compatibility with existing codes
@@ -4544,6 +4549,8 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     return res.json({ ok: false, error: 'invalid_code' });
   if (entry.expires && new Date() > new Date(entry.expires))
     return res.json({ ok: false, error: 'expired' });
+  if (entry.minBuild != null && !(Number(req.body.build) >= entry.minBuild))
+    return res.json({ ok: false, error: 'update_required' });
   // targetUid: code is locked to a specific player — others see invalid_code
   if (entry.targetUid && entry.targetUid !== uid)
     return res.json({ ok: false, error: 'invalid_code' });
@@ -4637,6 +4644,7 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.messageBottles         != null) reward.messageBottles         = entry.messageBottles;
     if (entry.krakenTest             != null) reward.krakenTest             = entry.krakenTest;
     if (entry.aciPractice            != null) reward.aciPractice            = entry.aciPractice;
+    if (entry.harborItems            != null) reward.harborItems            = entry.harborItems;
   }
 
   res.json({ ok: true, desc: entry.desc, reward });
