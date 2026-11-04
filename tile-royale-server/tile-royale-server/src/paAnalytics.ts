@@ -496,6 +496,9 @@ const MILESTONE_KEYS = new Set([
   'first_black_pearl','black_pearls_10','black_pearls_50','black_pearls_100','black_pearls_500',
   'first_achievement','achievements_25_percent','achievements_50_percent','achievements_75_percent','achievements_100_percent',
   'first_guild_order_completed','guild_orders_10','first_golden_contract',
+  // Early-session funnel (2026-11-04): tutorial steps, first automation, play-time checkpoints.
+  'tutorial_started','tutorial_seagull_claimed','tutorial_completed','first_net_purchased',
+  'playtime_2m','playtime_5m','playtime_10m','playtime_20m','playtime_30m',
 ]);
 
 // ─── DB Upsert: Player Progress ───────────────────────────────────────────────
@@ -882,7 +885,11 @@ export async function handleAdminFunnel(_req: Request, res: Response): Promise<v
   const total = Number((await query('SELECT COUNT(*) AS c FROM pa_player_progress'))?.[0]?.c || 0);
 
   const FUNNEL_MILESTONES = [
-    'game_started','river_unlocked','lake_unlocked','bay_unlocked','sea_unlocked','ocean_unlocked',
+    'game_started',
+    // Early-session funnel (2026-11-04)
+    'tutorial_started','playtime_2m','tutorial_seagull_claimed','first_net_purchased','tutorial_completed',
+    'playtime_5m','playtime_10m','playtime_20m','playtime_30m',
+    'river_unlocked','lake_unlocked','bay_unlocked','sea_unlocked','ocean_unlocked',
     'first_prestige','automation_fishdex_50','overall_fishdex_50','manual_fishdex_100',
     'overall_fishdex_100','abyss_unlocked',
   ];
