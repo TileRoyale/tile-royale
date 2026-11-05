@@ -102,8 +102,9 @@ public class BillingPlugin extends Plugin {
 
         billingClient.queryProductDetailsAsync(
                 QueryProductDetailsParams.newBuilder().setProductList(productList).build(),
-                (result, detailsList) -> {
-                    if (result.getResponseCode() != BillingClient.BillingResponseCode.OK || detailsList.isEmpty()) {
+                (result, detailsResult) -> {
+                    List<ProductDetails> detailsList = detailsResult.getProductDetailsList();
+                    if (result.getResponseCode() != BillingClient.BillingResponseCode.OK || detailsList == null || detailsList.isEmpty()) {
                         if (pendingCall != null) {
                             pendingCall.reject("product_not_found");
                             pendingCall = null;

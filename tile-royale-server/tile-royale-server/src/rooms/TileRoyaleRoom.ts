@@ -26,7 +26,8 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
   maxClients = MAX_PLAYERS;
 
   // Lag compensation: store half-RTT per client
-  private clientPings   = new Map<string, number>();   // sessionId → half-RTT ms
+  private clientPings   = new Map<string, number>();   // sessionId → half-RTT ms (smoothed)
+  private rttSamples    = new Map<string, number[]>(); // sessionId → last 5 raw RTT samples
   private pingTimestamps = new Map<string, number>();  // sessionId → ping sent time
 
   private roundTaps:      Array<{ sessionId: string; compensatedTime: number }> = [];
@@ -163,6 +164,7 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
       }
     }
     this.clientPings.delete(client.sessionId);
+    this.rttSamples.delete(client.sessionId);
     this.pingTimestamps.delete(client.sessionId);
     this.playerReactions.delete(client.sessionId);
   }
@@ -192,7 +194,13 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
     this.pingTimestamps.delete(key);
 
     const rtt      = Date.now() - sent;
-    const halfRtt  = Math.round(rtt / 2);
+    // Smooth: median of last 5 RTT samples so a single jitter spike can't skew fairness
+    const samples = this.rttSamples.get(client.sessionId) || [];
+    samples.push(rtt);
+    if (samples.length > 5) samples.shift();
+    this.rttSamples.set(client.sessionId, samples);
+    const sorted   = [...samples].sort((a, b) => a - b);
+    const halfRtt  = Math.round(sorted[Math.floor(sorted.length / 2)] / 2);
     this.clientPings.set(client.sessionId, halfRtt);
 
     // Update visible ping on state
@@ -532,20 +540,16 @@ export class TileRoyaleRoom extends Room<TileRoyaleState> {
       return;
     }
 
-    // LAG COMPENSATION: subtract half-RTT from server receive time
+    // LAG COMPENSATION: the player saw the tile ignite one-way-delay LATE (server→client)
+    // and their tap arrived one-way-delay late (client→server). Subtract the FULL RTT
+    // (not half) so a high-ping player isn't penalised by the ignite delay.
     const halfRtt          = this.clientPings.get(client.sessionId) || 0;
     const serverReceiveTime = Date.now();
-    const compensatedTime   = serverReceiveTime - halfRtt; // when player actually tapped
+    const compensatedTime   = serverReceiveTime - halfRtt * 2; // when player actually tapped, in ignite-time terms
 
     // Reaction time = compensated tap time − when tile ignited
-    const reactionMs = compensatedTime - this.state.roundStartTime;
-
-    // Anti-cheat: reaction floor (applied AFTER lag compensation — fair for all regions)
-    if (reactionMs < REACTION_FLOOR_MS) {
-      console.warn(`[AntiCheat] ${player.name} reaction ${reactionMs}ms (ping:${halfRtt*2}ms) — rejected`);
-      client.send("cheat_detected", { reason: "reaction_too_fast", reactionMs });
-      return;
-    }
+    // Clamp to the floor instead of rejecting: a legit tap from a laggy player must never be dropped.
+    const reactionMs = Math.max(REACTION_FLOOR_MS, compensatedTime - this.state.roundStartTime);
 
     // Anti-cheat: pattern detection
     this.recordReaction(client.sessionId, reactionMs);
