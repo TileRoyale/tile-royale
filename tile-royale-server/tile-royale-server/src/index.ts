@@ -4539,7 +4539,7 @@ const PA_REDEEM_CODES: Record<string, {
   // Hidden Letters hunt (2026-11-01): the first 5 players with at least 1 prestige get 1 Message in a Bottle.
   'GHOSTREEF':       { messageBottles: 1, maxUses: 5, minPrestige: 1, desc: 'Hidden Letters solved! You are one of the first 5 — 1 Message in a Bottle!' },
   // AngelDescent's 33rd birthday gift (owner 2026-11-06): only on 9.11.2026 Estonian time, only for this player.
-  'ANGEL33BDAY':     { autoIncomePackages: 33, harborItems: { geode: 33 }, minBuild: 630, maxUses: 1, targetUid: 'HIRgOsH8cxWSz6amurrPew8XNvp2', startsAt: '2026-11-08T22:00:00Z', expires: '2026-11-09T21:59:59Z', desc: 'Happy 33rd birthday, Angel! 33 Auto Income Tokens + 33 Geodes!' },
+  'ANGEL33BDAY':     { autoIncomePackages: 33, harborItems: { geode: 33 }, messageBottles: 3, minBuild: 630, maxUses: 1, targetUid: 'HIRgOsH8cxWSz6amurrPew8XNvp2', startsAt: '2026-11-08T22:00:00Z', expires: '2026-11-09T21:59:59Z', desc: 'Happy 33rd birthday, Angel! 33 Auto Income Tokens + 33 Geodes + 3 Messages in a Bottle!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
