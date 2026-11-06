@@ -28,6 +28,7 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
 import * as firebaseAdmin from "firebase-admin";
 import { PA_MYTHIC_COOLDOWN_MS, PA_MYTHIC_ZONES, paFortuneRaw, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from "./paMythic";
 import { getAciRewardBracket } from "./aciRanking";
+import { eiLbPercentile, eiLbReward, eiCanSubmit, eiCanClaim } from "./eiRanking";
 import { readFileSync } from "fs";
 import path from "path";
 // Environment/SignedDataVerifier are lazy-loaded (see _appleVerifierLib() near their first use,
@@ -4140,6 +4141,8 @@ app.post('/pa/ei/leaderboard/submit', verifyPAToken, express.json(), async (req,
   if (!eventId || typeof catchRate !== 'number' || catchRate <= 0) {
     return res.status(400).json({ ok: false, error: 'invalid_request' });
   }
+  // Scores only count while the event runs (plus a short grace) — see eiRanking.ts.
+  if (!eiCanSubmit(String(eventId), Date.now())) return res.json({ ok: false, error: 'event_not_active' });
   let displayName = (typeof clientName === 'string' && clientName.trim()) ? clientName.trim() : '';
   if (!displayName) {
     try {
@@ -4173,12 +4176,15 @@ app.get('/pa/ei/leaderboard', verifyPAToken, async (req, res) => {
 
   // Own rank
   const ownIdx = rows.findIndex(r => r.uid === uid);
-  let own: { rank: number; catchRate: number; pctile: number; displayName: string; claimed: boolean } | null = null;
+  let own: { rank: number; catchRate: number; pctile: number; displayName: string; claimed: boolean; bracket: string; tokens: number } | null = null;
   if (ownIdx >= 0) {
     const rank    = ownIdx + 1;
-    const pctile  = total > 0 ? ((rank - 1) / total) * 100 : 100;
+    // Below 100 players pctile is the place itself, so older game builds (which pick the reward
+    // row by pctile <= 1/5/10/25) show the same reward the claim below pays.
+    const pctile  = eiLbPercentile(rank, total);
+    const reward  = eiLbReward(rank, total);
     const claimed = await hasEiLbClaim(uid, eventId);
-    own = { rank, catchRate: rows[ownIdx].catch_rate, pctile, displayName: rows[ownIdx].display_name, claimed };
+    own = { rank, catchRate: rows[ownIdx].catch_rate, pctile, displayName: rows[ownIdx].display_name, claimed, bracket: reward.bracket, tokens: reward.tokens };
   }
 
   res.json({ ok: true, top50, own, total });
@@ -4216,6 +4222,7 @@ app.post('/pa/ei/leaderboard/claim', verifyPAToken, express.json(), async (req, 
   const uid = res.locals.paUid as string;
   const { eventId } = req.body;
   if (!eventId) return res.status(400).json({ ok: false, error: 'invalid_request' });
+  if (!eiCanClaim(String(eventId), Date.now())) return res.json({ ok: false, error: 'event_not_ended' });
 
   if (await hasEiLbClaim(uid, eventId)) {
     return res.json({ ok: false, error: 'already_claimed' });
@@ -4226,12 +4233,9 @@ app.post('/pa/ei/leaderboard/claim', verifyPAToken, express.json(), async (req, 
   const ownIdx = rows.findIndex(r => r.uid === uid);
   if (ownIdx < 0) return res.json({ ok: false, error: 'no_score' });
 
-  const pctile = total > 0 ? (ownIdx / total) * 100 : 100;
-  let tokens = 0;
-  if (pctile <= 1)  tokens = 10;
-  else if (pctile <= 5)  tokens = 5;
-  else if (pctile <= 10) tokens = 3;
-  else if (pctile <= 25) tokens = 1;
+  // Place-based below 100 players, percentile from 100 (same as ACI) — see eiRanking.ts.
+  const pctile = eiLbPercentile(ownIdx + 1, total);
+  const { tokens } = eiLbReward(ownIdx + 1, total);
 
   if (tokens === 0) return res.json({ ok: false, error: 'not_qualified' });
 
