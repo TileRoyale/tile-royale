@@ -4497,7 +4497,11 @@ const PA_REDEEM_CODES: Record<string, {
   // Only players whose cloud save has at least this many prestiges may redeem (others get invalid_code).
   minPrestige?: number;
   targetUid?: string;
+  // Valid from this moment (ISO). Before it the code answers like an unknown code (invalid_code).
+  startsAt?: string;
   expires?: string;
+  // Unopened Depthlight Cores. Clients older than Build 637 ignore this field, so such codes need minBuild: 637.
+  depthlightCores?: number;
 }> = {
   'REVIEW':         { rewardType: 'autoIncome',                                desc: '1h automation income — thank you for the review!' },
   'LAUNCH':         { rewardType: 'coins',    amount: 500,                     desc: 'Launch celebration gift!' },
@@ -4534,6 +4538,8 @@ const PA_REDEEM_CODES: Record<string, {
   'IOSLAUNCH':       { diamonds: 100, autoIncomePackages: 10, desc: 'Patient Angler is now on iOS! 🎉 100 Diamonds + 10 Auto Income Tokens!' },
   // Hidden Letters hunt (2026-11-01): the first 5 players with at least 1 prestige get 1 Message in a Bottle.
   'GHOSTREEF':       { messageBottles: 1, maxUses: 5, minPrestige: 1, desc: 'Hidden Letters solved! You are one of the first 5 — 1 Message in a Bottle!' },
+  // AngelDescent's 33rd birthday gift (owner 2026-11-06): only on 9.11.2026 Estonian time, only for this player.
+  'ANGEL33BDAY':     { autoIncomePackages: 33, harborItems: { geode: 33 }, minBuild: 630, maxUses: 1, targetUid: 'HIRgOsH8cxWSz6amurrPew8XNvp2', startsAt: '2026-11-08T22:00:00Z', expires: '2026-11-09T21:59:59Z', desc: 'Happy 33rd birthday, Angel! 33 Auto Income Tokens + 33 Geodes!' },
 };
 
 app.post("/pa/redeem", express.json(), async (req, res) => {
@@ -4564,6 +4570,8 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
   }
 
   if (!entry)
+    return res.json({ ok: false, error: 'invalid_code' });
+  if (entry.startsAt && new Date() < new Date(entry.startsAt))
     return res.json({ ok: false, error: 'invalid_code' });
   if (entry.expires && new Date() > new Date(entry.expires))
     return res.json({ ok: false, error: 'expired' });
@@ -4663,6 +4671,7 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.krakenTest             != null) reward.krakenTest             = entry.krakenTest;
     if (entry.aciPractice            != null) reward.aciPractice            = entry.aciPractice;
     if (entry.harborItems            != null) reward.harborItems            = entry.harborItems;
+    if (entry.depthlightCores        != null) reward.depthlightCores        = entry.depthlightCores;
   }
 
   res.json({ ok: true, desc: entry.desc, reward });
