@@ -201,7 +201,10 @@ const MIN_CLIENT_VERSION = "v1.0.22";
 // changing response bodies or client behavior; WebSocket traffic is not handled by this middleware.
 app.use(compression({ threshold: 1024 }));
 app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '2mb' }));
+// 8 MB (owner 2026-11-07): Rakados' cloud save passed 2 MB on 2026-10-31 and every save after that
+// was rejected with PayloadTooLargeError. The route-level 500kb limits on /pa/save(-v2) never apply,
+// because this global parser has already read the body.
+app.use(express.json({ limit: '8mb' }));
 
 // Privacy Policy page
 app.get("/privacy", (_req, res) => {
