@@ -19,7 +19,7 @@ import { initDb, getRankingsWeekly, getRankingsAllTime, getPlayerStats, getDbSta
   getPool, getAciGoalComplete, setAciGoalComplete, getActiveAciCompetition, createAciCompetition,
   getAciResult, getAciLeaderboard, getAciParticipantCount,
   recordAciRewardClaim, getAciPlayerRank, getAciRewardClaim, ackAciRewardClaim,
-  openAciBottle, redeemAciBottleCode, recordBottleFind, reportAciCasts, getAciCastCount,
+  openAciBottle, redeemAciBottleCode, recordBottleFind, getSharedBottleCodeCount, reportAciCasts, getAciCastCount,
   getPlayerDropOverrides, setPlayerDropOverrides,
   getAciCompetitionNameIndex, recordAciTrophy, getAciTrophies, logDepthlightDrop,
   isAciWinnerCooldown,
@@ -4028,6 +4028,16 @@ app.post('/pa/aci/bottle/found', verifyPAToken, async (req, res) => {
   }
   await recordBottleFind(bottleId, uid, safeCompId);
   res.json({ ok: true });
+});
+
+// GET /pa/aci/bottle/shared  → { ok, count }
+// How many of the player's bottle codes another player redeemed (own redeems never count).
+// The client unlocks the hidden "Sharing is Caring" bobber at 5.
+app.get('/pa/aci/bottle/shared', verifyPAToken, async (req, res) => {
+  const uid = res.locals.paUid as string;
+  const count = await getSharedBottleCodeCount(uid);
+  if (count == null) return res.json({ ok: false, error: 'server_error' });
+  res.json({ ok: true, count });
 });
 
 // Temporary diagnostic for the Depthlight Core "got it without Abyss Descent unlocked"

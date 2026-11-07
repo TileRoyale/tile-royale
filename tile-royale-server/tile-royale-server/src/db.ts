@@ -4090,6 +4090,25 @@ export async function redeemAciBottleCode(code: string, redeemerUid: string): Pr
 }
 
 /**
+ * How many of this player's opened bottle codes were redeemed by a different player ("Sharing is
+ * Caring" hidden bobber, owner 2026-11-07). Counted straight from aci_bottles, so codes shared
+ * before this feature existed count too. Returns null when the DB is unavailable.
+ */
+export async function getSharedBottleCodeCount(uid: string): Promise<number | null> {
+  if (!pool || !dbAvailable) return null;
+  try {
+    const r = await pool.query(
+      `SELECT COUNT(*)::INT AS n FROM aci_bottles
+       WHERE uid = $1 AND redeemed_by_uid IS NOT NULL AND redeemed_by_uid <> $1`, [uid]
+    );
+    return r.rows[0]?.n ?? 0;
+  } catch (err) {
+    console.error('[DB] getSharedBottleCodeCount error:', err);
+    return null;
+  }
+}
+
+/**
  * Records who originally found a bottle (called the moment it drops, both ACI and ordinary manual
  * fishing) — idempotent, since the client may retry. compId mirrors bottle.compId on the client
  * (null for ordinary finds, a real competition id or 'admin_grant' for ACI-sourced ones).
