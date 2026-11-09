@@ -2731,7 +2731,33 @@ const PA_LEGACY_IOS_VERSION_CHECK_DISABLED = true;
 // minBuild: first versionCode that should show the popup.
 // texts: localized announcement body keyed by locale code; 'en' is the required fallback.
 // v1.0.8.18 Build 643 [Production] (Android, 2026-11-09)
+// v1.0.8.19 Build 647 [Production] (Android + iOS 1.0.19, 2026-11-09)
 const PA_ANNOUNCEMENT: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
+  track: 'production',
+  minBuild: 647,
+  texts: {
+    "en": "• Event bug hotfixes",
+    "et": "• Eventi vigade kiirparandused",
+    "de": "• Fehlerbehebungen für das Event",
+    "el": "• Διορθώσεις σφαλμάτων της εκδήλωσης",
+    "es": "• Correcciones de errores del evento",
+    "fr": "• Corrections de bugs de l’événement",
+    "id": "• Perbaikan bug event",
+    "it": "• Correzioni di bug dell’evento",
+    "ja": "• イベントの不具合修正",
+    "ko": "• 이벤트 버그 수정",
+    "nl": "• Bugfixes voor het evenement",
+    "pl": "• Poprawki błędów wydarzenia",
+    "pt-BR": "• Correções de bugs do evento",
+    "th": "• แก้ไขบั๊กของกิจกรรม",
+    "tr": "• Etkinlik hata düzeltmeleri",
+    "vi": "• Sửa lỗi sự kiện",
+    "zh-CN": "• 活动问题修复",
+    "zh-TW": "• 活動問題修復",
+  }
+};
+
+const PA_ANNOUNCEMENT_PREVIOUS_11: { track?: 'internal' | 'production'; minBuild: number; texts: Record<string, string> } | null = {
   track: 'production',
   minBuild: 643,
   texts: {
