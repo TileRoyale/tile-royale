@@ -380,6 +380,15 @@ export async function createAnalyticsTables(): Promise<void> {
         current_fish_rate      REAL        DEFAULT 0,
         PRIMARY KEY (player_id, progress_date)
       );
+
+      -- One row per player per clock hour in which the game sent an analytics snapshot
+      -- (every app start sends one). Lets the dashboard count true active players per hour.
+      CREATE TABLE IF NOT EXISTS pa_player_active_hours (
+        player_id  TEXT        NOT NULL,
+        active_hour TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (player_id, active_hour)
+      );
+      CREATE INDEX IF NOT EXISTS idx_pa_pah_hour ON pa_player_active_hours(active_hour);
     `);
     console.log('[PA Analytics] Tables ready');
   } catch(err: any) {
@@ -394,6 +403,7 @@ export async function deletePlayerAnalytics(playerId: string): Promise<void> {
     await query('DELETE FROM pa_player_progress WHERE player_id=$1', [playerId]);
     await query('DELETE FROM pa_player_milestones WHERE player_id=$1', [playerId]);
     await query('DELETE FROM pa_player_daily_progress WHERE player_id=$1', [playerId]);
+    await query('DELETE FROM pa_player_active_hours WHERE player_id=$1', [playerId]);
     await query('COMMIT');
   } catch (e) {
     await query('ROLLBACK');
@@ -694,6 +704,8 @@ export async function handleAnalyticsProgress(req: Request, res: Response): Prom
     const data = sanitize(payload);
     await upsertProgress(playerId, data);
     await upsertDailyProgress(playerId, data);
+    await query(`INSERT INTO pa_player_active_hours (player_id, active_hour)
+      VALUES ($1, date_trunc('hour', now())) ON CONFLICT DO NOTHING`, [playerId]);
 
     const rawMilestones = Array.isArray(raw.milestones) ? raw.milestones : [];
     const validMilestones = rawMilestones
@@ -1006,13 +1018,15 @@ export async function handleAdminGrowth(req: Request, res: Response): Promise<vo
       GROUP BY period ORDER BY period ASC
       LIMIT 400
     `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ]),
+    // Active = distinct players with a daily snapshot row in the period (progress_date is the UTC
+    // day of the snapshot). Every app start sends one, so this matches "players who opened the
+    // game", not only players whose most recent visit fell on that day.
     query(`
-      SELECT DATE_TRUNC($1, last_seen AT TIME ZONE $3)::date AS period, COUNT(*) AS count
-      FROM pa_player_progress
-      WHERE total_play_time_seconds > $2
+      SELECT DATE_TRUNC($1, progress_date)::date AS period, COUNT(DISTINCT player_id) AS count
+      FROM pa_player_daily_progress
       GROUP BY period ORDER BY period ASC
       LIMIT 400
-    `, [bucket, GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ]),
+    `, [bucket]),
   ]);
   res.json({ bucket, newPlayers: newPlayers || [], activePlayers: activePlayers || [] });
 }
@@ -1030,7 +1044,7 @@ export async function handleAdminGrowthHourly(req: Request, res: Response): Prom
   const dateParam = typeof req.query.date === 'string' && _DATE_RE.test(req.query.date) ? req.query.date : null;
   // $1 = min-seconds, $2 = timezone, $3 = date (only bound/used when dateParam is set)
   const dayFilter     = dateParam ? `AND (created_at AT TIME ZONE $2)::date = $3::date` : '';
-  const dayFilterSeen = dateParam ? `AND (last_seen  AT TIME ZONE $2)::date = $3::date` : '';
+  const dayFilterSeen = dateParam ? `WHERE (active_hour AT TIME ZONE $2)::date = $3::date` : '';
   const params: any[] = dateParam
     ? [GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ, dateParam]
     : [GROWTH_REAL_PLAYER_MIN_SECONDS, GROWTH_TZ];
@@ -1042,12 +1056,14 @@ export async function handleAdminGrowthHourly(req: Request, res: Response): Prom
       WHERE total_play_time_seconds > $1 ${dayFilter}
       GROUP BY hour
     `, params),
+    // Active per hour = distinct players who sent a snapshot in that hour. All-time view sums
+    // player-hours across every day since the table started (2026-11-12).
     query(`
-      SELECT EXTRACT(HOUR FROM last_seen AT TIME ZONE $2)::int AS hour, COUNT(*) AS count
-      FROM pa_player_progress
-      WHERE total_play_time_seconds > $1 ${dayFilterSeen}
+      SELECT EXTRACT(HOUR FROM active_hour AT TIME ZONE $1)::int AS hour, COUNT(*) AS count
+      FROM pa_player_active_hours
+      ${dayFilterSeen}
       GROUP BY hour
-    `, params),
+    `, dateParam ? [GROWTH_TZ, GROWTH_TZ, dateParam] : [GROWTH_TZ]),
   ]);
   // Fill all 24 hours (0 for any hour with no rows) so the chart always has a full, stable axis.
   const fill = (rows: any[] | null) => {
@@ -1416,7 +1432,7 @@ canvas{width:100%!important;height:120px!important}
 
   <!-- Growth Tab -->
   <div class="tab-content" id="tab-growth">
-    <h2>Player Growth <span style="font-size:11px;color:#8b949e;font-weight:400">— "real" players only (total play time &gt; 10 min); New = signup date, Active = last-seen date</span></h2>
+    <h2>Player Growth <span style="font-size:11px;color:#8b949e;font-weight:400">— New = signup date of "real" players (total play time &gt; 10 min); Active = every player who opened the game in that period</span></h2>
     <div style="margin-bottom:16px;display:flex;gap:6px">
       <div id="gr-bucket-day"   class="tab active" style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('day')">Day</div>
       <div id="gr-bucket-week"  class="tab"        style="background:#161b22;border:1px solid #30363d;border-radius:6px" onclick="setGrowthBucket('week')">Week</div>
@@ -1897,7 +1913,7 @@ async function loadGrowth() {
       const activeData = (data.activeByHour || []).map(d => ({ period: hh(d.hour), count: d.count }));
       const scopeLabel = _growthHourDate ? _growthHourDate : 'all-time';
       const newChart    = _svgBarChart('New Real Players — by hour, ' + scopeLabel + ' (Estonia time)', newData, '#3fb950');
-      const activeChart = _svgBarChart('Active Real Players — by hour, ' + scopeLabel + ' (Estonia time)', activeData, '#1f6feb');
+      const activeChart = _svgBarChart('Active Players — by hour, ' + scopeLabel + ' (Estonia time)', activeData, '#1f6feb');
       const banner = _growthHourDate
         ? \`<div class="chart-wrap" style="background:#1f6feb11;border-color:#1f6feb44;font-size:11px;color:#c9d1d9;margin-bottom:12px">
             Showing only \${H(_growthHourDate)} (00:00–23:59, Estonia time). Hours later than right-now on today's date will correctly show 0 — they genuinely haven't happened yet. Switch to "All-Time" to see the full historical pattern instead.
@@ -1907,7 +1923,7 @@ async function loadGrowth() {
           </div>\`;
       el.innerHTML = banner
         + newChart
-        + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, at the hour of their most recent last-seen timestamp\${_growthHourDate ? ' that falls on this date' : ''} — \${_growthHourDate ? 'so a player who last played earlier today but is still "last seen" today will show up here.' : 'skews toward recent play patterns rather than a true historical average.'}</div>\`
+        + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts every player who opened the game in that hour (a player active in 3 hours appears in 3 bars). Hourly data is collected from 2026-11-12 onward; earlier dates show 0.</div>\`
         + activeChart;
       return;
     }
@@ -1921,9 +1937,9 @@ async function loadGrowth() {
     };
     const relabel = (rows) => (rows || []).map(d => ({ period: fmtPeriod(d.period), count: d.count }));
     const newChart = _svgBarChart('New Real Players (by signup date)', relabel(data.newPlayers), '#3fb950');
-    const activeChart = _svgBarChart('Active Real Players (by last-seen date)', relabel(data.activePlayers), '#1f6feb');
+    const activeChart = _svgBarChart('Active Players (opened the game, UTC day)', relabel(data.activePlayers), '#1f6feb');
     el.innerHTML = newChart
-      + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts each player once, on their most recent last-seen date — there's no per-day session log, so this approximates true daily/weekly active counts rather than measuring them exactly.</div>\`
+      + \`<div style="color:#8b949e;font-size:11px;margin:-8px 0 16px">Note: "Active" counts every distinct player who opened the game in that day/week/month (from the per-day snapshot log), so it is comparable to Play Console daily active users. Days are UTC.</div>\`
       + activeChart;
   } catch(e) { el.textContent = 'Load failed'; }
 }

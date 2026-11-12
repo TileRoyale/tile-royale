@@ -2103,6 +2103,7 @@ export async function deletePAAccountData(uid: string): Promise<boolean> {
       'DELETE FROM pa_community_claims WHERE player_id = $1',
       'DELETE FROM pa_community_contributions WHERE player_id = $1',
       'DELETE FROM pa_player_daily_progress WHERE player_id = $1',
+      'DELETE FROM pa_player_active_hours WHERE player_id = $1',
       'DELETE FROM pa_player_milestones WHERE player_id = $1',
       'DELETE FROM pa_player_progress WHERE player_id = $1',
       'DELETE FROM pa_voided_purchases WHERE player_id = $1',
