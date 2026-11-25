@@ -4598,6 +4598,8 @@ const PA_REDEEM_CODES: Record<string, {
   'TIGHTLINES':      { diamonds: 100, harborItems: { patience_hourglass: 5 }, minBuild: 630, expires: '2026-11-26T21:59:59Z', desc: 'Tight lines, angler! 100 Diamonds + 5 Patience Hourglasses!' },
   // Rakados gift (owner 2026-11-25): only for this player, single use.
   'GEM500RK7Q':      { diamonds: 500, maxUses: 1, targetUid: 'mX8k5Plr4LXpacIAwYo8FJDPFVF3', desc: '500 Diamonds gift!' },
+  // illmage gift (owner 2026-11-25): only for this player, single use.
+  'GEM500IL8M':      { diamonds: 500, maxUses: 1, targetUid: 'vTYlQoIMiLS1ntXRzdRzI2SIHg13', desc: '500 Diamonds gift!' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
