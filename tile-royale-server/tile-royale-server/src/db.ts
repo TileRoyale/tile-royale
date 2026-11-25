@@ -229,6 +229,13 @@ async function createTables(): Promise<void> {
     -- Used by the "N players have ever found this" stat on the catch popup — one row per
     -- player per item, so COUNT(*) WHERE item_id=$1 is exactly the global discoverer count.
     CREATE INDEX IF NOT EXISTS idx_pa_mythic_items_item_id ON pa_mythic_items(item_id);
+    -- Player request (Rakados, 2026-11-13): "what place was I when I caught it". The first catch
+    -- time per player per item is kept here (never updated by duplicates or sells); the player's
+    -- worldwide place is the number of earlier first catches + 1. Rows from before this column
+    -- get their last update time as the best available estimate.
+    ALTER TABLE pa_mythic_items ADD COLUMN IF NOT EXISTS first_caught_at TIMESTAMPTZ;
+    UPDATE pa_mythic_items SET first_caught_at = updated_at WHERE first_caught_at IS NULL;
+    ALTER TABLE pa_mythic_items ALTER COLUMN first_caught_at SET DEFAULT now();
 
     -- Rolling backup of the last 3 saves per player (auto-purged beyond 3)
     CREATE TABLE IF NOT EXISTS pa_save_history (
@@ -244,6 +251,17 @@ async function createTables(): Promise<void> {
       uid              TEXT         PRIMARY KEY,
       corrections_json TEXT         NOT NULL,
       created_at       TIMESTAMPTZ  DEFAULT now()
+    );
+
+    -- Angler's Canvas Bobber short share codes (2026-11-18): AT MOST ONE published design per
+    -- player. Publishing a different design overwrites the player's row with a new share_code, so
+    -- old codes stop working and rows never accumulate (see src/paCanvasBobber.ts).
+    CREATE TABLE IF NOT EXISTS pa_canvas_bobbers (
+      owner_uid    TEXT         PRIMARY KEY,
+      share_code   TEXT         UNIQUE NOT NULL,
+      design_data  TEXT         NOT NULL,
+      design_hash  TEXT         NOT NULL,
+      updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     );
 
     -- Patient Angler redeem code uses: one row per (code, uid) pair
@@ -813,7 +831,7 @@ async function createTables(): Promise<void> {
       bottle_cooldown_hours  REAL,
       updated_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
     );
-    -- autoclicker_threshold: per-player override of AUTOCLICKER_TAPS_PER_24H_THRESHOLD (20000
+    -- autoclicker_threshold: per-player override of AUTOCLICKER_TAPS_PER_24H_THRESHOLD (50000
     -- by default). NULL = no override, uses the global default. Set LOWER than the default to
     -- watch one specific account more closely (re-flags it sooner); set higher to relax it for a
     -- known-legitimate fast clicker. See isAutoClickerToday() in paAnalytics.ts.
@@ -3447,12 +3465,21 @@ export async function upsertCEContribution(playerId: string, eventId: string, am
   );
 }
 
-export async function getCECommunityTotal(eventId: string): Promise<number> {
+// perPlayerCap > 0: each player's contribution counts toward the community total only up to that
+// amount (owner 2026-11-18: one player can fill at most 10% of the target). Personal totals and the
+// leaderboard always use the full, uncapped contribution.
+export async function getCECommunityTotal(eventId: string, perPlayerCap = 0): Promise<number> {
   if (!pool) return 0;
-  const r = await pool.query(
-    `SELECT COALESCE(SUM(contribution), 0) AS total FROM pa_community_contributions WHERE event_id=$1`,
-    [eventId]
-  );
+  const cap = Number(perPlayerCap);
+  const r = cap > 0
+    ? await pool.query(
+        `SELECT COALESCE(SUM(LEAST(contribution, $2)), 0) AS total FROM pa_community_contributions WHERE event_id=$1`,
+        [eventId, cap]
+      )
+    : await pool.query(
+        `SELECT COALESCE(SUM(contribution), 0) AS total FROM pa_community_contributions WHERE event_id=$1`,
+        [eventId]
+      );
   return Number(r.rows[0]?.total || 0);
 }
 

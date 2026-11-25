@@ -23,9 +23,14 @@ export function paMythicActiveZones(save: any): string[] {
     return (!unlock.rod || rods.has(unlock.rod)) && (!unlock.transport || transport.has(unlock.transport));
   }).slice(0, 2);
 }
-export function paMythicAdvance(progress: number, elapsedMs: number, fortune: number, activeZones: string[]): number {
+export function paMythicAncientSignalsMult(save: any): number {
+  const level = Math.max(0, Math.min(100, Math.floor(Number(save?.city?.research?.signals) || 0)));
+  return 1 + Math.floor(level / 25) * 0.05; // client acCityMythicDiscoveryMult (2026-11-14): +5% per 25 Signals levels
+}
+export function paMythicAdvance(progress: number, elapsedMs: number, fortune: number, activeZones: string[], discoveryMult = 1): number {
   if (!activeZones.length) return Math.max(0, progress);
-  return Math.max(0, progress) + Math.max(0, elapsedMs) / (paMythicMeanDays(fortune) * 86400000);
+  const mult = Math.max(1, Math.min(1.20, Number(discoveryMult) || 1));
+  return Math.max(0, progress) + Math.max(0, elapsedMs) * mult / (paMythicMeanDays(fortune) * 86400000);
 }
 export function paMythicEligibleElapsed(lastEvalMs: number, nowMs: number, cooldownUntilMs: number | null): number {
   const eligibleFrom = Math.max(lastEvalMs, Number(cooldownUntilMs) || 0);

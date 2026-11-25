@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { PA_MYTHIC_COOLDOWN_MS, paFortune, paFortuneRaw, paLegacyMythicFortune, paMythicActiveZones, paMythicAdvance, paMythicEligibleElapsed, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from '../src/paMythic';
+import { PA_MYTHIC_COOLDOWN_MS, paFortune, paFortuneRaw, paLegacyMythicFortune, paMythicActiveZones, paMythicAdvance, paMythicAncientSignalsMult, paMythicEligibleElapsed, paMythicMeanDays, paMythicPendingZone, paMythicPick, paMythicTarget } from '../src/paMythic';
 
 assert.equal(paFortune({}), 0);
 assert.equal(paLegacyMythicFortune({ fishdex:Array.from({length:517},(_,i)=>String(i)), prestigeCount:40, abyssExpeditionsCompleted:10000, stats:{mythicCatchRate:1e13,autoCatchTotal:1e16,lifeCoinsEarned:1e24,lifePearlsEarned:1e10,totalLegendary:1e6,islesDiscovered:300,totalSeagull:1e4,totalCrystalBugs:1e3,trophyCatches:1e4,mythicMasteryRatio:1} }), 100);
@@ -19,6 +19,11 @@ assert.deepEqual(paMythicActiveZones({ activeAutomationZones:['river'], ownedRod
 assert.deepEqual(paMythicActiveZones({ activeAutomationZones:['river','lake'], ownedRods:['river_rod','lake_rod'], ownedTransport:['waders','rowing_boat'] }), ['river','lake']);
 assert.equal(paMythicAdvance(0.25, 86400000, 7, []), 0.25);
 assert.ok(Math.abs(paMythicAdvance(0.25, 86400000, 180, ['pond']) - (0.25 + 1/7)) < 1e-12);
+assert.equal(paMythicAncientSignalsMult({}), 1);
+assert.equal(paMythicAncientSignalsMult({ city:{ research:{ signals:24 } } }), 1);
+assert.equal(paMythicAncientSignalsMult({ city:{ research:{ signals:25 } } }), 1.05);
+assert.equal(paMythicAncientSignalsMult({ city:{ research:{ signals:100 } } }), 1.20);
+assert.ok(Math.abs(paMythicAdvance(0.25, 86400000, 180, ['pond'], 1.10) - (0.25 + 1.10/7)) < 1e-12);
 assert.equal(PA_MYTHIC_COOLDOWN_MS, 17 * 60 * 60 * 1000);
 assert.equal(paMythicEligibleElapsed(0, 16 * 60 * 60 * 1000, PA_MYTHIC_COOLDOWN_MS), 0);
 assert.equal(paMythicEligibleElapsed(0, 18 * 60 * 60 * 1000, PA_MYTHIC_COOLDOWN_MS), 60 * 60 * 1000);
