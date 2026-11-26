@@ -4541,6 +4541,10 @@ const PA_REDEEM_CODES: Record<string, {
   expires?: string;
   // Unopened Depthlight Cores. Clients older than Build 637 ignore this field, so such codes need minBuild: 637.
   depthlightCores?: number;
+  // Ancient Civilization currencies (owner 2026-11-26), e.g. { scrap: 1000000, essence: 50 }. Keys: scrap,
+  // fibre, food, energy, essence, nav, deepTechRelics, relicOfCthulhu, treasureMapFragments2/3, treasureMaps2/3.
+  // Clients older than Build 686 cannot apply it, so such codes need minBuild: 686.
+  ancient?: Record<string, number>;
 }> = {
   'REVIEW':         { rewardType: 'autoIncome',                                desc: '1h automation income — thank you for the review!' },
   'LAUNCH':         { rewardType: 'coins',    amount: 500,                     desc: 'Launch celebration gift!' },
@@ -4602,6 +4606,7 @@ const PA_REDEEM_CODES: Record<string, {
   'GEM500IL8M':      { diamonds: 500, maxUses: 1, targetUid: 'vTYlQoIMiLS1ntXRzdRzI2SIHg13', desc: '500 Diamonds gift!' },
   // Gift (owner 2026-11-25): only for this player, single use.
   'GEMS75XKVN':    { diamonds: 750, maxUses: 1, targetUid: 'Rlnj2DJvxMQrwOltDuBjS9qCwVV2', desc: '750 Diamonds gift!' },
+  'JAKUSCRAP1M':     { ancient: { scrap: 1000000 }, minBuild: 686, maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: '1,000,000 Scrap for your Ancient City!' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
@@ -4753,6 +4758,7 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.aciPractice            != null) reward.aciPractice            = entry.aciPractice;
     if (entry.harborItems            != null) reward.harborItems            = entry.harborItems;
     if (entry.depthlightCores        != null) reward.depthlightCores        = entry.depthlightCores;
+    if (entry.ancient                != null) reward.ancient                = entry.ancient;
   }
 
   res.json({ ok: true, desc: entry.desc, reward });
