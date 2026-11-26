@@ -4606,7 +4606,6 @@ const PA_REDEEM_CODES: Record<string, {
   'GEM500IL8M':      { diamonds: 500, maxUses: 1, targetUid: 'vTYlQoIMiLS1ntXRzdRzI2SIHg13', desc: '500 Diamonds gift!' },
   // Gift (owner 2026-11-25): only for this player, single use.
   'GEMS75XKVN':    { diamonds: 750, maxUses: 1, targetUid: 'Rlnj2DJvxMQrwOltDuBjS9qCwVV2', desc: '750 Diamonds gift!' },
-  'JAKUSCRAP1M':     { ancient: { scrap: 1000000 }, minBuild: 686, maxUses: 1, targetUid: 'r1K3rVd5RscWDKnypgZlFIkVlBs1', desc: '1,000,000 Scrap for your Ancient City!' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
