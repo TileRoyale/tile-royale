@@ -4609,7 +4609,7 @@ const PA_REDEEM_CODES: Record<string, {
   // Gift (owner 2026-11-25): only for this player, single use.
   'GEMS75XKVN':    { diamonds: 750, maxUses: 1, targetUid: 'Rlnj2DJvxMQrwOltDuBjS9qCwVV2', desc: '750 Diamonds gift!' },
   // Owner 2026-11-26: once per player, active 7 days (until end of 03.12 Estonian time).
-  'PATIENCE10':      { harborItems: { patience_hourglass: 10 }, minBuild: 630, expires: '2026-12-03T21:59:59Z', desc: '10 Patience Hourglasses — enjoy!' },
+  'LUCKYANGEL':      { harborItems: { patience_hourglass: 10 }, minBuild: 630, expires: '2026-12-03T21:59:59Z', desc: '10 Patience Hourglasses — enjoy!' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
