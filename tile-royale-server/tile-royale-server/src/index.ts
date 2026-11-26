@@ -4610,6 +4610,11 @@ const PA_REDEEM_CODES: Record<string, {
   'GEMS75XKVN':    { diamonds: 750, maxUses: 1, targetUid: 'Rlnj2DJvxMQrwOltDuBjS9qCwVV2', desc: '750 Diamonds gift!' },
   // Owner 2026-11-26: once per player, active 7 days (until end of 03.12 Estonian time).
   'LUCKYANGEL':      { harborItems: { patience_hourglass: 10 }, minBuild: 630, expires: '2026-12-03T21:59:59Z', desc: '10 Patience Hourglasses — enjoy!' },
+  // Abyss bosses 4-7 test fights (owner 2026-11-26): repeatable, test mode, the bosses exist from Build 687.
+  'FWTEST':          { krakenTest: 'floodgate_warden',      multiUse: true, minBuild: 687, desc: 'Floodgate Warden test fight' },
+  'IATEST':          { krakenTest: 'ink_archivist',         multiUse: true, minBuild: 687, desc: 'Ink Archivist test fight' },
+  'DHTEST':          { krakenTest: 'drowned_hierophant',    multiUse: true, minBuild: 687, desc: 'Drowned Hierophant test fight' },
+  'HSTEST':          { krakenTest: 'herald_of_the_sleeper', multiUse: true, minBuild: 687, desc: 'Herald of the Sleeper test fight' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
