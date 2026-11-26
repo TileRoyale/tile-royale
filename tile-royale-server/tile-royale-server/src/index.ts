@@ -4520,6 +4520,7 @@ const PA_REDEEM_CODES: Record<string, {
   treasureMapFragments?: number;
   messageBottles?: number;
   krakenTest?: string;
+  krakenEnd?: boolean; // ends the player's active boss encounter (client Build 689+)
   aciPractice?: boolean;
   // Harbor Crate items by loot id, e.g. { patience_hourglass: 5 }. Clients older than minBuild cannot
   // apply them, so such codes should always set minBuild.
@@ -4615,6 +4616,7 @@ const PA_REDEEM_CODES: Record<string, {
   'IATEST':          { krakenTest: 'ink_archivist',         multiUse: true, minBuild: 687, desc: 'Ink Archivist test fight' },
   'DHTEST':          { krakenTest: 'drowned_hierophant',    multiUse: true, minBuild: 687, desc: 'Drowned Hierophant test fight' },
   'HSTEST':          { krakenTest: 'herald_of_the_sleeper', multiUse: true, minBuild: 687, desc: 'Herald of the Sleeper test fight' },
+  'BOSSEND':         { krakenEnd: true, multiUse: true, minBuild: 689, desc: 'Ends the active boss encounter' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
@@ -4763,6 +4765,7 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.treasureMapFragments   != null) reward.treasureMapFragments   = entry.treasureMapFragments;
     if (entry.messageBottles         != null) reward.messageBottles         = entry.messageBottles;
     if (entry.krakenTest             != null) reward.krakenTest             = entry.krakenTest;
+    if (entry.krakenEnd              != null) reward.krakenEnd              = entry.krakenEnd;
     if (entry.aciPractice            != null) reward.aciPractice            = entry.aciPractice;
     if (entry.harborItems            != null) reward.harborItems            = entry.harborItems;
     if (entry.depthlightCores        != null) reward.depthlightCores        = entry.depthlightCores;
