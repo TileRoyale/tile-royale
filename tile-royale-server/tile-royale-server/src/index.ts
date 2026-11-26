@@ -2740,7 +2740,7 @@ app.get("/", (_req, res) => {
 });
 
 const PA_MIN_CLIENT_VERSION = "v0.1.5";
-const PA_LATEST_VERSION     = "v1.0.8.24"; // Build 685 [Production] — owner confirmed live on Play (2026-11-25)
+const PA_LATEST_VERSION     = "v1.0.8.25"; // Build 686 [Production] — owner confirmed live on Play (2026-11-26)
 // Store 2026-11-09.
 
 // iOS ships its own native App Store version numbers (e.g. "1.0.9"), set independently
