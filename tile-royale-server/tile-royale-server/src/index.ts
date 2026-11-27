@@ -4522,6 +4522,7 @@ const PA_REDEEM_CODES: Record<string, {
   messageBottles?: number;
   krakenTest?: string;
   krakenEnd?: boolean; // ends the player's active boss encounter (client Build 689+)
+  xmasTester?: boolean; // X-mas Event test access until 1.02.2027, no rewards (client Build 694+)
   aciPractice?: boolean;
   // Harbor Crate items by loot id, e.g. { patience_hourglass: 5 }. Clients older than minBuild cannot
   // apply them, so such codes should always set minBuild.
@@ -4619,6 +4620,7 @@ const PA_REDEEM_CODES: Record<string, {
   'HSTEST':          { krakenTest: 'herald_of_the_sleeper', multiUse: true, minBuild: 687, desc: 'Herald of the Sleeper test fight' },
   'BOSSEND':         { krakenEnd: true, multiUse: true, minBuild: 689, desc: 'Ends the active boss encounter' },
   'ENDBOSS':         { krakenEnd: true, multiUse: true, minBuild: 689, desc: 'Ends the active boss encounter' },
+  'XMASTEST':        { xmasTester: true, multiUse: true, minBuild: 694, desc: 'X-mas Event test access (no rewards)' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
@@ -4768,6 +4770,7 @@ app.post("/pa/redeem", express.json(), async (req, res) => {
     if (entry.messageBottles         != null) reward.messageBottles         = entry.messageBottles;
     if (entry.krakenTest             != null) reward.krakenTest             = entry.krakenTest;
     if (entry.krakenEnd              != null) reward.krakenEnd              = entry.krakenEnd;
+    if (entry.xmasTester             != null) reward.xmasTester             = entry.xmasTester;
     if (entry.aciPractice            != null) reward.aciPractice            = entry.aciPractice;
     if (entry.harborItems            != null) reward.harborItems            = entry.harborItems;
     if (entry.depthlightCores        != null) reward.depthlightCores        = entry.depthlightCores;
