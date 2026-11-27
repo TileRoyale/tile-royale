@@ -33,8 +33,9 @@ export const EI_EVENT_WINDOWS: Record<string, { start: number; end: number; noRe
   founders_island:       { start: Date.parse('2026-08-10T10:00:00Z'), end: Date.parse('2026-08-17T10:00:00Z') },
   harvest_island:        { start: Date.parse('2026-09-06T10:00:00Z'), end: Date.parse('2026-09-13T10:00:00Z') },
   november_event_island: { start: Date.parse('2026-11-09T08:00:00Z'), end: Date.parse('2026-11-16T08:00:00Z') },
+  // Real X-mas Event (owner 2026-11-27): 7.12.2026 10:00 Estonian time, 7 days.
+  christmas_event_island: { start: Date.parse('2026-12-07T08:00:00Z'), end: Date.parse('2026-12-14T08:00:00Z') },
   // X-mas Event test version (redeem code XMASTEST, until 1.02.2027 EET): its own board, no rewards.
-  // The real X-mas event gets its own 'christmas_event_island' window with the real dates at release.
   christmas_event_island_test: { start: Date.parse('2026-11-27T00:00:00Z'), end: Date.parse('2027-01-31T22:00:00Z'), noRewards: true },
 };
 
