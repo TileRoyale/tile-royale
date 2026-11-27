@@ -4617,6 +4617,7 @@ const PA_REDEEM_CODES: Record<string, {
   'DHTEST':          { krakenTest: 'drowned_hierophant',    multiUse: true, minBuild: 687, desc: 'Drowned Hierophant test fight' },
   'HSTEST':          { krakenTest: 'herald_of_the_sleeper', multiUse: true, minBuild: 687, desc: 'Herald of the Sleeper test fight' },
   'BOSSEND':         { krakenEnd: true, multiUse: true, minBuild: 689, desc: 'Ends the active boss encounter' },
+  'ENDBOSS':         { krakenEnd: true, multiUse: true, minBuild: 689, desc: 'Ends the active boss encounter' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
