@@ -338,7 +338,11 @@ app.get("/delete-data", (_req, res) => {
 
 // AdMob app-ads.txt — must be served from the developer website registered in Play Console
 app.get("/app-ads.txt", (_req, res) => {
-  res.type('text/plain').send('google.com, pub-1687381057809117, DIRECT, f08c47fec0942fa0');
+  res.type('text/plain').send([
+    'google.com, pub-1687381057809117, DIRECT, f08c47fec0942fa0',
+    'vungle.com, 6b09a231773d8c98a7110072, DIRECT, c107d686becd2d77',
+    '',
+  ].join('\n'));
 });
 
 // Health check + region info (clients ping this to measure latency)
@@ -4916,11 +4920,6 @@ app.post('/pa/referral/use', verifyPAToken, express.json(), async (req, res) => 
 
   console.log(`[Referral] ${uid} used code ${referralCode} (referrer: ${referrerUid}) — +${_REFERRAL_REWARD} each`);
   res.json({ ok: true, reward: _REFERRAL_REWARD, message: `+${_REFERRAL_REWARD} Diamonds! Referral successful.` });
-});
-
-// AdMob app-ads.txt verification
-app.get("/app-ads.txt", (_req, res) => {
-  res.type("text/plain").send("google.com, pub-1687381057809117, DIRECT, f08c47fec0942fa0\n");
 });
 
 // ─── Patient Angler Analytics ─────────────────────────────────────────────────
