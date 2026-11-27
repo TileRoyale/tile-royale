@@ -29,10 +29,13 @@ export function eiLbReward(rank: number, total: number): { bracket: EiLbBracket;
 
 // Event windows (UTC), copied from EI_EVENTS in the game's www/event_island.js. A NEW EVENT MUST BE
 // ADDED HERE TOO, otherwise its scores and leaderboard rewards are rejected.
-export const EI_EVENT_WINDOWS: Record<string, { start: number; end: number }> = {
+export const EI_EVENT_WINDOWS: Record<string, { start: number; end: number; noRewards?: boolean }> = {
   founders_island:       { start: Date.parse('2026-08-10T10:00:00Z'), end: Date.parse('2026-08-17T10:00:00Z') },
   harvest_island:        { start: Date.parse('2026-09-06T10:00:00Z'), end: Date.parse('2026-09-13T10:00:00Z') },
   november_event_island: { start: Date.parse('2026-11-09T08:00:00Z'), end: Date.parse('2026-11-16T08:00:00Z') },
+  // X-mas Event test version (redeem code XMASTEST, until 1.02.2027 EET): its own board, no rewards.
+  // The real X-mas event gets its own 'christmas_event_island' window with the real dates at release.
+  christmas_event_island_test: { start: Date.parse('2026-11-27T00:00:00Z'), end: Date.parse('2027-01-31T22:00:00Z'), noRewards: true },
 };
 
 // A score sent a few minutes after the end (slow network, last tick) still counts.
@@ -50,5 +53,5 @@ export const EI_CLAIM_CLOCK_SKEW_MS = 5 * 60 * 1000;
 /** Leaderboard rewards are only paid once the event is over. */
 export function eiCanClaim(eventId: string, now: number): boolean {
   const w = EI_EVENT_WINDOWS[eventId];
-  return !!w && now >= w.end - EI_CLAIM_CLOCK_SKEW_MS;
+  return !!w && !w.noRewards && now >= w.end - EI_CLAIM_CLOCK_SKEW_MS;
 }
