@@ -4625,6 +4625,8 @@ const PA_REDEEM_CODES: Record<string, {
   'BOSSEND':         { krakenEnd: true, multiUse: true, minBuild: 689, desc: 'Ends the active boss encounter' },
   'ENDBOSS':         { krakenEnd: true, multiUse: true, minBuild: 689, desc: 'Ends the active boss encounter' },
   'XMASTEST':        { xmasTester: true, multiUse: true, minBuild: 694, desc: 'X-mas Event test access (no rewards)' },
+  // 100 Discord members (owner 2026-11-28): everyone once, never expires.
+  'DISCORD100':      { diamonds: 200, harborItems: { patience_hourglass: 10 }, minBuild: 630, desc: 'Thank you for 100 Discord members! 200 Diamonds + 10 Patience Hourglasses!' },
 };
 
 // ── Angler's Canvas Bobber short share codes (2026-11-18) ────────────────────────────────
